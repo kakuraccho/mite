@@ -8,7 +8,7 @@ Miteは、PC操作の途中で次に何をすればよいか分からなくな�
 
 家族が利用者の画面を見ながら操作する場所を伝え、利用者本人が操作して解決することを支援します。役立った支援内容はガイドとして残し、次回は利用者が一人でも操作できるようになる循環を目指します。
 
-現在はMVPの仕様策定とプロトタイプによる検証を進めています。フロントエンドとバックエンドの技術構成は未決定です。
+現在はMVPの仕様策定とプロトタイプによる検証を進めています。クライアントとサーバーの技術構成は未決定です。
 
 ## ディレクトリ構成
 
@@ -16,17 +16,17 @@ Miteは、PC操作の途中で次に何をすればよいか分からなくな�
 .
 ├── AGENTS.md
 ├── README.md
-├── back/                   # バックエンド（構成検討中）
+├── client/                # 利用者・家族クライアント（構成検討中）
 ├── docs/
 │   ├── PS.md                  # プロダクトシート
 │   ├── specification.md       # プロダクト仕様書
 │   └── tech-specification.md  # 技術仕様書
-├── front/                  # フロントエンド（構成検討中）
 ├── mock/                   # 画面・動作検証用のプロトタイプ
 │   ├── 01-except-use-guide/
 │   └── 02-specification/
-└── other/                  # その他の参考資料
-    └── mock01/
+├── other/                  # その他の参考資料
+│   └── mock01/
+└── server/                # サーバー（構成検討中）
 ```
 
 ## 仕様の参照
@@ -47,7 +47,7 @@ Miteは、PC操作の途中で次に何をすればよいか分からなくな�
 - 既存の設計、命名およびディレクトリ構成を尊重してください。
 - ユーザーの既存変更を、許可なく削除、上書きまたは差し戻さないでください。
 - 新しい依存関係、技術スタックまたは外部サービスを導入する前に、必要性と影響を説明してユーザーへ確認してください。
-- APIやデータ構造を変更する場合は、`front/` と `back/` の両方への影響を確認してください。
+- APIやデータ構造を変更する場合は、`client/` と `server/` の両方への影響を確認してください。
 - 秘密情報、認証情報、個人情報および実データをコミットしないでください。
 - READMEには人向けの概要と利用方法を、AGENTS.mdにはAIエージェント向けの作業規則を記載してください。
 
@@ -69,18 +69,18 @@ Miteは、PC操作の途中で次に何をすればよいか分からなくな�
 
 ### scope
 
-- `front`: フロントエンド
-- `back`: バックエンド
-- `fullstack`: フロントエンドとバックエンドの両方
+- `client`: クライアント
+- `server`: サーバー
+- `system`: クライアントとサーバーの両方
 - `project`: README、AGENTS.mdなど、プロジェクト全体
 - `spec`: プロダクト仕様
 
 例:
 
 ```text
-feat/front/add-support-request
-fix/back/validate-session-id
-update/fullstack/change-user-profile
+feat/client/add-support-request
+fix/server/validate-session-id
+update/system/change-user-profile
 docs/project/update-readme
 docs/spec/update-support-flow
 chore/project/update-dependencies
