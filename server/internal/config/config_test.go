@@ -21,6 +21,9 @@ func TestLoad(t *testing.T) {
 	if _, ok := config.ClientOrigins["mite-user://app"]; !ok {
 		t.Fatal("mite-user origin is missing")
 	}
+	if _, ok := config.ClientOrigins["http://127.0.0.1:5173"]; !ok {
+		t.Fatal("user development origin is missing")
+	}
 }
 
 func TestLoadRejectsUnsafeConfiguration(t *testing.T) {
@@ -69,6 +72,6 @@ func validEnvironment() map[string]string {
 		"GEMINI_API_KEY":          "gemini-key",
 		"AI_MODEL":                "gemini-3.8-flash",
 		"AI_PROMPT_VERSION":       "v1",
-		"CLIENT_ORIGINS":          "http://localhost:5173,mite-user://app",
+		"CLIENT_ORIGINS":          "http://localhost:5173,http://127.0.0.1:5173,mite-user://app",
 	}
 }

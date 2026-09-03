@@ -706,7 +706,7 @@ export interface components {
         CreateSupportRequestRequest: {
             initialScreenshotArtifactId: string;
             /** @default  */
-            comment: string;
+            comment?: string;
         };
         CallSupportRequestRequest: {
             /** Format: int64 */
@@ -778,7 +778,7 @@ export interface components {
             expectedRevision: number;
             initialScreenshotArtifactId: string;
             /** @default  */
-            comment: string;
+            comment?: string;
         };
         EndSupportSessionWithoutGuideRequest: {
             /** Format: int64 */

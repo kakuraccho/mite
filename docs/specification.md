@@ -1,7 +1,7 @@
 # Mite MVP 実装仕様書
 
 > DevCamp2026 / 実装基準 v1.3
-> 最終更新: 2026-09-03
+> 最終更新: 2026-09-04
 > 対象: 利用者側クライアント、家族側クライアント、Miteサーバー
 
 ## 0. 本書の扱い
@@ -225,7 +225,7 @@ Authorization: Bearer <demo-token>
 - トークンから role と actorId を確定する。
 - LiveKit API SecretとAI API Keyはサーバーだけが保持する。
 - トークンをURLのクエリ文字列へ含めない。
-- REST APIのCORSとWebSocketのOriginはCLIENT_ORIGINSとの完全一致だけを許可する。cookie認証は使わず、ワイルドカードoriginを許可しない。
+- REST APIのCORSとWebSocketのOriginはCLIENT_ORIGINSとの完全一致だけを許可する。cookie認証は使わず、ワイルドカードoriginを許可しない。CORS応答では `Retry-After` をクライアントへ公開する。
 
 ### 3.3 成功レスポンス
 
@@ -1401,7 +1401,7 @@ AI_BASE_URL=https://generativelanguage.googleapis.com/v1beta
 GEMINI_API_KEY=change-me
 AI_MODEL=gemini-3.8-flash
 AI_PROMPT_VERSION=v1
-CLIENT_ORIGINS=http://localhost:5173,http://localhost:5174,mite-user://app,mite-family://app
+CLIENT_ORIGINS=http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174,mite-user://app,mite-family://app
 ~~~
 
 ### 14.2 利用者側

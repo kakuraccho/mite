@@ -42,6 +42,28 @@ func TestRouterCORSAndAuthentication(t *testing.T) {
 		if got := response.Header().Get("Access-Control-Allow-Origin"); got != "mite-user://app" {
 			t.Fatalf("Allow-Origin = %q", got)
 		}
+		if got := response.Header().Get("Access-Control-Expose-Headers"); got != "Retry-After" {
+			t.Fatalf("Expose-Headers = %q, want Retry-After", got)
+		}
+	})
+
+	t.Run("allowed error exposes retry after", func(t *testing.T) {
+		retryHandler := CORS(cfg.ClientOrigins)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			WriteError(w, r, idempotencyInProgressError())
+		}))
+		request := httptest.NewRequest(http.MethodPost, "/v1/support-requests", nil)
+		request.Header.Set("Origin", "mite-user://app")
+		response := httptest.NewRecorder()
+		retryHandler.ServeHTTP(response, request)
+		if response.Code != http.StatusConflict {
+			t.Fatalf("status = %d, want %d", response.Code, http.StatusConflict)
+		}
+		if got := response.Header().Get("Retry-After"); got != "1" {
+			t.Fatalf("Retry-After = %q, want 1", got)
+		}
+		if got := response.Header().Get("Access-Control-Expose-Headers"); got != "Retry-After" {
+			t.Fatalf("Expose-Headers = %q, want Retry-After", got)
+		}
 	})
 
 	t.Run("disallowed origin", func(t *testing.T) {
