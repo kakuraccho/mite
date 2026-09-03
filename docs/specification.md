@@ -1,6 +1,6 @@
 # Mite MVP 実装仕様書
 
-> DevCamp2026 / 実装基準 v1.2
+> DevCamp2026 / 実装基準 v1.3
 > 最終更新: 2026-09-03
 > 対象: 利用者側クライアント、家族側クライアント、Miteサーバー
 
@@ -96,6 +96,7 @@ WebSocketから状態を変更してはならない。WebSocketはREST APIで確
 | API定義 | OpenAPI 3.0.3 |
 | Go APIコード生成 | oapi-codegen、chi-server、strict-server |
 | TypeScript APIコード生成 | openapi-typescript、openapi-fetch |
+| JavaScriptパッケージ管理 | npm workspaces |
 | DB | Supabase PostgreSQL |
 | DB接続 | pgx/v5のpgxpool、Supavisor Session pooler |
 | SQLコード生成 | sqlc |
@@ -120,16 +121,31 @@ TypeBoxとFastifyは採用しない。両者はTypeScriptサーバー向けで�
 - `openapi-typescript`でTypeScriptの型を生成し、`openapi-fetch`から利用する。
 - `sqlc`でSQLに対応するGoコードを生成する。
 - 自動生成ファイルは直接編集しない。正本を変更して再生成する。
+- 自動生成ファイルはリポジトリへ含め、生成元と同じPull Requestで更新する。
 - 自動生成ファイルは通常のコードレビュー対象外とし、正本と手書き実装をレビューする。
+- ルートのnpm workspaceは `apps/*` と `packages/*` を対象とし、`mock/*` は含めない。
+- `packages/api-client` は非公開workspace package `@mite/api-client` とし、npm registryへ公開しない。
+- `packages/api-client` はOpenAPIから生成したTypeScript型と、API接続先およびBearerトークンを受け取る最小限のクライアント生成処理を公開する。画面状態、Electron固有処理、Idempotency-Keyの端末保存、再試行およびWebSocket接続は各Electronアプリが持つ。
+- `oapi-codegen` は `server/go.mod` のtool dependency、`openapi-typescript` は `packages/api-client` のdevDependencyとしてバージョンを固定する。JavaScript依存関係はルートの `package-lock.json` で固定する。
+- ルートの `npm run generate:api` で、同じ `api/openapi.yaml` からGoの型とサーバーインターフェース、およびTypeScript型を一括生成する。
+
+API契約を変更する場合は、先に本書を更新してクライアント担当とサーバー担当で合意し、次に `api/openapi.yaml` を更新して再生成する。本書、OpenAPIおよび影響する生成物は同じPull Requestへ含める。CIではAPIコードを再生成し、コミット済み生成物との間に差分がないことを確認する。
 
 ### 2.4 リポジトリ構成
 
 ~~~text
+package.json                npm workspaceと共通コマンド
+package-lock.json           JavaScript依存関係の固定
 apps/
 ├─ user-electron/          利用者側Electron
 └─ family-electron/        家族側Electron
 packages/
-└─ api-client/             OpenAPIから生成するTypeScript型とクライアント
+└─ api-client/             非公開workspace package @mite/api-client
+   └─ src/
+      ├─ generated/
+      │  └─ schema.ts      OpenAPIから生成するTypeScript型
+      ├─ client.ts         openapi-fetchのクライアント生成処理
+      └─ index.ts          packageの公開入口
 api/
 └─ openapi.yaml            APIの正本
 server/
@@ -145,6 +161,8 @@ supabase/
 ~~~
 
 両Electronアプリは同じリポジトリで管理するが、別々の実行ファイルとしてビルドする。利用者用と家族用で異なるデモトークンを設定し、実行中に役割を切り替えない。
+
+両Electronアプリは `@mite/api-client` をworkspace経由で参照する。生成されたTypeScript型やクライアントを相対パスで直接参照せず、packageの公開入口から利用する。
 
 Electronでは `contextIsolation` を有効、`nodeIntegration` を無効にする。画面取得と端末ファイル操作はメインプロセスで実行し、preloadから必要最小限のAPIだけをReactのレンダラープロセスへ公開する。パッケージ版のレンダラーは、利用者側で `mite-user://app`、家族側で `mite-family://app` をオリジンとして使う。
 
@@ -1345,9 +1363,10 @@ DBスキーマはSupabase CLIのマイグレーションだけで変更する。
 - デモ用トークンと接続先
 - 正常系E2Eの開始条件と期待結果
 - OpenAPI、マイグレーション、生成コマンドの変更
+- npm workspaceと `@mite/api-client` の公開範囲
 - 利用者側と家族側ElectronのAPI接続先
 
-共有契約を変更した場合は本書を先に更新し、その後に両実装を変更する。
+共有契約を変更した場合は本書を先に更新して両担当で合意し、OpenAPI、生成物、両実装の順に変更する。生成物だけを直接変更してはならない。
 
 ### 13.4 サーバーのコード構成とレビュー規則
 
@@ -1430,9 +1449,9 @@ Supabase、LiveKit、Google AI StudioのGemini APIキーをクライアントの
 ## 16. 実装順
 
 1. `api/openapi.yaml`へ本書のAPIを記述する。
-2. `supabase/migrations`へPostgreSQLスキーマとデモデータを記述する。
-3. `server/db/queries`へSQLを記述し、OpenAPIとSQLからGo・TypeScriptコードを生成する。
-4. Go、Chi、handler、service、repository、domainの基本構成を作る。
+2. ルートのnpm workspace、`packages/api-client`およびAPIコード生成設定を作り、OpenAPIからGo・TypeScriptコードを生成する。
+3. `supabase/migrations`へPostgreSQLスキーマとデモデータを記述する。
+4. `server/db/queries`へSQLを記述してsqlcコードを生成し、Go、Chi、handler、service、repository、domainの基本構成を作る。
 5. 固定ユーザー認証、支援依頼API、Supabase Storageへの画像登録を作る。
 6. 利用者の支援依頼画面と家族の依頼画面を接続する。
 7. SupportSession APIとWebSocketを接続する。
@@ -1523,6 +1542,7 @@ MVP実装完了は次をすべて満たした時点とする。
 - 第17章のテストがすべて通る。
 - 状態名とAPIが本書と一致する。
 - OpenAPI、DB制約、revision、Idempotency-Key、WebSocketの復元契約が本書と一致する。
+- `npm run generate:api`でGoとTypeScriptのAPIコードを再生成でき、コミット済み生成物との差分がない。
 - デモ用の起動手順と環境変数例がリポジトリにある。
 - DBを空にした状態から固定データを投入できる。
 - 画像、DB、LiveKit Cloud、AI APIを使った正常系がモックなしで通る。
@@ -1532,7 +1552,10 @@ MVP実装完了は次をすべて満たした時点とする。
 
 - [Mite プロダクトシート](./PS.md)
 - Chi: https://github.com/go-chi/chi
+- npm workspaces: https://docs.npmjs.com/cli/using-npm/workspaces/
 - oapi-codegen: https://github.com/oapi-codegen/oapi-codegen
+- openapi-typescript: https://openapi-ts.dev/cli
+- Go tool dependencies: https://go.dev/doc/modules/managing-dependencies#tool-dependencies
 - sqlc: https://docs.sqlc.dev/
 - Supabase PostgreSQL connection: https://supabase.com/docs/guides/database/connecting-to-postgres
 - Supabase database migrations: https://supabase.com/docs/guides/deployment/database-migrations
