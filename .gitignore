@@ -1,0 +1,22 @@
+# env
+.env
+
+# build
+node_modules/
+build/
+dist/
+
+# log
+*.log
+
+# execute
+*.exe
+
+# temp
+*.temp
+*.tmp
+
+# os
+.DS_Store
+Thumbs.db
+
