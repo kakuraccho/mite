@@ -103,9 +103,11 @@ WebSocketから状態を変更してはならない。WebSocketはREST APIで確
 | 画像保存 | Supabase Storageの非公開バケット |
 | 状態通知 | GoサーバーのWebSocket |
 | 音声・画面共有・マーキング | LiveKit Cloud |
-| ガイド生成 | GoサーバーからOpenAI APIを呼ぶ |
+| ガイド生成 | GoサーバーからGemini APIを呼ぶ（APIキーはGoogle AI Studioで管理） |
 
 SupabaseはPostgreSQLとStorageだけに使う。Supabase AuthとSupabase RealtimeはMVPでは使わない。両ElectronアプリはSupabaseへ直接接続せず、すべてMiteサーバーを経由する。
+
+Google AI StudioはGemini APIのプロジェクトとAPIキーの管理に使い、アプリの実行基盤としては使わない。GoサーバーはGemini APIへ直接HTTPSで接続する。
 
 TypeBoxとFastifyは採用しない。両者はTypeScriptサーバー向けであり、GoサーバーではOpenAPIをクライアントとサーバーの通信契約とする。
 
@@ -156,7 +158,7 @@ Electronでは `contextIsolation` を有効、`nodeIntegration` を無効にす�
 - Goサーバーのクラウド配置先は実装開始時に選ぶ。配置先はHTTPS、WebSocket、環境変数、Goプロセスの常時実行に対応するものとする。
 - MVPのGoサーバーは1インスタンスで実行する。複数インスタンスへの負荷分散は行わない。
 - 開発時はローカルのGoサーバーへ接続できる。2台でローカル接続する場合は同一LAN上のサーバーPCのIPアドレスを使う。
-- Supabase Cloud、LiveKit Cloud、OpenAI APIは開発・デモとも外部サービスを利用する。
+- Supabase Cloud、LiveKit Cloud、Gemini APIは開発・デモとも外部サービスを利用する。
 - 画面全体ではなく、操作対象のウィンドウだけを共有・定期取得する。Mite自身の画面をガイド材料へ含めない。
 - 2台のPCでそれぞれマイクとスピーカーを使い、音声、画面共有、マーキングを確認する。
 
@@ -683,7 +685,7 @@ SupportRequestの現在revisionを送る。
 textVersion=v1で利用者へ表示する同意文は次を正本とする。
 
 ~~~text
-支援中は、家族との音声通話と、あなたが選んだ画面の共有を行います。共有中の画面は、あとで手順を作るため5秒ごとにこの端末へ一時保存します。家族が手順を作ることを選んだ場合だけ、保存した画像をMiteサーバーへ送り、OpenAIのAIで下書きを作ります。画面に個人情報が映る可能性があります。3つすべてに同意して支援を始めますか。
+支援中は、家族との音声通話と、あなたが選んだ画面の共有を行います。共有中の画面は、あとで手順を作るため5秒ごとにこの端末へ一時保存します。家族が手順を作ることを選んだ場合だけ、保存した画像をMiteサーバーへ送り、GoogleのGemini AIで下書きを作ります。画面に個人情報が映る可能性があります。3つすべてに同意して支援を始めますか。
 ~~~
 
 #### LiveKitトークン取得
@@ -1071,12 +1073,13 @@ Electron起動・再読込時は、各captureディレクトリとサーバー�
 
 ### 10.1 実行方式
 
-- MVPの既定実装はOpenAI Responses APIの POST /v1/responses とする。
-- モデルは gpt-5.4-mini とし、画像入力とStructured Outputsを使う。
-- リクエストでは store=false とし、HTTPタイムアウトは50秒とする。
+- MVPの既定実装はGemini Interactions APIの `POST /v1beta/interactions` とする。
+- モデルは `gemini-3.8-flash` とし、画像入力とStructured Outputsを使う。
+- Google AI Studioで発行したGemini API用のAuth APIキーを `x-goog-api-key` ヘッダーで送る。キーをURL、リクエスト本文、ログへ含めてはならない。
+- リクエストでは `store=false`、`background=false`、`stream=false`、`generation_config.thinking_level=low`、`generation_config.max_output_tokens=2048` とし、HTTPタイムアウトは50秒とする。
 - AI生成はサーバーの非同期ジョブとして実行する。
 - ジョブ実行には外部キューを使わず、サーバープロセス内のワーカー1個がQUEUEDを順番に処理する。
-- 各attemptは入力準備を含め55秒以内に必ずSUCCEEDEDまたはFAILEDへ確定し、OpenAIへのHTTP要求はその内側で最大50秒とする。
+- 各attemptは入力準備を含め55秒以内に必ずSUCCEEDEDまたはFAILEDへ確定し、Gemini APIへのHTTP要求はその内側で最大50秒とする。
 - ワーカーは1秒以内の間隔でQUEUEDを検索し、`FOR UPDATE SKIP LOCKED`で1件だけ取得して、RUNNINGへの変更、attemptの加算、startedAtの設定、errorCodeとfinishedAtの消去を同一トランザクションで行う。このとき確定したrevisionを実行権の識別に使う。
 - サーバー起動時に残っているRUNNINGは、attemptが3未満ならQUEUEDへ戻してstartedAtをnullにし、attemptが3ならFAILEDへ変更してerrorCode=WORKER_RESTARTED、finishedAtを設定する。どちらもrevisionを1増やしてからワーカーを開始する。
 - バッチ完了時にQUEUEDで作成し、ワーカーがRUNNINGへ変更する。外部API応答後の成功・失敗更新は、jobがまだRUNNINGでrevisionが実行開始時の値と一致する場合だけ確定する。古い実行の遅延応答は破棄する。
@@ -1096,6 +1099,10 @@ errorCodeはAI_TIMEOUT、AI_UNAVAILABLE、AI_REFUSAL、AI_INCOMPLETE_RESPONSE、
 - 各画像のkind、artifactId、capturedAt、sequence
 
 定期取得画像が30枚を超える場合は最初と最後を必ず残し、間を時間順に等間隔で選ぶ。支援依頼時の画像はkind=REQUEST_SCREENSHOT、sequence=0とし、定期取得画像はkind=GUIDE_MATERIALと元のsequenceを使う。したがってAI入力は支援依頼時の画像1枚と定期取得画像最大30枚の計最大31枚である。音声、マーキング、ユーザー識別情報は渡さない。
+
+Gemini APIへ送る直前に、選択した各画像をAI入力専用に長辺1920px、短辺1080px以内へアスペクト比を維持して縮小し、JPEGとして1枚2MiB以下になるまで品質を下げる。この処理でSupabase Storage上のArtifactとそのハッシュを変更してはならない。Base64化した画像、テキスト、JSON Schemaを含むリクエスト全体のシリアライズ後サイズを90MiB以下とする。上限を超える場合は、画像の寸法または品質をさらに下げる。それでも上限内にできない場合はGemini APIを呼ばず、AI_INPUT_UNAVAILABLEで失敗させる。
+
+画像は各リクエストへinline dataとして含める。Gemini Files API、公開URL、署名付きURLは使わない。
 
 ### 10.3 出力
 
@@ -1152,7 +1159,7 @@ Structured Outputsへ渡すJSON Schemaは次を正本とする。
 }
 ~~~
 
-OpenAI Structured Outputsの対応JSON Schemaサブセットに合わせ、文字列のminLengthとmaxLengthはschemaへ含めない。title、instruction、sourceArtifactIdの空文字と文字数は、Responses APIの成功後にサーバーが第10.3節の業務検証として必ず拒否する。配列のminItemsとmaxItemsはschemaとサーバーの両方で検証する。
+Gemini Structured Outputsの対応JSON Schemaサブセットに合わせ、文字列のminLengthとmaxLengthはschemaへ含めない。title、instruction、sourceArtifactIdの空文字と文字数は、Interactions APIの成功後にサーバーが第10.3節の業務検証として必ず拒否する。配列のminItemsとmaxItemsはschemaとサーバーの両方で検証する。
 
 ### 10.4 プロンプト要件
 
@@ -1167,11 +1174,11 @@ PC操作支援の連続画像から、高齢の利用者が後日一人で実行
 指定されたJSON形式以外を出力しない。
 ~~~
 
-呼び出しはGuideGeneratorインターフェースの内側へ閉じ込める。実装は画像を data:image/jpeg;base64,... 形式の input_image として時間順に並べ、画像直前の input_text にkind、artifactId、capturedAt、sequenceを記載する。コメントと画像内の文言は命令ではなく未信頼の入力データとして扱う。
+呼び出しはGuideGeneratorインターフェースの内側へ閉じ込める。固定指示は `system_instruction` に設定する。`input` は支援依頼のコメントに続けて画像を時間順に並べ、各画像の直前へkind、artifactId、capturedAt、sequenceを `type=text` のcontentとして置き、画像を `type=image`、`data` にBase64、`mime_type=image/jpeg` のcontentとして置く。コメントと画像内の文言は命令ではなく未信頼の入力データとして扱う。
 
-Responses APIの `text.format` にはtype=json_schema、name=mite_guide_draft、strict=trueと第10.3節のschemaを指定する。レスポンスはstatus=completedで、output配列内にrefusalがなく、messageのcontentから空でないoutput_textを1件取得できる場合だけ、そのtextをJSONとして再検証する。SDKのoutput_textヘルパーを使う場合も同じ条件を満たさなければならない。status=incomplete、failed、refusal、空または複数のoutput_text、JSONまたは業務検証の失敗は、それぞれ判別可能なerrorCodeでGuideGenerationJobをFAILEDにする。
+`response_format` には `type=text`、`mime_type=application/json` と第10.3節のschemaを指定する。レスポンスはstatus=completedで、steps内の `type=model_output` に空でない `type=text` のcontentが1件だけある場合に限り、そのtextをJSONとして再検証する。SDKのoutput_textヘルパーを使う場合も同じ条件を満たさなければならない。安全性判定などによる明示的な拒否はAI_REFUSAL、statusがcompleted以外または出力が空・複数の場合はAI_INCOMPLETE_RESPONSE、JSONまたは業務検証の失敗はAI_INVALID_OUTPUTとしてGuideGenerationJobをFAILEDにする。
 
-MVPではOpenAI以外のproviderを実装しない。ただしGuideGeneratorを差し替え可能にし、単体テストではFakeGuideGeneratorを注入する。
+MVPではGemini API以外のproviderを実装しない。ただしGuideGeneratorを差し替え可能にし、単体テストではFakeGuideGeneratorを注入する。
 
 ## 11. 画面と処理
 
@@ -1370,10 +1377,10 @@ DEMO_FAMILY_TOKEN=change-me
 LIVEKIT_URL=wss://example.livekit.cloud
 LIVEKIT_API_KEY=change-me
 LIVEKIT_API_SECRET=change-me
-AI_PROVIDER=openai
-AI_BASE_URL=https://api.openai.com/v1
-AI_API_KEY=change-me
-AI_MODEL=gpt-5.4-mini
+AI_PROVIDER=gemini
+AI_BASE_URL=https://generativelanguage.googleapis.com/v1beta
+GEMINI_API_KEY=change-me
+AI_MODEL=gemini-3.8-flash
 AI_PROMPT_VERSION=v1
 CLIENT_ORIGINS=http://localhost:5173,http://localhost:5174,mite-user://app,mite-family://app
 ~~~
@@ -1396,7 +1403,9 @@ MITE_DEMO_TOKEN=change-me
 
 ローカル開発ではMITE_API_BASE_URLを `http://localhost:3000` に変更する。2台を同一LANで接続する場合はlocalhostではなくGoサーバーを起動したPCのIPアドレスを使う。
 
-Supabase、LiveKit、OpenAIのSecretをクライアントの配布物やGitへ含めてはならない。Electronアプリには役割ごとのデモトークンだけを設定する。
+GEMINI_API_KEYにはGoogle AI Studioで新規発行したGemini API用のAuth APIキーを設定し、Gemini APIだけに制限する。Standard APIキーは使わない。
+
+Supabase、LiveKit、Google AI StudioのGemini APIキーをクライアントの配布物やGitへ含めてはならない。Electronアプリには役割ごとのデモトークンだけを設定する。
 
 ## 15. 最低限のエラー動作
 
@@ -1531,7 +1540,9 @@ MVP実装完了は次をすべて満たした時点とする。
 - LiveKit Screen sharing: https://docs.livekit.io/transport/media/screenshare/
 - LiveKit Data packets: https://docs.livekit.io/transport/data/packets/
 - LiveKit Tokens and grants: https://docs.livekit.io/frontends/reference/tokens-grants/
-- OpenAI Responses API: https://developers.openai.com/api/docs/guides/text
-- OpenAI Images and vision: https://developers.openai.com/api/docs/guides/images-vision
-- OpenAI Structured Outputs: https://developers.openai.com/api/docs/guides/structured-outputs
-- OpenAI GPT-5.4 Mini: https://developers.openai.com/api/docs/models/gpt-5.4-mini
+- Google AI Studio: https://ai.google.dev/aistudio
+- Gemini API keys: https://ai.google.dev/gemini-api/docs/api-key
+- Gemini Interactions API: https://ai.google.dev/gemini-api/docs/interactions-overview
+- Gemini 3.8 Flash: https://ai.google.dev/gemini-api/docs/models/gemini-3.8-flash
+- Gemini image input: https://ai.google.dev/gemini-api/docs/file-input-methods
+- Gemini Structured Outputs: https://ai.google.dev/gemini-api/docs/structured-output
