@@ -1,0 +1,1541 @@
+openapi: 3.0.3
+info:
+  title: Mite API
+  version: 1.0.0
+  description: Mite MVPのREST API契約。
+
+servers:
+  - url: http://localhost:3000
+    description: ローカル開発
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Artifacts
+  - name: SupportRequests
+  - name: SupportSessions
+  - name: GuideMaterials
+  - name: GuideGeneration
+  - name: GuideDrafts
+  - name: Guides
+  - name: GuideRuns
+
+paths:
+  /v1/artifacts:
+    post:
+      tags: [Artifacts]
+      operationId: createArtifact
+      summary: 支援依頼用画像を登録する
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CreateArtifactRequest'
+      responses:
+        '201':
+          description: 登録成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtifactResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
+  /v1/artifacts/{id}/content:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    get:
+      tags: [Artifacts]
+      operationId: getArtifactContent
+      summary: 権限確認後に画像を返す
+      responses:
+        '200':
+          description: JPEG画像
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum: ['private, no-store']
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
+  /v1/support-requests:
+    post:
+      tags: [SupportRequests]
+      operationId: createSupportRequest
+      summary: 支援依頼を作る
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSupportRequestRequest'
+      responses:
+        '201':
+          description: 作成成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportRequestResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    get:
+      tags: [SupportRequests]
+      operationId: listSupportRequests
+      summary: 自分のペアの支援依頼を新しい順に最大20件返す
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/SupportRequestStatus'
+      responses:
+        '200':
+          description: 取得成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportRequestListResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/support-requests/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    get:
+      tags: [SupportRequests]
+      operationId: getSupportRequest
+      summary: 支援依頼の詳細を取得する
+      responses:
+        '200':
+          description: 取得成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportRequestResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/support-requests/{id}/call:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      tags: [SupportRequests, SupportSessions]
+      operationId: callSupportRequest
+      summary: RINGINGの支援セッションを作る
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CallSupportRequestRequest'
+      responses:
+        '201':
+          description: 発信成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CallSupportRequestResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/support-sessions/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    get:
+      tags: [SupportSessions]
+      operationId: getSupportSession
+      summary: 支援セッションを取得する
+      responses:
+        '200':
+          description: 取得成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportSessionResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/support-sessions/{id}/accept:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      tags: [SupportSessions]
+      operationId: acceptSupportSession
+      summary: 応答と同意を確定する
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcceptSupportSessionRequest'
+      responses:
+        '200':
+          description: 応答成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportRequestAndSessionResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/support-sessions/{id}/livekit-token:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      tags: [SupportSessions]
+      operationId: createLiveKitToken
+      summary: LiveKit接続用トークンを取得する
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmptyRequest'
+      responses:
+        '200':
+          description: 発行成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveKitTokenResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
+  /v1/support-sessions/{id}/resolve:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      tags: [SupportSessions]
+      operationId: resolveSupportSession
+      summary: 解決済みとガイド作成有無を確定する
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResolveSupportSessionRequest'
+      responses:
+        '200':
+          description: 解決成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportRequestAndSessionResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/support-sessions/{id}/guide-material-batches:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      tags: [GuideMaterials]
+      operationId: createGuideMaterialBatch
+      summary: ガイド材料画像の一括登録を開始する
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateGuideMaterialBatchRequest'
+      responses:
+        '201':
+          description: バッチ作成成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuideMaterialBatchCreatedResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/support-sessions/{id}/end-without-guide:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      tags: [SupportSessions]
+      operationId: endSupportSessionWithoutGuide
+      summary: ガイド作成を中止して支援セッションを終了する
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EndSupportSessionWithoutGuideRequest'
+      responses:
+        '200':
+          description: 終了成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportSessionResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/guide-material-batches/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    get:
+      tags: [GuideMaterials]
+      operationId: getGuideMaterialBatch
+      summary: ガイド材料画像の登録状況を取得する
+      responses:
+        '200':
+          description: 取得成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuideMaterialBatchResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/guide-material-batches/{id}/materials:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      tags: [GuideMaterials]
+      operationId: createGuideMaterial
+      summary: ガイド材料画像を1件登録する
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CreateGuideMaterialRequest'
+      responses:
+        '201':
+          description: 新規登録成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuideMaterialCreatedResponse'
+        '200':
+          description: 同一材料の重複登録成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuideMaterialCreatedResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
+  /v1/guide-material-batches/{id}/complete:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      tags: [GuideMaterials, GuideGeneration]
+      operationId: completeGuideMaterialBatch
+      summary: 一括登録を閉じてAI生成を予約する
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteGuideMaterialBatchRequest'
+      responses:
+        '202':
+          description: 生成予約成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuideMaterialBatchCompletedResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/guide-generation-jobs/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    get:
+      tags: [GuideGeneration]
+      operationId: getGuideGenerationJob
+      summary: AI生成状態を取得する
+      responses:
+        '200':
+          description: 取得成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuideGenerationJobResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/guide-generation-jobs/{id}/retry:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      tags: [GuideGeneration]
+      operationId: retryGuideGenerationJob
+      summary: 失敗したAI生成を再試行する
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RetryGuideGenerationJobRequest'
+      responses:
+        '202':
+          description: 再試行受付成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuideGenerationJobResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/guide-drafts/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    get:
+      tags: [GuideDrafts]
+      operationId: getGuideDraft
+      summary: ガイド下書きを取得する
+      responses:
+        '200':
+          description: 取得成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuideDraftResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    patch:
+      tags: [GuideDrafts]
+      operationId: updateGuideDraft
+      summary: ガイド下書き全体を更新する
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateGuideDraftRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuideDraftResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/guide-drafts/{id}/save:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      tags: [GuideDrafts, Guides]
+      operationId: saveGuideDraft
+      summary: ガイド下書きをガイドとして保存する
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveGuideDraftRequest'
+      responses:
+        '201':
+          description: 保存成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuideSavedResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/guides:
+    get:
+      tags: [Guides]
+      operationId: listGuides
+      summary: 利用可能なガイド一覧を返す
+      responses:
+        '200':
+          description: 取得成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuideListResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/guides/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    get:
+      tags: [Guides]
+      operationId: getGuide
+      summary: 現在版のガイドを取得する
+      responses:
+        '200':
+          description: 取得成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuideDetailResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/guide-runs:
+    post:
+      tags: [GuideRuns]
+      operationId: createGuideRun
+      summary: ガイド利用を開始する
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateGuideRunRequest'
+      responses:
+        '201':
+          description: 作成成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuideRunResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/guide-runs/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    get:
+      tags: [GuideRuns]
+      operationId: getGuideRun
+      summary: ガイド利用状態を取得する
+      responses:
+        '200':
+          description: 取得成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuideRunResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    patch:
+      tags: [GuideRuns]
+      operationId: updateGuideRun
+      summary: 前または次のステップへ移動する
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateGuideRunRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuideRunResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/guide-runs/{id}/complete:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      tags: [GuideRuns]
+      operationId: completeGuideRun
+      summary: ガイド利用を完了する
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteGuideRunRequest'
+      responses:
+        '200':
+          description: 完了成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuideRunResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/guide-runs/{id}/support-request:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      tags: [GuideRuns, SupportRequests]
+      operationId: createSupportRequestFromGuideRun
+      summary: 現在ステップを引き継いで支援依頼を作る
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSupportRequestFromGuideRunRequest'
+      responses:
+        '201':
+          description: 作成成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuideRunSupportRequestResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+
+  parameters:
+    ResourceId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+        pattern: '^[\x20-\x7E]+$'
+
+  responses:
+    BadRequest:
+      description: 入力形式が不正
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Unauthorized:
+      description: 認証情報がない、または不正
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Forbidden:
+      description: 役割または対象が不正
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    NotFound:
+      description: 対象が存在しない
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Conflict:
+      description: 状態、revision、Idempotency-Keyまたは材料が競合
+      headers:
+        Retry-After:
+          description: 処理中の同一Idempotency-Keyを再送するまでの秒数
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    PayloadTooLarge:
+      description: 画像サイズ上限を超えた
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    UnprocessableEntity:
+      description: ガイド生成に使える画像がない
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    InternalError:
+      description: サーバー内部エラー
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    ServiceUnavailable:
+      description: 外部サービスが利用できない
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  schemas:
+    ErrorCode:
+      type: string
+      enum:
+        - VALIDATION_ERROR
+        - UNAUTHENTICATED
+        - FORBIDDEN
+        - NOT_FOUND
+        - INVALID_STATE
+        - REVISION_CONFLICT
+        - IDEMPOTENCY_KEY_REUSED
+        - IDEMPOTENCY_REQUEST_IN_PROGRESS
+        - DUPLICATE_ACTIVE_REQUEST
+        - MATERIAL_CONFLICT
+        - FILE_TOO_LARGE
+        - INSUFFICIENT_MATERIALS
+        - INTERNAL_ERROR
+        - EXTERNAL_SERVICE_UNAVAILABLE
+    Error:
+      type: object
+      additionalProperties: false
+      required: [code, message, requestId]
+      properties:
+        code: { $ref: '#/components/schemas/ErrorCode' }
+        message:
+          type: string
+          minLength: 1
+        requestId:
+          type: string
+          minLength: 1
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error: { $ref: '#/components/schemas/Error' }
+
+    UserRole:
+      type: string
+      enum: [USER, FAMILY]
+    SupportRequestStatus:
+      type: string
+      enum: [PENDING, IN_SUPPORT, RESOLVED]
+    SupportSessionStatus:
+      type: string
+      enum: [RINGING, ACTIVE, GENERATING_GUIDE, REVIEWING_GUIDE, ENDED]
+    GuideDecision:
+      type: string
+      enum: [CREATE, SKIP]
+    SupportSessionEndReason:
+      type: string
+      enum: [GUIDE_SKIPPED, GUIDE_SAVED, GUIDE_CANCELLED, NO_MATERIALS]
+    ArtifactPurpose:
+      type: string
+      enum: [REQUEST_SCREENSHOT, GUIDE_MATERIAL, GUIDE_STEP]
+    GuideMaterialBatchStatus:
+      type: string
+      enum: [UPLOADING, COMPLETED]
+    GuideGenerationJobStatus:
+      type: string
+      enum: [QUEUED, RUNNING, SUCCEEDED, FAILED]
+    GuideGenerationErrorCode:
+      type: string
+      enum:
+        - AI_TIMEOUT
+        - AI_UNAVAILABLE
+        - AI_REFUSAL
+        - AI_INCOMPLETE_RESPONSE
+        - AI_INVALID_OUTPUT
+        - AI_INPUT_UNAVAILABLE
+        - WORKER_RESTARTED
+    GuideDraftStatus:
+      type: string
+      enum: [EDITING, SAVED]
+    GuideRunStatus:
+      type: string
+      enum: [IN_PROGRESS, COMPLETED, PAUSED_FOR_SUPPORT]
+    GuideRunAction:
+      type: string
+      enum: [NEXT, PREVIOUS]
+
+    User:
+      type: object
+      additionalProperties: false
+      required: [id, role, displayName]
+      properties:
+        id: { type: string }
+        role: { $ref: '#/components/schemas/UserRole' }
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 40
+
+    Artifact:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - ownerUserId
+        - purpose
+        - mimeType
+        - sha256
+        - byteSize
+        - width
+        - height
+        - capturedAt
+        - contentUrl
+        - createdAt
+        - updatedAt
+        - revision
+      properties:
+        id: { type: string }
+        ownerUserId: { type: string }
+        purpose: { $ref: '#/components/schemas/ArtifactPurpose' }
+        mimeType:
+          type: string
+          enum: [image/jpeg]
+        sha256:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+        byteSize:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 10485760
+        width:
+          type: integer
+          minimum: 1
+        height:
+          type: integer
+          minimum: 1
+        capturedAt: { type: string, format: date-time }
+        contentUrl: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        revision:
+          type: integer
+          format: int64
+          minimum: 1
+
+    GuideContext:
+      type: object
+      additionalProperties: false
+      required:
+        - guideRunId
+        - guideId
+        - guideVersionNumber
+        - stepNumber
+        - guideTitle
+        - stepInstruction
+        - stepArtifactId
+      properties:
+        guideRunId: { type: string }
+        guideId: { type: string }
+        guideVersionNumber: { type: integer, minimum: 1 }
+        stepNumber: { type: integer, minimum: 1 }
+        guideTitle: { type: string, minLength: 1, maxLength: 40 }
+        stepInstruction: { type: string, minLength: 1, maxLength: 120 }
+        stepArtifactId: { type: string }
+
+    SupportRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - userId
+        - familyId
+        - initialScreenshotArtifactId
+        - comment
+        - status
+        - supportSessionId
+        - guideContext
+        - createdAt
+        - updatedAt
+        - revision
+      properties:
+        id: { type: string }
+        userId: { type: string }
+        familyId: { type: string }
+        initialScreenshotArtifactId: { type: string }
+        comment: { type: string, maxLength: 500 }
+        status: { $ref: '#/components/schemas/SupportRequestStatus' }
+        supportSessionId:
+          type: string
+          nullable: true
+        guideContext:
+          allOf:
+            - $ref: '#/components/schemas/GuideContext'
+          nullable: true
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        revision: { type: integer, format: int64, minimum: 1 }
+
+    Consent:
+      type: object
+      additionalProperties: false
+      required: [audio, screenShare, periodicCapture, textVersion]
+      properties:
+        audio: { type: boolean }
+        screenShare: { type: boolean }
+        periodicCapture: { type: boolean }
+        textVersion:
+          type: string
+          enum: [v1]
+
+    SupportSession:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - supportRequestId
+        - userId
+        - familyId
+        - livekitRoomName
+        - status
+        - guideDecision
+        - guideMaterialBatchId
+        - guideGenerationJobId
+        - guideDraftId
+        - guideId
+        - consent
+        - consentedAt
+        - startedAt
+        - endedAt
+        - endReason
+        - createdAt
+        - updatedAt
+        - revision
+      properties:
+        id: { type: string }
+        supportRequestId: { type: string }
+        userId: { type: string }
+        familyId: { type: string }
+        livekitRoomName: { type: string }
+        status: { $ref: '#/components/schemas/SupportSessionStatus' }
+        guideDecision:
+          allOf:
+            - $ref: '#/components/schemas/GuideDecision'
+          nullable: true
+        guideMaterialBatchId: { type: string, nullable: true }
+        guideGenerationJobId: { type: string, nullable: true }
+        guideDraftId: { type: string, nullable: true }
+        guideId: { type: string, nullable: true }
+        consent:
+          allOf:
+            - $ref: '#/components/schemas/Consent'
+          nullable: true
+        consentedAt: { type: string, format: date-time, nullable: true }
+        startedAt: { type: string, format: date-time, nullable: true }
+        endedAt: { type: string, format: date-time, nullable: true }
+        endReason:
+          allOf:
+            - $ref: '#/components/schemas/SupportSessionEndReason'
+          nullable: true
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        revision: { type: integer, format: int64, minimum: 1 }
+
+    GuideMaterialBatch:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - supportSessionId
+        - status
+        - captureIntervalSeconds
+        - expectedItemCount
+        - receivedItemCount
+        - capturedFrom
+        - capturedTo
+        - completedAt
+        - createdAt
+        - updatedAt
+        - revision
+      properties:
+        id: { type: string }
+        supportSessionId: { type: string }
+        status: { $ref: '#/components/schemas/GuideMaterialBatchStatus' }
+        captureIntervalSeconds: { type: integer, enum: [5] }
+        expectedItemCount: { type: integer, minimum: 1, maximum: 360 }
+        receivedItemCount: { type: integer, minimum: 0, maximum: 360 }
+        capturedFrom: { type: string, format: date-time }
+        capturedTo: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        revision: { type: integer, format: int64, minimum: 1 }
+
+    GuideMaterial:
+      type: object
+      additionalProperties: false
+      required: [id, batchId, clientCaptureId, artifactId, sequence, capturedAt, createdAt]
+      properties:
+        id: { type: string }
+        batchId: { type: string }
+        clientCaptureId: { type: string }
+        artifactId: { type: string }
+        sequence: { type: integer, minimum: 1, maximum: 360 }
+        capturedAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+
+    GuideGenerationJob:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - batchId
+        - status
+        - attempt
+        - guideDraftId
+        - errorCode
+        - createdAt
+        - startedAt
+        - finishedAt
+        - updatedAt
+        - revision
+      properties:
+        id: { type: string }
+        batchId: { type: string }
+        status: { $ref: '#/components/schemas/GuideGenerationJobStatus' }
+        attempt: { type: integer, minimum: 0, maximum: 3 }
+        guideDraftId: { type: string, nullable: true }
+        errorCode:
+          allOf:
+            - $ref: '#/components/schemas/GuideGenerationErrorCode'
+          nullable: true
+        createdAt: { type: string, format: date-time }
+        startedAt: { type: string, format: date-time, nullable: true }
+        finishedAt: { type: string, format: date-time, nullable: true }
+        updatedAt: { type: string, format: date-time }
+        revision: { type: integer, format: int64, minimum: 1 }
+
+    GuideStep:
+      type: object
+      additionalProperties: false
+      required: [position, artifactId, instruction]
+      properties:
+        position: { type: integer, minimum: 1, maximum: 8 }
+        artifactId: { type: string }
+        instruction: { type: string, minLength: 1, maxLength: 120 }
+
+    GuideDraft:
+      type: object
+      additionalProperties: false
+      required: [id, supportSessionId, title, steps, status, revision, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        supportSessionId: { type: string }
+        title: { type: string, minLength: 1, maxLength: 40 }
+        steps:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items: { $ref: '#/components/schemas/GuideStep' }
+        status: { $ref: '#/components/schemas/GuideDraftStatus' }
+        revision: { type: integer, format: int64, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    GuideSummary:
+      type: object
+      additionalProperties: false
+      required: [id, title, currentVersionNumber, representativeArtifactId, updatedAt]
+      properties:
+        id: { type: string }
+        title: { type: string, minLength: 1, maxLength: 40 }
+        currentVersionNumber: { type: integer, minimum: 1 }
+        representativeArtifactId: { type: string }
+        updatedAt: { type: string, format: date-time }
+
+    GuideVersion:
+      type: object
+      additionalProperties: false
+      required: [versionNumber, title, createdBy, createdAt, steps]
+      properties:
+        versionNumber: { type: integer, minimum: 1 }
+        title: { type: string, minLength: 1, maxLength: 40 }
+        createdBy: { type: string }
+        createdAt: { type: string, format: date-time }
+        steps:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items: { $ref: '#/components/schemas/GuideStep' }
+
+    GuideDetail:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - userId
+        - title
+        - currentVersionNumber
+        - revision
+        - createdAt
+        - updatedAt
+        - representativeArtifactId
+        - currentVersion
+      properties:
+        id: { type: string }
+        userId: { type: string }
+        title: { type: string, minLength: 1, maxLength: 40 }
+        currentVersionNumber: { type: integer, minimum: 1 }
+        revision: { type: integer, format: int64, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        representativeArtifactId: { type: string }
+        currentVersion: { $ref: '#/components/schemas/GuideVersion' }
+
+    GuideRun:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - guideId
+        - guideVersionNumber
+        - userId
+        - status
+        - currentStepNumber
+        - supportRequestId
+        - startedAt
+        - completedAt
+        - pausedAt
+        - updatedAt
+        - revision
+      properties:
+        id: { type: string }
+        guideId: { type: string }
+        guideVersionNumber: { type: integer, minimum: 1 }
+        userId: { type: string }
+        status: { $ref: '#/components/schemas/GuideRunStatus' }
+        currentStepNumber: { type: integer, minimum: 1, maximum: 8 }
+        supportRequestId: { type: string, nullable: true }
+        startedAt: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time, nullable: true }
+        pausedAt: { type: string, format: date-time, nullable: true }
+        updatedAt: { type: string, format: date-time }
+        revision: { type: integer, format: int64, minimum: 1 }
+
+    CreateArtifactRequest:
+      type: object
+      additionalProperties: false
+      required: [purpose, capturedAt, file]
+      properties:
+        purpose:
+          type: string
+          enum: [REQUEST_SCREENSHOT]
+        capturedAt: { type: string, format: date-time }
+        file:
+          type: string
+          format: binary
+    CreateSupportRequestRequest:
+      type: object
+      additionalProperties: false
+      required: [initialScreenshotArtifactId]
+      properties:
+        initialScreenshotArtifactId: { type: string, minLength: 1 }
+        comment:
+          type: string
+          maxLength: 500
+          default: ''
+    CallSupportRequestRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedRequestRevision]
+      properties:
+        expectedRequestRevision: { type: integer, format: int64, minimum: 1 }
+    AcceptSupportSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedSessionRevision, consent]
+      properties:
+        expectedSessionRevision: { type: integer, format: int64, minimum: 1 }
+        consent: { $ref: '#/components/schemas/Consent' }
+    EmptyRequest:
+      type: object
+      additionalProperties: false
+      maxProperties: 0
+    ResolveSupportSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedSessionRevision, guideDecision]
+      properties:
+        expectedSessionRevision: { type: integer, format: int64, minimum: 1 }
+        guideDecision: { $ref: '#/components/schemas/GuideDecision' }
+    CreateGuideMaterialBatchRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - expectedSessionRevision
+        - captureIntervalSeconds
+        - capturedFrom
+        - capturedTo
+        - expectedItemCount
+      properties:
+        expectedSessionRevision: { type: integer, format: int64, minimum: 1 }
+        captureIntervalSeconds: { type: integer, enum: [5] }
+        capturedFrom: { type: string, format: date-time, nullable: true }
+        capturedTo: { type: string, format: date-time, nullable: true }
+        expectedItemCount: { type: integer, minimum: 0, maximum: 360 }
+    CreateGuideMaterialRequest:
+      type: object
+      additionalProperties: false
+      required: [clientCaptureId, sequence, capturedAt, file]
+      properties:
+        clientCaptureId: { type: string, minLength: 1 }
+        sequence: { type: integer, minimum: 1, maximum: 360 }
+        capturedAt: { type: string, format: date-time }
+        file: { type: string, format: binary }
+    CompleteGuideMaterialBatchRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedBatchRevision, expectedItemCount]
+      properties:
+        expectedBatchRevision: { type: integer, format: int64, minimum: 1 }
+        expectedItemCount: { type: integer, minimum: 1, maximum: 360 }
+    RetryGuideGenerationJobRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedJobRevision]
+      properties:
+        expectedJobRevision: { type: integer, format: int64, minimum: 1 }
+    UpdateGuideDraftRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedRevision, title, steps]
+      properties:
+        expectedRevision: { type: integer, format: int64, minimum: 1 }
+        title: { type: string, minLength: 1, maxLength: 40 }
+        steps:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items: { $ref: '#/components/schemas/GuideStep' }
+    SaveGuideDraftRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedRevision]
+      properties:
+        expectedRevision: { type: integer, format: int64, minimum: 1 }
+    CreateGuideRunRequest:
+      type: object
+      additionalProperties: false
+      required: [guideId]
+      properties:
+        guideId: { type: string, minLength: 1 }
+    UpdateGuideRunRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedRevision, action]
+      properties:
+        expectedRevision: { type: integer, format: int64, minimum: 1 }
+        action: { $ref: '#/components/schemas/GuideRunAction' }
+    CompleteGuideRunRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedRevision]
+      properties:
+        expectedRevision: { type: integer, format: int64, minimum: 1 }
+    CreateSupportRequestFromGuideRunRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedRevision, initialScreenshotArtifactId]
+      properties:
+        expectedRevision: { type: integer, format: int64, minimum: 1 }
+        initialScreenshotArtifactId: { type: string, minLength: 1 }
+        comment: { type: string, maxLength: 500, default: '' }
+    EndSupportSessionWithoutGuideRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedSessionRevision, reason]
+      properties:
+        expectedSessionRevision: { type: integer, format: int64, minimum: 1 }
+        reason:
+          type: string
+          enum: [GUIDE_CANCELLED, NO_MATERIALS]
+
+    ArtifactResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/Artifact' }
+    SupportRequestResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/SupportRequest' }
+    SupportRequestListResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [items]
+          properties:
+            items:
+              type: array
+              maxItems: 20
+              items: { $ref: '#/components/schemas/SupportRequest' }
+    CallSupportRequestResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [supportRequest, supportSession]
+          properties:
+            supportRequest: { $ref: '#/components/schemas/SupportRequest' }
+            supportSession: { $ref: '#/components/schemas/SupportSession' }
+    SupportRequestAndSessionResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [supportRequest, supportSession]
+          properties:
+            supportRequest: { $ref: '#/components/schemas/SupportRequest' }
+            supportSession: { $ref: '#/components/schemas/SupportSession' }
+    SupportSessionResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/SupportSession' }
+    LiveKitTokenResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [serverUrl, roomName, participantIdentity, token, expiresAt]
+          properties:
+            serverUrl: { type: string }
+            roomName: { type: string }
+            participantIdentity: { type: string }
+            token: { type: string }
+            expiresAt: { type: string, format: date-time }
+    GuideMaterialBatchCreatedResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [batch, supportSession]
+          properties:
+            batch: { $ref: '#/components/schemas/GuideMaterialBatch' }
+            supportSession: { $ref: '#/components/schemas/SupportSession' }
+    GuideMaterialBatchResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [batch, materials]
+          properties:
+            batch: { $ref: '#/components/schemas/GuideMaterialBatch' }
+            materials:
+              type: array
+              items: { $ref: '#/components/schemas/GuideMaterial' }
+    GuideMaterialCreatedResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [material, batch]
+          properties:
+            material: { $ref: '#/components/schemas/GuideMaterial' }
+            batch: { $ref: '#/components/schemas/GuideMaterialBatch' }
+    GuideMaterialBatchCompletedResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [batch, job, supportSession]
+          properties:
+            batch: { $ref: '#/components/schemas/GuideMaterialBatch' }
+            job: { $ref: '#/components/schemas/GuideGenerationJob' }
+            supportSession: { $ref: '#/components/schemas/SupportSession' }
+    GuideGenerationJobResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/GuideGenerationJob' }
+    GuideDraftResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/GuideDraft' }
+    GuideSavedResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [guide, supportSession]
+          properties:
+            guide: { $ref: '#/components/schemas/GuideDetail' }
+            supportSession: { $ref: '#/components/schemas/SupportSession' }
+    GuideListResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/GuideSummary' }
+    GuideDetailResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/GuideDetail' }
+    GuideRunResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/GuideRun' }
+    GuideRunSupportRequestResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [guideRun, supportRequest]
+          properties:
+            guideRun: { $ref: '#/components/schemas/GuideRun' }
+            supportRequest: { $ref: '#/components/schemas/SupportRequest' }

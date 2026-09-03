@@ -1,0 +1,19 @@
+{
+  "name": "mite",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "generate:api": "npm run generate:api:go && npm run generate:api:ts",
+    "generate:api:go": "cd server && go tool oapi-codegen -config oapi-codegen.yaml ../api/openapi.yaml",
+    "generate:api:ts": "npm run generate -w @mite/api-client",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present"
+  },
+  "devDependencies": {
+    "supabase": "^2.116.0"
+  }
+}
