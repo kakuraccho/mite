@@ -539,6 +539,29 @@ func TestCreateGuideMaterialNewDuplicateConflictAndStorageFailure(t *testing.T) 
 	if code, ok := domain.ErrorCodeOf(err); !ok || code != domain.CodeExternalServiceUnavailable {
 		t.Fatalf("storage error=%v", err)
 	}
+	for _, record := range failingTx.idempotency {
+		if record.LeaseExpiresAt == nil || !record.LeaseExpiresAt.Equal(failingService.now()) {
+			t.Fatalf("known storage failure lease = %v, want released at %v", record.LeaseExpiresAt, failingService.now())
+		}
+	}
+
+	unknownTx, _ := guideFixture()
+	unknownStorage := &fakeGuideStorage{objects: map[string][]byte{}, putErr: &repository.StorageOperationError{
+		Operation:      "put",
+		OutcomeUnknown: true,
+		Cause:          errors.New("connection reset"),
+	}}
+	unknownService := newGuideServiceForTest(unknownTx, unknownStorage)
+	_, _, err = unknownService.CreateGuideMaterial(context.Background(), CreateGuideMaterialCommand{Meta: userMeta("unknown"), BatchID: "batch_1", ClientCaptureID: "capture", Sequence: 1, CapturedAt: capturedAt, JPEG: jpegOne})
+	if code, ok := domain.ErrorCodeOf(err); !ok || code != domain.CodeExternalServiceUnavailable {
+		t.Fatalf("unknown storage outcome error=%v", err)
+	}
+	for _, record := range unknownTx.idempotency {
+		wantLease := unknownService.now().Add(domain.IdempotencyLease)
+		if record.LeaseExpiresAt == nil || !record.LeaseExpiresAt.Equal(wantLease) {
+			t.Fatalf("unknown storage outcome lease = %v, want retained until %v", record.LeaseExpiresAt, wantLease)
+		}
+	}
 }
 
 func TestCreateGuideMaterialParallelConflictAndDistinctSequences(t *testing.T) {

@@ -94,8 +94,8 @@ SET
     response_status = sqlc.arg(response_status),
     response_body = sqlc.arg(response_body),
     lease_expires_at = NULL,
-    completed_at = sqlc.arg(completed_at),
-    expires_at = sqlc.arg(completed_at) + interval '24 hours'
+    completed_at = sqlc.arg(completed_at)::timestamptz,
+    expires_at = sqlc.arg(completed_at)::timestamptz + interval '24 hours'
 WHERE actor_id = sqlc.arg(actor_id)
   AND method = sqlc.arg(method)
   AND path = sqlc.arg(path)

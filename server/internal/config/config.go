@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"strconv"
@@ -76,7 +77,7 @@ func load(lookup lookupEnv) (Config, error) {
 	if err := validateURL("DATABASE_URL", values["DATABASE_URL"], "postgres", "postgresql"); err != nil {
 		return Config{}, err
 	}
-	if err := validateURL("SUPABASE_URL", values["SUPABASE_URL"], "https"); err != nil {
+	if err := validateSupabaseURL(values["SUPABASE_URL"]); err != nil {
 		return Config{}, err
 	}
 	if err := validateURL("LIVEKIT_URL", values["LIVEKIT_URL"], "wss"); err != nil {
@@ -134,6 +135,21 @@ func validateURL(name, raw string, schemes ...string) error {
 		}
 	}
 	return fmt.Errorf("%s has an unsupported scheme", name)
+}
+
+func validateSupabaseURL(raw string) error {
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Host == "" {
+		return errors.New("SUPABASE_URL must be a valid URL")
+	}
+	if parsed.Scheme == "https" {
+		return nil
+	}
+	host := parsed.Hostname()
+	if parsed.Scheme == "http" && (host == "localhost" || net.ParseIP(host).IsLoopback()) {
+		return nil
+	}
+	return errors.New("SUPABASE_URL must use HTTPS except for loopback local development")
 }
 
 func parseOrigins(raw string) (map[string]struct{}, error) {

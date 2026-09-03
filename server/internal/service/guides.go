@@ -642,7 +642,9 @@ func (s *GuideService) CreateGuideMaterial(ctx context.Context, command CreateGu
 	}
 	storageKey := string(owner) + "/" + string(reservation.ArtifactID) + ".jpg"
 	if err := s.storage.Put(ctx, storageKey, bytes.NewReader(command.JPEG), int64(len(command.JPEG)), "image/jpeg"); err != nil {
-		s.releaseMaterialLease(ctx, reservation.Scope)
+		if !repository.IsStorageOutcomeUnknown(err) {
+			s.releaseMaterialLease(ctx, reservation.Scope)
+		}
 		return GuideMaterialCreated{}, 0, domain.WrapError(domain.CodeExternalServiceUnavailable, "画像を保存できない", err)
 	}
 

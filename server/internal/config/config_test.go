@@ -35,6 +35,7 @@ func TestLoadRejectsUnsafeConfiguration(t *testing.T) {
 		want  string
 	}{
 		{name: "same tokens", field: "DEMO_FAMILY_TOKEN", value: "user-token", want: "must differ"},
+		{name: "insecure remote Supabase", field: "SUPABASE_URL", value: "http://supabase.example", want: "must use HTTPS"},
 		{name: "wildcard origin", field: "CLIENT_ORIGINS", value: "*", want: "invalid origin"},
 		{name: "origin path", field: "CLIENT_ORIGINS", value: "https://client.example/path", want: "without paths"},
 		{name: "wrong livekit scheme", field: "LIVEKIT_URL", value: "https://livekit.example", want: "unsupported scheme"},
@@ -51,6 +52,24 @@ func TestLoadRejectsUnsafeConfiguration(t *testing.T) {
 			})
 			if err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("load() error = %v, want substring %q", err, test.want)
+			}
+		})
+	}
+}
+
+func TestLoadAllowsLoopbackSupabase(t *testing.T) {
+	t.Parallel()
+	for _, value := range []string{"http://localhost:54321", "http://127.0.0.1:54321", "http://[::1]:54321"} {
+		value := value
+		t.Run(value, func(t *testing.T) {
+			t.Parallel()
+			environment := validEnvironment()
+			environment["SUPABASE_URL"] = value
+			if _, err := load(func(name string) (string, bool) {
+				result, ok := environment[name]
+				return result, ok
+			}); err != nil {
+				t.Fatalf("load() error = %v", err)
 			}
 		})
 	}

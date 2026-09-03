@@ -18,8 +18,8 @@ SET
     response_status = $1,
     response_body = $2,
     lease_expires_at = NULL,
-    completed_at = $3,
-    expires_at = $3 + interval '24 hours'
+    completed_at = $3::timestamptz,
+    expires_at = $3::timestamptz + interval '24 hours'
 WHERE actor_id = $4
   AND method = $5
   AND path = $6
