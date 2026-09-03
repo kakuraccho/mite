@@ -15,12 +15,23 @@ func NewRouter(
 	logger *slog.Logger,
 	api generated.StrictServerInterface,
 ) http.Handler {
+	return NewRouterWithEvents(cfg, logger, api, nil)
+}
+
+// NewRouterWithEvents wires the WebSocket endpoint outside REST bearer
+// middleware because /v1/events authenticates with its first message.
+func NewRouterWithEvents(
+	cfg config.Config,
+	logger *slog.Logger,
+	api generated.StrictServerInterface,
+	events http.Handler,
+) http.Handler {
 	router := chi.NewRouter()
 	router.Use(RequestID)
 	router.Use(Recover(logger))
-	router.Use(AccessLog(logger))
-	router.Use(CORS(cfg.ClientOrigins))
-	router.Use(NewAuthenticator(cfg.DemoUserToken, cfg.DemoFamilyToken).Middleware)
+	if events != nil {
+		router.Handle("/v1/events", events)
+	}
 
 	if api != nil {
 		strictHandler := generated.NewStrictHandlerWithOptions(
@@ -35,7 +46,12 @@ func NewRouter(
 				},
 			},
 		)
-		generated.HandlerFromMux(strictHandler, router)
+		router.Group(func(rest chi.Router) {
+			rest.Use(AccessLog(logger))
+			rest.Use(CORS(cfg.ClientOrigins))
+			rest.Use(NewAuthenticator(cfg.DemoUserToken, cfg.DemoFamilyToken).Middleware)
+			generated.HandlerFromMux(strictHandler, rest)
+		})
 	}
 	return router
 }

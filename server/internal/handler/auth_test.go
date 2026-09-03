@@ -38,6 +38,20 @@ func TestAuthenticator(t *testing.T) {
 	}
 }
 
+func TestAuthenticatorAuthenticateTokenForWebSocket(t *testing.T) {
+	authenticator := NewAuthenticator("user-secret", "family-secret")
+	actor, err := authenticator.AuthenticateToken("family-secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if actor.ID != "family_demo" || actor.Role != domain.RoleFamily {
+		t.Fatalf("actor=%+v", actor)
+	}
+	if _, err := authenticator.AuthenticateToken(" family-secret"); err == nil {
+		t.Fatal("whitespace token was accepted")
+	}
+}
+
 func TestAuthenticatorMiddlewareStoresActor(t *testing.T) {
 	t.Parallel()
 	authenticator := NewAuthenticator("user-secret", "family-secret")

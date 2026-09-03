@@ -28,6 +28,16 @@ func (a Authenticator) Authenticate(header string) (domain.Actor, error) {
 	if token == "" || strings.TrimSpace(token) != token {
 		return domain.Actor{}, domain.NewError(domain.CodeUnauthenticated, "認証情報が不正")
 	}
+	return a.AuthenticateToken(token)
+}
+
+// AuthenticateToken authenticates the token carried by the first WebSocket
+// message. Keeping this separate prevents credentials from being placed in a
+// URL while sharing the same fixed-token mapping as REST authentication.
+func (a Authenticator) AuthenticateToken(token string) (domain.Actor, error) {
+	if token == "" || strings.TrimSpace(token) != token {
+		return domain.Actor{}, domain.NewError(domain.CodeUnauthenticated, "認証情報が不正")
+	}
 	if secureEqual(token, a.userToken) {
 		return domain.Actor{ID: "user_demo", Role: domain.RoleUser}, nil
 	}
