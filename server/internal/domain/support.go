@@ -3,34 +3,34 @@ package domain
 import "time"
 
 type GuideContext struct {
-	GuideRunID         ID
-	GuideID            ID
-	GuideVersionNumber int
-	StepNumber         int
-	GuideTitle         string
-	StepInstruction    string
-	StepArtifactID     ID
+	GuideRunID         ID     `json:"guideRunId"`
+	GuideID            ID     `json:"guideId"`
+	GuideVersionNumber int    `json:"guideVersionNumber"`
+	StepNumber         int    `json:"stepNumber"`
+	GuideTitle         string `json:"guideTitle"`
+	StepInstruction    string `json:"stepInstruction"`
+	StepArtifactID     ID     `json:"stepArtifactId"`
 }
 
 type SupportRequest struct {
-	ID                          ID
-	UserID                      ID
-	FamilyID                    ID
-	InitialScreenshotArtifactID ID
-	Comment                     string
-	Status                      SupportRequestStatus
-	SupportSessionID            *ID
-	GuideContext                *GuideContext
-	CreatedAt                   time.Time
-	UpdatedAt                   time.Time
-	Revision                    int64
+	ID                          ID                   `json:"id"`
+	UserID                      ID                   `json:"userId"`
+	FamilyID                    ID                   `json:"familyId"`
+	InitialScreenshotArtifactID ID                   `json:"initialScreenshotArtifactId"`
+	Comment                     string               `json:"comment"`
+	Status                      SupportRequestStatus `json:"status"`
+	SupportSessionID            *ID                  `json:"supportSessionId"`
+	GuideContext                *GuideContext        `json:"guideContext"`
+	CreatedAt                   time.Time            `json:"createdAt"`
+	UpdatedAt                   time.Time            `json:"updatedAt"`
+	Revision                    int64                `json:"revision"`
 }
 
 type Consent struct {
-	Audio           bool
-	ScreenShare     bool
-	PeriodicCapture bool
-	TextVersion     string
+	Audio           bool   `json:"audio"`
+	ScreenShare     bool   `json:"screenShare"`
+	PeriodicCapture bool   `json:"periodicCapture"`
+	TextVersion     string `json:"textVersion"`
 }
 
 func (c Consent) Accepted() bool {
@@ -38,23 +38,23 @@ func (c Consent) Accepted() bool {
 }
 
 type SupportSession struct {
-	ID                   ID
-	SupportRequestID     ID
-	UserID               ID
-	FamilyID             ID
-	LiveKitRoomName      string
-	Status               SupportSessionStatus
-	GuideDecision        *GuideDecision
-	GuideMaterialBatchID *ID
-	GuideGenerationJobID *ID
-	GuideDraftID         *ID
-	GuideID              *ID
-	Consent              *Consent
-	ConsentedAt          *time.Time
-	StartedAt            *time.Time
-	EndedAt              *time.Time
-	EndReason            *SupportSessionEndReason
-	CreatedAt            time.Time
-	UpdatedAt            time.Time
-	Revision             int64
+	ID                   ID                       `json:"id"`
+	SupportRequestID     ID                       `json:"supportRequestId"`
+	UserID               ID                       `json:"userId"`
+	FamilyID             ID                       `json:"familyId"`
+	LiveKitRoomName      string                   `json:"livekitRoomName"`
+	Status               SupportSessionStatus     `json:"status"`
+	GuideDecision        *GuideDecision           `json:"guideDecision"`
+	GuideMaterialBatchID *ID                      `json:"guideMaterialBatchId"`
+	GuideGenerationJobID *ID                      `json:"guideGenerationJobId"`
+	GuideDraftID         *ID                      `json:"guideDraftId"`
+	GuideID              *ID                      `json:"guideId"`
+	Consent              *Consent                 `json:"consent"`
+	ConsentedAt          *time.Time               `json:"consentedAt"`
+	StartedAt            *time.Time               `json:"startedAt"`
+	EndedAt              *time.Time               `json:"endedAt"`
+	EndReason            *SupportSessionEndReason `json:"endReason"`
+	CreatedAt            time.Time                `json:"createdAt"`
+	UpdatedAt            time.Time                `json:"updatedAt"`
+	Revision             int64                    `json:"revision"`
 }

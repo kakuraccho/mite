@@ -3,6 +3,7 @@ package domain
 import (
 	"fmt"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestValidateGuideDraftContentBoundaries(t *testing.T) {
@@ -26,6 +27,49 @@ func TestValidateGuideDraftContentBoundaries(t *testing.T) {
 	nineSteps := append(append([]GuideStep(nil), steps...), GuideStep{Position: 9, ArtifactID: "art_9", Instruction: "完了する"})
 	if err := ValidateGuideDraftContent("操作ガイド", nineSteps, allowed); err == nil {
 		t.Fatal("nine steps accepted")
+	}
+}
+
+func TestSelectGuideMaterialIndexes(t *testing.T) {
+	t.Parallel()
+	tests := []struct{ total, want int }{{0, 0}, {1, 1}, {30, 30}, {31, 30}, {360, 30}}
+	for _, test := range tests {
+		indexes := SelectGuideMaterialIndexes(test.total)
+		if len(indexes) != test.want {
+			t.Fatalf("total %d: len = %d, want %d", test.total, len(indexes), test.want)
+		}
+		for index := 1; index < len(indexes); index++ {
+			if indexes[index] <= indexes[index-1] {
+				t.Fatalf("total %d: indexes are not strictly increasing: %v", test.total, indexes)
+			}
+		}
+		if test.total > 0 && (indexes[0] != 0 || indexes[len(indexes)-1] != test.total-1) {
+			t.Fatalf("total %d: first/last not retained: %v", test.total, indexes)
+		}
+	}
+}
+
+func TestValidateGeneratedGuideBoundaries(t *testing.T) {
+	t.Parallel()
+	allowed := map[ID]struct{}{"art_1": {}}
+	valid := GeneratedGuide{Title: "ガイド", Steps: []GeneratedGuideStep{{SourceArtifactID: "art_1", Instruction: "ボタンを押す"}}}
+	if err := ValidateGeneratedGuide(valid, allowed); err != nil {
+		t.Fatalf("valid output rejected: %v", err)
+	}
+	invalid := []GeneratedGuide{
+		{Title: "", Steps: valid.Steps},
+		{Title: string(make([]rune, 41)), Steps: valid.Steps},
+		{Title: "ガイド", Steps: nil},
+		{Title: "ガイド", Steps: []GeneratedGuideStep{{SourceArtifactID: "other", Instruction: "押す"}}},
+		{Title: "ガイド", Steps: []GeneratedGuideStep{{SourceArtifactID: "art_1", Instruction: " "}}},
+	}
+	for index, output := range invalid {
+		if err := ValidateGeneratedGuide(output, allowed); err == nil {
+			t.Fatalf("invalid output %d accepted", index)
+		}
+	}
+	if !utf8.ValidString(valid.Title) {
+		t.Fatal("test fixture is invalid UTF-8")
 	}
 }
 
