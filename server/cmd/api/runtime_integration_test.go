@@ -15,7 +15,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -152,6 +151,22 @@ func TestServerRuntimeE2E(t *testing.T) {
 		"purpose": "REQUEST_SCREENSHOT", "capturedAt": now.Format(time.RFC3339),
 	}, initialJPEG, http.StatusCreated)
 	initialArtifactID := jsonString(t, initialArtifact.body, "data", "id")
+	initialArtifactSHA256 := jsonString(t, initialArtifact.body, "data", "sha256")
+	artifactCount, artifactRevision := artifactState(t, pool, initialArtifactSHA256, now)
+	if artifactCount != 1 || artifactRevision != 1 {
+		t.Fatalf("artifact state after first request = count %d, revision %d; want count 1, revision 1", artifactCount, artifactRevision)
+	}
+	replayedArtifact := client.multipart(t, "/v1/artifacts", e2eUserToken, keyPrefix+"initial", map[string]string{
+		"purpose": "REQUEST_SCREENSHOT", "capturedAt": now.Format(time.RFC3339),
+	}, initialJPEG, http.StatusCreated)
+	assertIdempotentReplay(t, initialArtifact, replayedArtifact)
+	replayedArtifactCount, replayedArtifactRevision := artifactState(t, pool, initialArtifactSHA256, now)
+	if replayedArtifactCount != artifactCount || replayedArtifactRevision != artifactRevision {
+		t.Fatalf(
+			"artifact state changed on replay: first count/revision=%d/%d, replay count/revision=%d/%d",
+			artifactCount, artifactRevision, replayedArtifactCount, replayedArtifactRevision,
+		)
+	}
 	content := client.request(t, http.MethodGet, "/v1/artifacts/"+initialArtifactID+"/content", e2eFamilyToken, "", nil)
 	assertStatus(t, content, http.StatusOK)
 	if content.Header.Get("Content-Type") != "image/jpeg" || content.Header.Get("Cache-Control") != "private, no-store" {
@@ -164,9 +179,18 @@ func TestServerRuntimeE2E(t *testing.T) {
 	createRequestBody := map[string]any{"initialScreenshotArtifactId": initialArtifactID, "comment": "E2E support request"}
 	createdRequest := client.json(t, http.MethodPost, "/v1/support-requests", e2eUserToken, keyPrefix+"request", createRequestBody, http.StatusCreated)
 	requestID := jsonString(t, createdRequest.body, "data", "id")
+	requestCount, requestRevision := supportRequestState(t, pool, initialArtifactID, "E2E support request")
+	if requestCount != 1 || requestRevision != 1 {
+		t.Fatalf("support request state after first request = count %d, revision %d; want count 1, revision 1", requestCount, requestRevision)
+	}
 	replayedRequest := client.json(t, http.MethodPost, "/v1/support-requests", e2eUserToken, keyPrefix+"request", createRequestBody, http.StatusCreated)
-	if !reflect.DeepEqual(createdRequest.body, replayedRequest.body) {
-		t.Fatalf("idempotency replay differs: first=%#v replay=%#v", createdRequest.body, replayedRequest.body)
+	assertIdempotentReplay(t, createdRequest, replayedRequest)
+	replayedRequestCount, replayedRequestRevision := supportRequestState(t, pool, initialArtifactID, "E2E support request")
+	if replayedRequestCount != requestCount || replayedRequestRevision != requestRevision {
+		t.Fatalf(
+			"support request state changed on replay: first count/revision=%d/%d, replay count/revision=%d/%d",
+			requestCount, requestRevision, replayedRequestCount, replayedRequestRevision,
+		)
 	}
 	var event map[string]any
 	if err := websocket.JSON.Receive(connection, &event); err != nil {
@@ -179,6 +203,8 @@ func TestServerRuntimeE2E(t *testing.T) {
 	client.json(t, http.MethodGet, "/v1/support-requests/"+requestID, e2eFamilyToken, "", nil, http.StatusOK)
 
 	called := client.json(t, http.MethodPost, "/v1/support-requests/"+requestID+"/call", e2eFamilyToken, keyPrefix+"call", map[string]any{"expectedRequestRevision": 1}, http.StatusCreated)
+	replayedCall := client.json(t, http.MethodPost, "/v1/support-requests/"+requestID+"/call", e2eFamilyToken, keyPrefix+"call", map[string]any{"expectedRequestRevision": 1}, http.StatusCreated)
+	assertIdempotentReplay(t, called, replayedCall)
 	sessionID := jsonString(t, called.body, "data", "supportSession", "id")
 	client.json(t, http.MethodGet, "/v1/support-sessions/"+sessionID, e2eUserToken, "", nil, http.StatusOK)
 	client.json(t, http.MethodPost, "/v1/support-sessions/"+sessionID+"/accept", e2eUserToken, keyPrefix+"accept", map[string]any{
@@ -192,9 +218,13 @@ func TestServerRuntimeE2E(t *testing.T) {
 	if code := jsonString(t, conflict.body, "error", "code"); code != "REVISION_CONFLICT" {
 		t.Fatalf("conflict code = %q", code)
 	}
-	client.json(t, http.MethodPost, "/v1/support-sessions/"+sessionID+"/resolve", e2eFamilyToken, keyPrefix+"resolve", map[string]any{
+	resolved := client.json(t, http.MethodPost, "/v1/support-sessions/"+sessionID+"/resolve", e2eFamilyToken, keyPrefix+"resolve", map[string]any{
 		"expectedSessionRevision": 2, "guideDecision": "CREATE",
 	}, http.StatusOK)
+	replayedResolve := client.json(t, http.MethodPost, "/v1/support-sessions/"+sessionID+"/resolve", e2eFamilyToken, keyPrefix+"resolve", map[string]any{
+		"expectedSessionRevision": 2, "guideDecision": "CREATE",
+	}, http.StatusOK)
+	assertIdempotentReplay(t, resolved, replayedResolve)
 
 	batchCreated := client.json(t, http.MethodPost, "/v1/support-sessions/"+sessionID+"/guide-material-batches", e2eUserToken, keyPrefix+"batch", map[string]any{
 		"expectedSessionRevision": 3,
@@ -218,6 +248,10 @@ func TestServerRuntimeE2E(t *testing.T) {
 	completed := client.json(t, http.MethodPost, "/v1/guide-material-batches/"+batchID+"/complete", e2eUserToken, keyPrefix+"complete", map[string]any{
 		"expectedBatchRevision": 3, "expectedItemCount": 2,
 	}, http.StatusAccepted)
+	replayedComplete := client.json(t, http.MethodPost, "/v1/guide-material-batches/"+batchID+"/complete", e2eUserToken, keyPrefix+"complete", map[string]any{
+		"expectedBatchRevision": 3, "expectedItemCount": 2,
+	}, http.StatusAccepted)
+	assertIdempotentReplay(t, completed, replayedComplete)
 	jobID := jsonString(t, completed.body, "data", "job", "id")
 
 	var job e2eResponse
@@ -247,6 +281,10 @@ func TestServerRuntimeE2E(t *testing.T) {
 	saved := client.json(t, http.MethodPost, "/v1/guide-drafts/"+draftID+"/save", e2eFamilyToken, keyPrefix+"save", map[string]any{
 		"expectedRevision": jsonNumber(t, updatedDraft.body, "data", "revision"),
 	}, http.StatusCreated)
+	replayedSave := client.json(t, http.MethodPost, "/v1/guide-drafts/"+draftID+"/save", e2eFamilyToken, keyPrefix+"save", map[string]any{
+		"expectedRevision": jsonNumber(t, updatedDraft.body, "data", "revision"),
+	}, http.StatusCreated)
+	assertIdempotentReplay(t, saved, replayedSave)
 	guideID := jsonString(t, saved.body, "data", "guide", "id")
 	client.json(t, http.MethodGet, "/v1/guides", e2eUserToken, "", nil, http.StatusOK)
 	client.json(t, http.MethodGet, "/v1/guides/"+guideID, e2eUserToken, "", nil, http.StatusOK)
@@ -408,6 +446,49 @@ func assertStatus(t *testing.T, response e2eResponse, want int) {
 	if response.Status != want {
 		t.Fatalf("status = %d, want %d; body=%s", response.Status, want, response.rawBody)
 	}
+}
+
+func assertIdempotentReplay(t *testing.T, first, replay e2eResponse) {
+	t.Helper()
+	if replay.Status != first.Status {
+		t.Fatalf("idempotency replay status = %d, want first status %d", replay.Status, first.Status)
+	}
+	if !bytes.Equal(replay.rawBody, first.rawBody) {
+		t.Fatalf("idempotency replay raw body differs:\nfirst=%q\nreplay=%q", first.rawBody, replay.rawBody)
+	}
+}
+
+func artifactState(t *testing.T, pool *pgxpool.Pool, sha256 string, capturedAt time.Time) (int, int64) {
+	t.Helper()
+	var count int
+	var revision int64
+	if err := pool.QueryRow(context.Background(), `
+		SELECT count(*), max(revision)
+		FROM artifacts
+		WHERE owner_user_id = 'user_demo'
+		  AND purpose = 'REQUEST_SCREENSHOT'
+		  AND sha256 = $1
+		  AND captured_at = $2
+	`, sha256, capturedAt).Scan(&count, &revision); err != nil {
+		t.Fatal(err)
+	}
+	return count, revision
+}
+
+func supportRequestState(t *testing.T, pool *pgxpool.Pool, artifactID, comment string) (int, int64) {
+	t.Helper()
+	var count int
+	var revision int64
+	if err := pool.QueryRow(context.Background(), `
+		SELECT count(*), max(revision)
+		FROM support_requests
+		WHERE user_id = 'user_demo'
+		  AND initial_screenshot_artifact_id = $1
+		  AND comment = $2
+	`, artifactID, comment).Scan(&count, &revision); err != nil {
+		t.Fatal(err)
+	}
+	return count, revision
 }
 
 func jsonMap(t *testing.T, value map[string]any, path ...string) map[string]any {

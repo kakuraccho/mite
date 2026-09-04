@@ -49,6 +49,8 @@ go run ./cmd/api
 
 ## 検証
 
+主要APIをローカルSupabaseと`curl`で順番に確認する場合は、[サーバー手動検証ガイド](./MANUAL_TESTING.md)を参照する。
+
 ```bash
 go tool sqlc generate
 go test ./...

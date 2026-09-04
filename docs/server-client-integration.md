@@ -11,7 +11,15 @@ npx supabase start
 npx supabase db reset
 ```
 
-`npx supabase status -o env` の出力を、次の対応でサーバー環境変数へ設定します。
+[`server/.env.example`](../server/.env.example) からGit管理外の `server/.env` を作成した場合は、先に読み込みます。サーバー自身は `.env` を自動で読み込みません。
+
+```bash
+set -a
+source server/.env
+set +a
+```
+
+その後、`npx supabase status -o env` の現行ローカル値を、次の対応でサーバー環境変数へ上書きします。ローカルSupabaseの再起動やresetでSecret keyが変わることがあるため、順序を逆にして `.env` の古い値で上書きしてはいけません。
 
 | Supabase CLI | サーバー |
 |---|---|
@@ -19,7 +27,16 @@ npx supabase db reset
 | `API_URL` | `SUPABASE_URL` |
 | `SECRET_KEY` | `SUPABASE_SECRET_KEY` |
 
-残りの必須値は [`server/.env.example`](../server/.env.example) を参照してください。ローカルでは `SUPABASE_STORAGE_BUCKET=mite-artifacts` を使います。`.env` はGitへ追加せず、値を現在のshellへexportしてから起動します。
+CLIの秘密値を画面へ表示せず、同じshellで次を実行します。
+
+```bash
+eval "$(npx supabase status -o env 2>/dev/null)"
+export DATABASE_URL="$DB_URL"
+export SUPABASE_URL="$API_URL"
+export SUPABASE_SECRET_KEY="$SECRET_KEY"
+```
+
+残りの必須値は `server/.env` または実行環境へ設定してください。ローカルでは `SUPABASE_STORAGE_BUCKET=mite-artifacts` を使います。`.env` はGitへ追加しません。
 
 ```bash
 cd server
@@ -64,6 +81,8 @@ REQUEST_SCREENSHOT登録
 ## 4. 再送と復旧
 
 状態変更POSTとmultipart POSTでは、操作前に `Idempotency-Key` を生成して端末へ保存します。応答が確定するまで、同じbody・同じfile bytes・同じkeyで再送してください。異なるbodyへ同じkeyを使うと `IDEMPOTENCY_KEY_REUSED` です。
+
+同一操作の完了済み応答を再送した場合、サーバーは初回と同じHTTP statusと、初回と同一バイト列のJSON本文を返します。空白、改行、オブジェクトのキー順も変わりません。`X-Request-ID` などのレスポンスヘッダーはリクエストごとに変わることがあり、この一致要件には含みません。
 
 `IDEMPOTENCY_REQUEST_IN_PROGRESS` の409では、`Retry-After` 秒後に同じrequestを再送します。CORSで `Retry-After` を公開済みなので、rendererから `response.headers.get("Retry-After")` で参照できます。
 

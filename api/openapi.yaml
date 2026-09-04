@@ -720,6 +720,9 @@ components:
       name: Idempotency-Key
       in: header
       required: true
+      description: >-
+        操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、
+        初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。
       schema:
         type: string
         minLength: 1

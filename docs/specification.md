@@ -203,7 +203,7 @@ Idempotency-Keyは次の規約に従う。
 - 値は1〜128文字のASCII文字列とし、クライアントが操作ごとに生成する。同じ操作の応答が確定するまで端末へ保存し、タイムアウトや再起動後も同じ値を再利用する。
 - サーバーは actorId、method、実際のpath、key の組を一意とし、完了から24時間、PostgreSQLへ永続化する。Goサーバー再起動で失ってはならない。
 - requestHashは、JSONでは検証済みのリクエスト型を仕様上のfield順で再直列化したJSONから計算する。省略可能fieldは既定値またはnullへ補完し、元のキー順と空白に依存させない。multipartでは型検証・正規化したテキストfieldとファイル内容のSHA-256から計算し、HTTPのmultipart boundaryは比較対象にしない。
-- 同じキーと同じrequestHashの完了済みリクエストには、現在状態の検証より先に、初回と同じHTTP statusとJSONレスポンスを返す。状態変更とrevision更新を繰り返さない。
+- 同じキーと同じrequestHashの完了済みリクエストには、現在状態の検証より先に、初回と同じHTTP statusと、初回のJSONレスポンス本文と同一バイト列の本文を返す。JSON本文の空白、改行、オブジェクトのキー順も初回から変えてはならない。`X-Request-ID` などのレスポンスヘッダーはこの一致要件に含めない。状態変更とrevision更新を繰り返さない。
 - 同じキーでrequestHashが異なる場合は、現在状態に関係なく409 IDEMPOTENCY_KEY_REUSEDを返す。
 - 同じキーの処理が進行中の場合は409 IDEMPOTENCY_REQUEST_IN_PROGRESSと `Retry-After: 1` を返す。クライアントは同じキーで再送する。
 - 認証、形式、サイズの検証に失敗したリクエストと、再試行可能な5xx応答は完了済みとして保存しない。それ以外の業務結果はIdempotencyRecordへ保存する。
@@ -536,7 +536,7 @@ currentStepNumberは固定したGuideVersionの1〜ステップ数とする。IN
 
 ### 5.10 内部整合性データ
 
-IdempotencyRecordは actorId、method、path、key、requestHash、status、resourceId、responseStatus、responseBody、leaseExpiresAt、createdAt、completedAt、expiresAt を持つ。actorId、method、path、keyを複合主キーとし、statusはIN_PROGRESSまたはCOMPLETEDとする。resourceIdはStorage登録を再開するときの同一Artifact IDとして使う。Storage処理中はleaseExpiresAtを更新し、期限内の同じ処理を並行実行しない。
+IdempotencyRecordは actorId、method、path、key、requestHash、status、resourceId、responseStatus、responseBody、leaseExpiresAt、createdAt、completedAt、expiresAt を持つ。actorId、method、path、keyを複合主キーとし、statusはIN_PROGRESSまたはCOMPLETEDとする。responseStatusは初回のHTTP status、responseBodyは初回に返したJSON本文のバイト表現をそのまま保持し、再送時に再直列化またはJSONとして正規化してはならない。resourceIdはStorage登録を再開するときの同一Artifact IDとして使う。Storage処理中はleaseExpiresAtを更新し、期限内の同じ処理を並行実行しない。
 
 ArtifactDeletionTaskは id、artifactId、storageKey、status、attempt、nextAttemptAt、createdAt を持つ。statusはPENDINGまたはRUNNINGとする。artifactIdはnullを許容し、Storage成功・DB失敗で生じた未確定オブジェクトも扱うため外部キーにしない。削除対象をDBトランザクションで予約し、Storage削除を再起動後も再試行するための内部データであり、APIには公開しない。
 
@@ -1503,7 +1503,7 @@ Supabase、LiveKit、Google AI StudioのGemini APIキーをクライアントの
 
 ### 17.4 契約と安全性
 
-- 同じIdempotency-Keyによる再送でデータが増えない。
+- 同じIdempotency-Keyによる再送で、初回と同じHTTP statusおよび同一バイト列のJSON本文が返り、データが増えない。
 - 同じIdempotency-Keyと異なるbodyで409 IDEMPOTENCY_KEY_REUSEDになる。
 - 古いexpectedRevisionで更新すると409になる。
 - 家族は別ペアの画像を取得できない。
@@ -1513,7 +1513,7 @@ Supabase、LiveKit、Google AI StudioのGemini APIキーをクライアントの
 
 ### 17.5 二重送信と並行実行
 
-1. support-request、call、resolve、batch complete、draft saveを同じIdempotency-Keyで2回送り、HTTP statusとbodyが初回と同じで、エンティティとrevisionが増えない。
+1. support-request、call、resolve、batch complete、draft saveを同じIdempotency-Keyで2回送り、HTTP statusが初回と同じで、JSON本文が初回と同一バイト列になり、エンティティとrevisionが増えない。`X-Request-ID` などのレスポンスヘッダーは一致を要求しない。
 2. 上記を別のIdempotency-Keyで状態遷移後に再実行し、409になり、SupportSession、GuideGenerationJob、Guideが重複しない。
 3. 同じexpectedRevisionの競合更新を同時に送り、片方だけが成功し、もう片方が409 REVISION_CONFLICTになる。
 4. 3並列で1〜360件のGuideMaterialを順不同に登録し、各clientCaptureIdとsequenceが一意、receivedItemCountが実件数、最終revisionが1+件数になる。

@@ -947,41 +947,49 @@ type UnprocessableEntity = ErrorResponse
 
 // CreateArtifactParams defines parameters for CreateArtifact.
 type CreateArtifactParams struct {
+	// IdempotencyKey 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
 // SaveGuideDraftParams defines parameters for SaveGuideDraft.
 type SaveGuideDraftParams struct {
+	// IdempotencyKey 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
 // RetryGuideGenerationJobParams defines parameters for RetryGuideGenerationJob.
 type RetryGuideGenerationJobParams struct {
+	// IdempotencyKey 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
 // CompleteGuideMaterialBatchParams defines parameters for CompleteGuideMaterialBatch.
 type CompleteGuideMaterialBatchParams struct {
+	// IdempotencyKey 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
 // CreateGuideMaterialParams defines parameters for CreateGuideMaterial.
 type CreateGuideMaterialParams struct {
+	// IdempotencyKey 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
 // CreateGuideRunParams defines parameters for CreateGuideRun.
 type CreateGuideRunParams struct {
+	// IdempotencyKey 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
 // CompleteGuideRunParams defines parameters for CompleteGuideRun.
 type CompleteGuideRunParams struct {
+	// IdempotencyKey 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
 // CreateSupportRequestFromGuideRunParams defines parameters for CreateSupportRequestFromGuideRun.
 type CreateSupportRequestFromGuideRunParams struct {
+	// IdempotencyKey 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
@@ -992,31 +1000,37 @@ type ListSupportRequestsParams struct {
 
 // CreateSupportRequestParams defines parameters for CreateSupportRequest.
 type CreateSupportRequestParams struct {
+	// IdempotencyKey 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
 // CallSupportRequestParams defines parameters for CallSupportRequest.
 type CallSupportRequestParams struct {
+	// IdempotencyKey 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
 // AcceptSupportSessionParams defines parameters for AcceptSupportSession.
 type AcceptSupportSessionParams struct {
+	// IdempotencyKey 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
 // EndSupportSessionWithoutGuideParams defines parameters for EndSupportSessionWithoutGuide.
 type EndSupportSessionWithoutGuideParams struct {
+	// IdempotencyKey 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
 // CreateGuideMaterialBatchParams defines parameters for CreateGuideMaterialBatch.
 type CreateGuideMaterialBatchParams struct {
+	// IdempotencyKey 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
 // ResolveSupportSessionParams defines parameters for ResolveSupportSession.
 type ResolveSupportSessionParams struct {
+	// IdempotencyKey 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
