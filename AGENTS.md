@@ -87,5 +87,7 @@ chore/project/update-dependencies
 
 - 変更後は、対象範囲に応じてテスト、Lint、型チェックおよびビルドを実行してください。
 - ドキュメント変更では、リンク、コマンド、見出し構造および記述内容が現在のリポジトリと一致していることを確認してください。
-- 技術構成が決まり、各ディレクトリに検証コマンドが追加された場合は、このファイルにもコマンドを追記してください。
+- API生成はリポジトリルートで `npm run generate:api` を実行してください。
+- TypeScript共有packageはリポジトリルートで `npm run typecheck`、`npm run lint`、`npm run build` を実行してください。
+- サーバーは `server/` で `go tool sqlc generate`、`go test ./...`、`go vet ./...`、`go build ./...` を実行してください。
 - 実行できなかった確認項目がある場合は、完了報告で項目と理由を明記してください。

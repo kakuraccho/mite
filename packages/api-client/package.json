@@ -1,0 +1,30 @@
+{
+  "name": "@mite/api-client",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "generate": "openapi-typescript ../../api/openapi.yaml -o src/generated/schema.ts --default-non-nullable false",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit --pretty false",
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "openapi-fetch": "0.17.0"
+  },
+  "devDependencies": {
+    "openapi-typescript": "7.13.0",
+    "typescript": "5.9.3"
+  }
+}
