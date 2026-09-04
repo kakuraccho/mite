@@ -1,4 +1,5 @@
-html,
+/* Override the shared :root background behind the sliding panel. */
+html:root,
 body,
 #root {
   width: 100%;
