@@ -123,10 +123,10 @@ TypeBoxとFastifyは採用しない。両者はTypeScriptサーバー向けで�
 - 自動生成ファイルは直接編集しない。正本を変更して再生成する。
 - 自動生成ファイルはリポジトリへ含め、生成元と同じPull Requestで更新する。
 - 自動生成ファイルは通常のコードレビュー対象外とし、正本と手書き実装をレビューする。
-- ルートのnpm workspaceは `apps/*` と `packages/*` を対象とし、`mock/*` は含めない。
+- ルートのnpm workspaceは `packages/*` を対象とし、クライアントのnpm workspaceは `client/apps/*` と `client/packages/*` を対象とする。`mock/*` はどちらにも含めない。
 - `packages/api-client` は非公開workspace package `@mite/api-client` とし、npm registryへ公開しない。
 - `packages/api-client` はOpenAPIから生成したTypeScript型と、API接続先およびBearerトークンを受け取る最小限のクライアント生成処理を公開する。画面状態、Electron固有処理、Idempotency-Keyの端末保存、再試行およびWebSocket接続は各Electronアプリが持つ。
-- `oapi-codegen` は `server/go.mod` のtool dependency、`openapi-typescript` は `packages/api-client` のdevDependencyとしてバージョンを固定する。JavaScript依存関係はルートの `package-lock.json` で固定する。
+- `oapi-codegen` は `server/go.mod` のtool dependency、`openapi-typescript` は `packages/api-client` のdevDependencyとしてバージョンを固定する。API生成側のJavaScript依存関係はルートの `package-lock.json`、Electron側は `client/package-lock.json` で固定する。
 - ルートの `npm run generate:api` で、同じ `api/openapi.yaml` からGoの型とサーバーインターフェース、およびTypeScript型を一括生成する。
 
 API契約を変更する場合は、先に本書を更新してクライアント担当とサーバー担当で合意し、次に `api/openapi.yaml` を更新して再生成する。本書、OpenAPIおよび影響する生成物は同じPull Requestへ含める。CIではAPIコードを再生成し、コミット済み生成物との間に差分がないことを確認する。
@@ -134,11 +134,8 @@ API契約を変更する場合は、先に本書を更新してクライアン�
 ### 2.4 リポジトリ構成
 
 ~~~text
-package.json                npm workspaceと共通コマンド
-package-lock.json           JavaScript依存関係の固定
-apps/
-├─ user-electron/          利用者側Electron
-└─ family-electron/        家族側Electron
+package.json                API生成用npm workspaceと共通コマンド
+package-lock.json           API生成側JavaScript依存関係の固定
 packages/
 └─ api-client/             非公開workspace package @mite/api-client
    └─ src/
@@ -146,6 +143,16 @@ packages/
       │  └─ schema.ts      OpenAPIから生成するTypeScript型
       ├─ client.ts         openapi-fetchのクライアント生成処理
       └─ index.ts          packageの公開入口
+client/
+├─ package.json            Electronクライアント用npm workspace
+├─ package-lock.json       Electron側JavaScript依存関係の固定
+├─ apps/
+│  ├─ user-electron/       利用者側Electron
+│  └─ family-electron/     家族側Electron
+└─ packages/
+   ├─ client-api/          REST・WebSocket adapter @mite/client-api
+   ├─ client-core/         revision・再試行・復元
+   └─ ui/                  共通UI
 api/
 └─ openapi.yaml            APIの正本
 server/
@@ -162,7 +169,7 @@ supabase/
 
 両Electronアプリは同じリポジトリで管理するが、別々の実行ファイルとしてビルドする。利用者用と家族用で異なるデモトークンを設定し、実行中に役割を切り替えない。
 
-両Electronアプリは `@mite/api-client` をworkspace経由で参照する。生成されたTypeScript型やクライアントを相対パスで直接参照せず、packageの公開入口から利用する。
+`client/packages/client-api` は `@mite/api-client` の公開入口から生成型を参照し、`HttpMiteApi`、multipart uploadおよびWebSocketを画面から分離する。両Electronアプリはこのadapterを `@mite/client-api` として参照する。生成されたTypeScript型やクライアントを相対パスで直接参照しない。
 
 Electronでは `contextIsolation` を有効、`nodeIntegration` を無効にする。画面取得と端末ファイル操作はメインプロセスで実行し、preloadから必要最小限のAPIだけをReactのレンダラープロセスへ公開する。パッケージ版のレンダラーは、利用者側で `mite-user://app`、家族側で `mite-family://app` をオリジンとして使う。
 
@@ -660,6 +667,8 @@ POST /v1/artifacts は multipart/form-data とし、次を送る。
 | file | JPEG、10MB以下 |
 
 サーバーはJPEGをデコードしてmimeType、寸法、サイズ、SHA-256を検証する。content APIは `Content-Type: image/jpeg` と `Cache-Control: private, no-store` を返す。REQUEST_SCREENSHOTのうち24時間たってもSupportRequestから参照されないものは、第12.1節の削除処理で回収する。
+
+利用者側は通常の支援依頼とガイド実行中の「家族に聞く」のどちらでも、最初のArtifact POSTより前にJPEG、capturedAtおよびSHA-256をmainプロセスから端末へ原子的に保存し、Artifact用Idempotency-Keyをrendererの永続storageへ保存する。応答が不明な間は保存済みの同じ画像、capturedAtおよびキーだけを再送し、別画像へ置き換えない。SupportRequest作成の成功を確認した後に対象の端末ファイルとキーを削除する。Windowsでの保存先は `%LOCALAPPDATA%\Mite\support-request-drafts\<draftId>\` とする。
 
 #### 支援依頼作成
 
@@ -1204,7 +1213,7 @@ MVPではGemini API以外のproviderを実装しない。ただしGuideGenerator
 
 | ID | 画面 | 主な表示と操作 | 使用API・通信 |
 |---|---|---|---|
-| U-01 | 左端入口 | 左端4pxの反応領域。300msのhoverで幅320pxのパネルを開く | なし |
+| U-01 | 左端入口 | プライマリ画面の左端4pxを予約した反応領域。300msのhoverで幅320pxのパネルを開く | Windows AppBar |
 | U-02 | 支援依頼 | 取得画像プレビュー、任意コメント、送信 | POST /v1/artifacts、POST /v1/support-requests |
 | U-03 | 支援待ち | 「家族に知らせた」、依頼内容 | WebSocket、GET /v1/support-requests/{id} |
 | U-04 | 着信 | 家族名、第6.3節の同意文と3項目、「応答する」 | POST /v1/support-sessions/{id}/accept |
@@ -1214,6 +1223,12 @@ MVPではGemini API以外のproviderを実装しない。ただしGuideGenerator
 | U-08 | 下書き閲覧 | 家族が編集中のタイトルと手順を読み取り専用表示 | GET /v1/guide-drafts/{id}、WebSocket |
 
 利用者側の本文文字は20px以上、主要ボタンの高さは48px以上とする。専門用語を画面へ表示しない。
+
+利用者側アプリは通常のメインウィンドウを表示せず、U-01からU-08までをプライマリ画面の左端に常駐するフレームなしオーバーレイで完結させる。WindowsではShellのAppBarとして左端4pxだけを予約し、他アプリを最大化した場合もこの入口を隠さない。hover後の幅320pxの入口パネルと、それより広い幅を必要とする支援依頼、着信、支援中およびガイド画面は他アプリの上へ重ねて表示し、予約幅を4pxから増やさない。詳細画面の幅はプライマリ画面の利用可能範囲内で内容に応じて広げてよい。
+
+入口パネルはマウスが離れた後に4pxへ戻す。U-02からU-08は「しまう」操作で4pxへ戻せるようにし、入力内容と進行中の状態を保持して左端入口から同じ画面へ戻れるようにする。新しい着信を受け取った場合は着信画面を自動で展開する。表示設定、DPIまたは作業領域が変わった場合は位置と高さを再計算する。アプリ終了時はAppBar登録を解除する。MVPではプライマリ画面だけを対象とする。
+
+Windows AppBar APIの呼び出しとDIP・スクリーン座標の変換は、Electron mainプロセスのプラットフォームアダプターへ隔離する。rendererにはCOLLAPSED、ENTRY、DETAILの表示モードを切り替えるIPCだけを公開し、ネイティブAPIとウィンドウハンドルを公開しない。Linuxでのクライアント開発では、OSの作業領域を予約しない疑似オーバーレイとして同じ画面遷移とサイズ変更を確認する。Windows AppBarの登録、最大化した他アプリとの共存、DPI、タスクバーとの競合および終了時の予約解除はWindows 11で別途確認する。現在のWindows 11とWSL2（Ubuntu）の開発環境では、Windows固有の実動作確認は未実施とする。
 
 U-07ではGuideRun IDを端末へ保存し、状態変更のたびに更新する。「家族に聞く」の成功後は返されたsupportRequestIdを保存してU-03へ移る。CREATE後に画像が0件だった場合は、422を受けてNO_MATERIALS終了を実行し、「画像を保存できなかったため手順を作れなかった」と表示する。
 
@@ -1509,6 +1524,7 @@ Supabase、LiveKit、Google AI StudioのGemini APIキーをクライアントの
 - 家族は別ペアの画像を取得できない。
 - クライアントからLiveKit API SecretとAI API Keyを確認できない。
 - 共有停止操作から1秒以内に映像publishと定期取得が止まる。
+- Windows 11で利用者側を起動するとプライマリ画面の左端4pxだけが予約され、他アプリの最大化領域がその4pxを避ける。入口の300ms hover後も予約幅は変えず、幅320px以上の操作画面が他アプリの上へ展開する。表示設定変更後に位置を再計算し、正常終了後に予約領域が残らない。
 - 2台のWindows PCで利用者側Electronと家族側Electronを起動し、公開Goサーバーへ接続して全正常系を実演できる。
 
 ### 17.5 二重送信と並行実行
