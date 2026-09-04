@@ -4,7 +4,7 @@ import {
   type GuideMaterialBatch,
   type MiteApi,
   type SupportSession,
-} from '@mite/api-client'
+} from '@mite/client-api'
 import type { CaptureManifest, UserDesktopBridge } from './desktop'
 import { uploadCapturedMaterials } from './material-upload'
 

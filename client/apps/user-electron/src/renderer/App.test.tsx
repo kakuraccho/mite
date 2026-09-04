@@ -5,7 +5,7 @@ import type {
   MiteApi,
   SupportRequest,
   SupportSession,
-} from '@mite/api-client'
+} from '@mite/client-api'
 import { MemoryStorage, type RuntimeConfig } from '@mite/client-core'
 import { App, EdgeHelpEntry, UserClient } from './App'
 import type { CaptureManifest, UserDesktopBridge } from './desktop'
@@ -104,6 +104,13 @@ const makeDesktop = (): UserDesktopBridge =>
       bytes: new Uint8Array([1, 2, 3]),
       capturedAt: timestamp,
     }),
+    saveSupportScreenshotDraft: vi.fn(async (draftId, capturedAt, bytes) => ({
+      draftId,
+      capturedAt,
+      bytes: Uint8Array.from(bytes),
+    })),
+    loadSupportScreenshotDraft: vi.fn().mockResolvedValue(null),
+    deleteSupportScreenshotDraft: vi.fn().mockResolvedValue(undefined),
     listCaptureSessions: vi.fn().mockResolvedValue([]),
     deleteCaptureSession: vi.fn().mockResolvedValue(undefined),
   }) as unknown as UserDesktopBridge
@@ -119,6 +126,16 @@ const eventStreamFactory = () => ({
   start: vi.fn(),
   stop: vi.fn(),
 })
+
+const readBlob = (blob: Blob) =>
+  new Promise<Uint8Array>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.addEventListener('load', () => {
+      resolve(new Uint8Array(reader.result as ArrayBuffer))
+    })
+    reader.addEventListener('error', () => reject(reader.error))
+    reader.readAsArrayBuffer(blob)
+  })
 
 beforeEach(() => {
   Object.defineProperty(URL, 'createObjectURL', {
@@ -334,6 +351,103 @@ describe('UserClient', () => {
     expect(createSupportRequest.mock.calls[1]?.[0]).toEqual(firstBody)
     expect(createSupportRequest.mock.calls[1]?.[1]).toEqual(firstOperation)
     expect(storage.getItem('mite.user.supportDraftPayload')).toBeNull()
+  })
+
+  it('persists and reuses the screenshot before retrying Artifact after restart', async () => {
+    const storage = new MemoryStorage()
+    let savedDraft: {
+      draftId: string
+      capturedAt: string
+      bytes: Uint8Array
+    } | null = null
+    const desktop = {
+      ...makeDesktop(),
+      saveSupportScreenshotDraft: vi.fn(
+        async (draftId: string, capturedAt: string, bytes: Uint8Array) => {
+          savedDraft = {
+            draftId,
+            capturedAt,
+            bytes: Uint8Array.from(bytes),
+          }
+          return savedDraft
+        },
+      ),
+      loadSupportScreenshotDraft: vi.fn(async () => savedDraft),
+      deleteSupportScreenshotDraft: vi.fn(async () => {
+        savedDraft = null
+      }),
+    } as unknown as UserDesktopBridge
+    const uploadArtifact = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError('connection lost'))
+      .mockResolvedValueOnce(artifact)
+    const api = makeApi({
+      uploadArtifact,
+      createSupportRequest: vi.fn().mockResolvedValue(supportRequest()),
+    })
+
+    const first = render(
+      <UserClient
+        api={api}
+        runtime={runtime}
+        desktop={desktop}
+        storage={storage}
+        createEventStream={eventStreamFactory}
+      />,
+    )
+    fireEvent.focus(
+      await screen.findByRole('button', {
+        name: '家族に相談するメニューを開く',
+      }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '家族に相談する' }))
+    fireEvent.click(
+      await screen.findByRole('radio', { name: /相談したい画面/ }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'この画面を撮影する' }))
+    await screen.findByAltText('家族に送る画面')
+    fireEvent.click(screen.getByRole('button', { name: '家族に相談する' }))
+    await screen.findByText(
+      '通信できません。少し待ってから、もう一度試してください。',
+    )
+
+    expect(desktop.saveSupportScreenshotDraft).toHaveBeenCalled()
+    const firstInput = uploadArtifact.mock.calls[0]?.[0]
+    const firstOperation = uploadArtifact.mock.calls[0]?.[1]
+    fireEvent.click(screen.getByRole('button', { name: 'この画面を撮影する' }))
+    await screen.findByText(
+      '前回の送信結果を確認するため、保存済みの画面をそのまま再送します。',
+    )
+    expect(desktop.capturePreview).toHaveBeenCalledTimes(1)
+    first.unmount()
+
+    render(
+      <UserClient
+        api={api}
+        runtime={runtime}
+        desktop={desktop}
+        storage={storage}
+        createEventStream={eventStreamFactory}
+      />,
+    )
+    fireEvent.focus(
+      await screen.findByRole('button', {
+        name: '家族に相談するメニューを開く',
+      }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '家族に相談する' }))
+    await screen.findByAltText('家族に送る画面')
+    fireEvent.click(screen.getByRole('button', { name: '家族に相談する' }))
+    await screen.findByText('家族に知らせました')
+
+    expect(uploadArtifact).toHaveBeenCalledTimes(2)
+    const secondInput = uploadArtifact.mock.calls[1]?.[0]
+    expect(secondInput.capturedAt).toBe(firstInput.capturedAt)
+    expect(await readBlob(secondInput.file)).toEqual(
+      await readBlob(firstInput.file),
+    )
+    expect(uploadArtifact.mock.calls[1]?.[1]).toEqual(firstOperation)
+    expect(desktop.deleteSupportScreenshotDraft).toHaveBeenCalledOnce()
   })
 
   it('does not schedule another capture after the first frame reaches the limit', async () => {

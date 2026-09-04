@@ -1,4 +1,4 @@
-import type { SupportRequest, SupportSession } from '@mite/api-client'
+import type { SupportRequest, SupportSession } from '@mite/client-api'
 
 export type UserSupportScreen =
   | 'HOME'

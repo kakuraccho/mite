@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { HttpMiteApi } from '@mite/api-client'
+import { HttpMiteApi } from '@mite/client-api'
 import { loadRuntimeConfig, type RuntimeConfig } from '@mite/client-core'
 import { AppShell, Button, LoadingState, Notice, Surface } from '@mite/ui'
 import { FamilyClient } from './FamilyClient'

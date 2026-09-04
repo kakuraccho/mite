@@ -30,6 +30,7 @@ import {
 } from './security'
 import { createAppBarAdapter } from './appbar'
 import { UserOverlayController } from './overlay-controller'
+import { SupportScreenshotDraftStore } from './support-screenshot-draft'
 import { isUserOverlayMode } from '../shared/overlay'
 
 const scheme = userScheme
@@ -105,13 +106,20 @@ const runtimeConfig = (): RuntimeConfig => ({
 const idempotencyKey = (purpose: string) =>
   `mite-${purpose}-${randomUUID()}`.slice(0, 128)
 
-const capturesRoot = () => {
+const miteDataRoot = () => {
   const localDataRoot =
     process.platform === 'win32' && process.env.LOCALAPPDATA
       ? process.env.LOCALAPPDATA
       : app.getPath('userData')
-  return path.join(localDataRoot, 'Mite', 'captures')
+  return path.join(localDataRoot, 'Mite')
 }
+
+const capturesRoot = () => path.join(miteDataRoot(), 'captures')
+
+const supportScreenshotDraftStore = () =>
+  new SupportScreenshotDraftStore(
+    path.join(miteDataRoot(), 'support-request-drafts'),
+  )
 
 const assertSafeId = (value: string, label: string) => {
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(value)) {
@@ -526,6 +534,36 @@ const registerIpc = () => {
     if (typeof sourceId !== 'string') throw new Error('sourceId is invalid')
     return capturePreview(sourceId)
   })
+  ipcMain.handle(
+    'support-draft:save-screenshot',
+    async (event, draftId: unknown, capturedAt: unknown, bytes: unknown) => {
+      assertTrustedSender(event)
+      if (
+        typeof draftId !== 'string' ||
+        typeof capturedAt !== 'string' ||
+        !(bytes instanceof Uint8Array)
+      ) {
+        throw new Error('support screenshot draft is invalid')
+      }
+      return supportScreenshotDraftStore().save(draftId, capturedAt, bytes)
+    },
+  )
+  ipcMain.handle(
+    'support-draft:load-screenshot',
+    async (event, draftId: unknown) => {
+      assertTrustedSender(event)
+      if (typeof draftId !== 'string') throw new Error('draftId is invalid')
+      return supportScreenshotDraftStore().load(draftId)
+    },
+  )
+  ipcMain.handle(
+    'support-draft:delete-screenshot',
+    async (event, draftId: unknown) => {
+      assertTrustedSender(event)
+      if (typeof draftId !== 'string') throw new Error('draftId is invalid')
+      await supportScreenshotDraftStore().delete(draftId)
+    },
+  )
   ipcMain.handle('capture:initialize', async (event, sessionId: unknown) => {
     assertTrustedSender(event)
     if (typeof sessionId !== 'string') throw new Error('sessionId is invalid')

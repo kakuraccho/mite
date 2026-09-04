@@ -139,13 +139,14 @@ go test ./cmd/api -run '^TestServerRuntimeE2E$' -count=1 -v
 
 実LiveKit Cloudと実Gemini APIは、有効な認証情報を明示的に用意した環境で別途smoke testが必要です。通常のローカルE2Eは外部へ接続しません。
 
-## 9. クライアント側に残る作業
+## 9. クライアント統合状況
 
-- クライアントbranch側の `client/packages/api-client` へ、rootの `packages/api-client` が公開する生成型を統合する
-- 既存の `HttpMiteApi` adapterを維持し、画面からHTTP詳細を分離する
-- generated clientが直接扱いにくいmultipart用wrapperを維持する
-- 初期スクリーンショットを最初のArtifact POST前に永続化する
-- Idempotency-Key、revision、最後のSupportRequest / GuideRun ID、capture manifestを端末へ保存する
-- RESTの5秒pollingとWebSocket再接続後GETによる復旧を実装する
-- LiveKit SDKの音声・画面共有・marking Data Packetを接続する
-- 2台のWindows PCと公開サーバーで、実LiveKit・実Geminiを含む最終E2Eを行う
+- rootの `packages/api-client` を生成型と最小clientの正本とし、`client/packages/client-api` の `HttpMiteApi` adapterはその公開型からrequestとresponseを派生する
+- multipart uploadとimage/jpeg取得は `HttpMiteApi` のwrapperへ隔離する
+- 通常の支援依頼とGuideRunからの支援依頼は、最初のArtifact POST前に同じJPEGとcapturedAtを端末へ保存する
+- Idempotency-Key、最後のSupportRequest / GuideRun IDおよびcapture manifestを端末へ保存する
+- RESTの5秒pollingとWebSocket再接続後GETによる復旧を実装済み
+- LiveKit SDKの音声・画面共有・marking Data Packetを実装済み
+- ローカルSupabase、Goサーバーおよびfake Geminiを使い、実 `HttpMiteApi` でA/B/Cフローを確認するintegration testを用意している
+
+残る最終確認は、2台のWindows PCと公開サーバーで実LiveKit・実Geminiを含むE2Eを行うことである。Windows AppBar固有の確認項目は [`client/README.md`](../client/README.md) を参照する。

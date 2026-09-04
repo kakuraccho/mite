@@ -2,7 +2,6 @@
   "name": "mite",
   "private": true,
   "workspaces": [
-    "apps/*",
     "packages/*"
   ],
   "scripts": {

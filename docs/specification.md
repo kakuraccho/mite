@@ -123,10 +123,10 @@ TypeBoxとFastifyは採用しない。両者はTypeScriptサーバー向けで�
 - 自動生成ファイルは直接編集しない。正本を変更して再生成する。
 - 自動生成ファイルはリポジトリへ含め、生成元と同じPull Requestで更新する。
 - 自動生成ファイルは通常のコードレビュー対象外とし、正本と手書き実装をレビューする。
-- ルートのnpm workspaceは `apps/*` と `packages/*` を対象とし、`mock/*` は含めない。
+- ルートのnpm workspaceは `packages/*` を対象とし、クライアントのnpm workspaceは `client/apps/*` と `client/packages/*` を対象とする。`mock/*` はどちらにも含めない。
 - `packages/api-client` は非公開workspace package `@mite/api-client` とし、npm registryへ公開しない。
 - `packages/api-client` はOpenAPIから生成したTypeScript型と、API接続先およびBearerトークンを受け取る最小限のクライアント生成処理を公開する。画面状態、Electron固有処理、Idempotency-Keyの端末保存、再試行およびWebSocket接続は各Electronアプリが持つ。
-- `oapi-codegen` は `server/go.mod` のtool dependency、`openapi-typescript` は `packages/api-client` のdevDependencyとしてバージョンを固定する。JavaScript依存関係はルートの `package-lock.json` で固定する。
+- `oapi-codegen` は `server/go.mod` のtool dependency、`openapi-typescript` は `packages/api-client` のdevDependencyとしてバージョンを固定する。API生成側のJavaScript依存関係はルートの `package-lock.json`、Electron側は `client/package-lock.json` で固定する。
 - ルートの `npm run generate:api` で、同じ `api/openapi.yaml` からGoの型とサーバーインターフェース、およびTypeScript型を一括生成する。
 
 API契約を変更する場合は、先に本書を更新してクライアント担当とサーバー担当で合意し、次に `api/openapi.yaml` を更新して再生成する。本書、OpenAPIおよび影響する生成物は同じPull Requestへ含める。CIではAPIコードを再生成し、コミット済み生成物との間に差分がないことを確認する。
@@ -134,11 +134,8 @@ API契約を変更する場合は、先に本書を更新してクライアン�
 ### 2.4 リポジトリ構成
 
 ~~~text
-package.json                npm workspaceと共通コマンド
-package-lock.json           JavaScript依存関係の固定
-apps/
-├─ user-electron/          利用者側Electron
-└─ family-electron/        家族側Electron
+package.json                API生成用npm workspaceと共通コマンド
+package-lock.json           API生成側JavaScript依存関係の固定
 packages/
 └─ api-client/             非公開workspace package @mite/api-client
    └─ src/
@@ -146,6 +143,16 @@ packages/
       │  └─ schema.ts      OpenAPIから生成するTypeScript型
       ├─ client.ts         openapi-fetchのクライアント生成処理
       └─ index.ts          packageの公開入口
+client/
+├─ package.json            Electronクライアント用npm workspace
+├─ package-lock.json       Electron側JavaScript依存関係の固定
+├─ apps/
+│  ├─ user-electron/       利用者側Electron
+│  └─ family-electron/     家族側Electron
+└─ packages/
+   ├─ client-api/          REST・WebSocket adapter @mite/client-api
+   ├─ client-core/         revision・再試行・復元
+   └─ ui/                  共通UI
 api/
 └─ openapi.yaml            APIの正本
 server/
@@ -162,7 +169,7 @@ supabase/
 
 両Electronアプリは同じリポジトリで管理するが、別々の実行ファイルとしてビルドする。利用者用と家族用で異なるデモトークンを設定し、実行中に役割を切り替えない。
 
-両Electronアプリは `@mite/api-client` をworkspace経由で参照する。生成されたTypeScript型やクライアントを相対パスで直接参照せず、packageの公開入口から利用する。
+`client/packages/client-api` は `@mite/api-client` の公開入口から生成型を参照し、`HttpMiteApi`、multipart uploadおよびWebSocketを画面から分離する。両Electronアプリはこのadapterを `@mite/client-api` として参照する。生成されたTypeScript型やクライアントを相対パスで直接参照しない。
 
 Electronでは `contextIsolation` を有効、`nodeIntegration` を無効にする。画面取得と端末ファイル操作はメインプロセスで実行し、preloadから必要最小限のAPIだけをReactのレンダラープロセスへ公開する。パッケージ版のレンダラーは、利用者側で `mite-user://app`、家族側で `mite-family://app` をオリジンとして使う。
 
@@ -660,6 +667,8 @@ POST /v1/artifacts は multipart/form-data とし、次を送る。
 | file | JPEG、10MB以下 |
 
 サーバーはJPEGをデコードしてmimeType、寸法、サイズ、SHA-256を検証する。content APIは `Content-Type: image/jpeg` と `Cache-Control: private, no-store` を返す。REQUEST_SCREENSHOTのうち24時間たってもSupportRequestから参照されないものは、第12.1節の削除処理で回収する。
+
+利用者側は通常の支援依頼とガイド実行中の「家族に聞く」のどちらでも、最初のArtifact POSTより前にJPEG、capturedAtおよびSHA-256をmainプロセスから端末へ原子的に保存し、Artifact用Idempotency-Keyをrendererの永続storageへ保存する。応答が不明な間は保存済みの同じ画像、capturedAtおよびキーだけを再送し、別画像へ置き換えない。SupportRequest作成の成功を確認した後に対象の端末ファイルとキーを削除する。Windowsでの保存先は `%LOCALAPPDATA%\Mite\support-request-drafts\<draftId>\` とする。
 
 #### 支援依頼作成
 

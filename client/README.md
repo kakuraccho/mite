@@ -7,6 +7,8 @@
 
 業務状態はREST APIを正本とし、WebSocketは更新通知、LiveKitは音声・画面共有・一時マーキングにだけ使用します。遠隔操作、カメラ、録音・録画は行いません。
 
+支援依頼時のスクリーンショットは最初のArtifact送信前にmainプロセスから端末へ保存します。通信結果が分からない場合は、保存済みの同じ画像とIdempotency-Keyで再送します。
+
 ## 必要な環境
 
 - Node.js 24 LTS
@@ -19,7 +21,7 @@ apps/
 ├── user-electron/       利用者側アプリ
 └── family-electron/     家族側アプリ
 packages/
-├── api-client/          REST・WebSocket契約と通信処理
+├── client-api/          OpenAPI生成型を使うREST・WebSocket adapter
 ├── client-core/         revision・再試行・復元などの共通処理
 └── ui/                  共通UIとデザイントークン
 ```
@@ -93,12 +95,19 @@ npm run package:family
 
 ## API型の生成
 
-APIの正本 `../api/openapi.yaml` が作成された後、次を実行します。
+APIの正本は `../api/openapi.yaml` です。次のコマンドはリポジトリルートの `@mite/api-client` を再生成します。
 
 ```bash
 npm run generate:api
 ```
 
-`packages/api-client/src/generated/schema.ts` は生成物です。直接編集しないでください。
+`../packages/api-client/src/generated/schema.ts` は生成物です。直接編集しないでください。`packages/client-api` の `HttpMiteApi` はこの生成型からrequestとresponseの型を派生し、multipart uploadとWebSocketを画面から分離します。
 
-OpenAPIファイルがまだ存在しない間は、手書きのクライアント契約を [`../docs/specification.md`](../docs/specification.md) と照合して使用します。`generate:api` は正本が追加されるまで実行できません。
+ローカルSupabaseとGoサーバーを起動した状態で、adapterのA/B/Cフローだけを再確認する場合は、役割別デモトークンを環境変数で渡して次を実行します。値をログやソースへ記録しないでください。
+
+```bash
+MITE_E2E_API_BASE_URL=http://127.0.0.1:3000 \
+MITE_E2E_USER_TOKEN=<user-token> \
+MITE_E2E_FAMILY_TOKEN=<family-token> \
+npx vitest run packages/client-api/src/http-client.integration.test.ts
+```

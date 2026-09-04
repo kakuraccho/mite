@@ -6,7 +6,7 @@ import type {
   MiteApi,
   SupportRequest,
   SupportSession,
-} from '@mite/api-client'
+} from '@mite/client-api'
 import { MemoryStorage, type RuntimeConfig } from '@mite/client-core'
 import { FamilyClient, type FamilyEventStreamFactory } from './FamilyClient'
 import type { FamilyLiveSupport, LiveSupportSnapshot } from './live-support'

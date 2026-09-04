@@ -1,4 +1,4 @@
-import type { RevisionedEntity } from '@mite/api-client'
+import type { RevisionedEntity } from '@mite/client-api'
 
 export const selectNewestRevision = <TEntity extends RevisionedEntity>(
   current: TEntity | null,

@@ -26,6 +26,12 @@ export interface CaptureManifest {
   captures: CaptureEntry[]
 }
 
+export interface SupportScreenshotDraft {
+  draftId: string
+  capturedAt: string
+  bytes: Uint8Array
+}
+
 export interface UserDesktopBridge {
   getRuntimeConfig(): Promise<RuntimeConfig>
   setOverlayMode(mode: UserOverlayMode): Promise<UserOverlayLayout>
@@ -34,6 +40,15 @@ export interface UserDesktopBridge {
   capturePreview(
     sourceId: string,
   ): Promise<{ capturedAt: string; bytes: Uint8Array }>
+  saveSupportScreenshotDraft(
+    draftId: string,
+    capturedAt: string,
+    bytes: Uint8Array,
+  ): Promise<SupportScreenshotDraft>
+  loadSupportScreenshotDraft(
+    draftId: string,
+  ): Promise<SupportScreenshotDraft | null>
+  deleteSupportScreenshotDraft(draftId: string): Promise<void>
   initializeCaptureSession(sessionId: string): Promise<CaptureManifest>
   saveCapture(
     sessionId: string,

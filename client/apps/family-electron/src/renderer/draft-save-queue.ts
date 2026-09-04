@@ -1,4 +1,4 @@
-import { MiteApiError, type GuideDraft, type MiteApi } from '@mite/api-client'
+import { MiteApiError, type GuideDraft, type MiteApi } from '@mite/client-api'
 
 export type DraftSaveStatus =
   'SAVED' | 'WAITING' | 'SAVING' | 'ERROR' | 'CONFLICT'

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { MiteApi } from '@mite/api-client'
+import type { MiteApi } from '@mite/client-api'
 
 export interface ArtifactImageProps {
   api: MiteApi

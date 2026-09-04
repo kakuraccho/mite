@@ -1,4 +1,4 @@
-import type { LiveKitConnectionInfo } from '@mite/api-client'
+import type { LiveKitConnectionInfo } from '@mite/client-api'
 import { encodeMarkingMessage, MITE_MARKING_TOPIC } from '@mite/client-core'
 import {
   Room,

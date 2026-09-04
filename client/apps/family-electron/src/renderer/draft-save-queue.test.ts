@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { MiteApiError, type GuideDraft, type MiteApi } from '@mite/api-client'
+import { MiteApiError, type GuideDraft, type MiteApi } from '@mite/client-api'
 import { DraftSaveQueue } from './draft-save-queue'
 
 const draft = (revision = 1): GuideDraft => ({

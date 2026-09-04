@@ -18,7 +18,7 @@ import {
   type MiteEventStreamOptions,
   type SupportRequest,
   type SupportSession,
-} from '@mite/api-client'
+} from '@mite/client-api'
 import {
   IdempotencyKeyStore,
   normalizedPointInVideo,

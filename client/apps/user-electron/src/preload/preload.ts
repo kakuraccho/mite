@@ -37,6 +37,32 @@ const bridge = Object.freeze({
       capturedAt: string
       bytes: Uint8Array
     }>,
+  saveSupportScreenshotDraft: (
+    draftId: string,
+    capturedAt: string,
+    bytes: Uint8Array,
+  ) =>
+    ipcRenderer.invoke(
+      'support-draft:save-screenshot',
+      draftId,
+      capturedAt,
+      bytes,
+    ) as Promise<{
+      draftId: string
+      capturedAt: string
+      bytes: Uint8Array
+    }>,
+  loadSupportScreenshotDraft: (draftId: string) =>
+    ipcRenderer.invoke('support-draft:load-screenshot', draftId) as Promise<{
+      draftId: string
+      capturedAt: string
+      bytes: Uint8Array
+    } | null>,
+  deleteSupportScreenshotDraft: (draftId: string) =>
+    ipcRenderer.invoke(
+      'support-draft:delete-screenshot',
+      draftId,
+    ) as Promise<void>,
   initializeCaptureSession: (sessionId: string) =>
     ipcRenderer.invoke(
       'capture:initialize',

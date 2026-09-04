@@ -6,7 +6,7 @@
 
 - `apps/user-electron/`: 利用者側画面、画面取得、端末保存、共有送信、マーキング表示
 - `apps/family-electron/`: 家族側画面、共有受信、マーキング送信、下書き編集
-- `packages/api-client/`: REST、WebSocket、APIデータ型。API契約を独断で変更しない
+- `packages/client-api/`: rootの `@mite/api-client` から生成型を参照するREST・WebSocket adapter。API契約を独断で変更しない
 - `packages/client-core/`: revision、再試行、復元、共通状態判断
 - `packages/ui/`: 共通UI、アクセシビリティ、デザイントークン
 

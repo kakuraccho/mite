@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { GuideDraft, GuideStep, MiteApi } from '@mite/api-client'
+import type { GuideDraft, GuideStep, MiteApi } from '@mite/client-api'
 import { Button, Notice, ScreenHeading, StatusBadge, Surface } from '@mite/ui'
 import { ArtifactImage } from './ArtifactImage'
 import { DraftSaveQueue, type DraftSaveSnapshot } from './draft-save-queue'

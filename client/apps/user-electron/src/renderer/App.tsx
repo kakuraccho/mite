@@ -19,7 +19,7 @@ import {
   type MiteEventStreamOptions,
   type SupportRequest,
   type SupportSession,
-} from '@mite/api-client'
+} from '@mite/client-api'
 import {
   deriveUserSupportScreen,
   IdempotencyKeyStore,
@@ -227,6 +227,37 @@ function SupportRequestComposer({
     storage.setItem(supportDraftKey, created)
     return created
   }, [recoveredPayload, storage])
+  const artifactOperationId = `support-artifact:${draftId}`
+
+  useEffect(() => {
+    if (pendingPayload) return
+    let cancelled = false
+    void desktop
+      .loadSupportScreenshotDraft(draftId)
+      .then((saved) => {
+        if (cancelled || !saved) return
+        const copy = Uint8Array.from(saved.bytes)
+        const blob = new Blob([copy], { type: 'image/jpeg' })
+        setPreview((current) => {
+          if (current) URL.revokeObjectURL(current.url)
+          return {
+            bytes: copy,
+            capturedAt: saved.capturedAt,
+            url: URL.createObjectURL(blob),
+          }
+        })
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setError(
+            '前回保存した画面を確認できませんでした。もう一度撮影してください。',
+          )
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [desktop, draftId, pendingPayload])
 
   useEffect(
     () => () => {
@@ -237,17 +268,29 @@ function SupportRequestComposer({
 
   const capture = async () => {
     if (!source) return
+    if (keys.peek(artifactOperationId)) {
+      setError(
+        '前回の送信結果を確認するため、保存済みの画面をそのまま再送します。',
+      )
+      return
+    }
     setCapturing(true)
     setError(null)
     try {
       const result = await desktop.capturePreview(source.id)
+      const saved = await desktop.saveSupportScreenshotDraft(
+        draftId,
+        result.capturedAt,
+        result.bytes,
+      )
       if (preview) URL.revokeObjectURL(preview.url)
-      const blob = new Blob([Uint8Array.from(result.bytes)], {
+      const copy = Uint8Array.from(saved.bytes)
+      const blob = new Blob([copy], {
         type: 'image/jpeg',
       })
       setPreview({
-        bytes: result.bytes,
-        capturedAt: result.capturedAt,
+        bytes: copy,
+        capturedAt: saved.capturedAt,
         url: URL.createObjectURL(blob),
       })
     } catch {
@@ -270,15 +313,21 @@ function SupportRequestComposer({
     try {
       let requestPayload = pendingPayload
       if (!requestPayload) {
+        if (!preview) return
+        const savedPreview = await desktop.saveSupportScreenshotDraft(
+          draftId,
+          preview.capturedAt,
+          preview.bytes,
+        )
         const artifact = await runIdempotent(
           keys,
-          `support-artifact:${draftId}`,
+          artifactOperationId,
           (idempotencyKey) =>
             api.uploadArtifact(
               {
                 purpose: 'REQUEST_SCREENSHOT',
-                capturedAt: preview?.capturedAt ?? '',
-                file: new Blob([Uint8Array.from(preview?.bytes ?? [])], {
+                capturedAt: savedPreview.capturedAt,
+                file: new Blob([Uint8Array.from(savedPreview.bytes)], {
                   type: 'image/jpeg',
                 }),
                 filename: 'screenshot.jpg',
@@ -308,6 +357,7 @@ function SupportRequestComposer({
       )
       storage.removeItem(supportDraftKey)
       storage.removeItem(supportDraftPayloadKey)
+      await desktop.deleteSupportScreenshotDraft(draftId).catch(() => {})
       setPendingPayload(null)
       onCreated(request)
     } catch (caught) {
@@ -1640,6 +1690,7 @@ export function UserClient({
     setError(null)
     try {
       const payloadKey = `mite.user.guideSupportPayload:${activeRun.id}:${activeRun.revision}`
+      const screenshotDraftId = `guide_${activeRun.id}_${activeRun.revision}`
       const rawPayload = storage.getItem(payloadKey)
       let savedPayload: { artifactId: string; comment: string } | null = null
       if (rawPayload) {
@@ -1663,6 +1714,13 @@ export function UserClient({
         }
       }
       if (!savedPayload) {
+        const persistedPreview =
+          (await desktop.loadSupportScreenshotDraft(screenshotDraftId)) ??
+          (await desktop.saveSupportScreenshotDraft(
+            screenshotDraftId,
+            preview.capturedAt,
+            preview.bytes,
+          ))
         const artifact = await runIdempotent(
           keys,
           `guide-support-artifact:${activeRun.id}:${activeRun.revision}`,
@@ -1670,8 +1728,8 @@ export function UserClient({
             api.uploadArtifact(
               {
                 purpose: 'REQUEST_SCREENSHOT',
-                capturedAt: preview.capturedAt,
-                file: new Blob([Uint8Array.from(preview.bytes)], {
+                capturedAt: persistedPreview.capturedAt,
+                file: new Blob([Uint8Array.from(persistedPreview.bytes)], {
                   type: 'image/jpeg',
                 }),
                 filename: 'current-screen.jpg',
@@ -1698,6 +1756,9 @@ export function UserClient({
       )
       setGuideRun(result.guideRun)
       storage.removeItem(payloadKey)
+      await desktop
+        .deleteSupportScreenshotDraft(screenshotDraftId)
+        .catch(() => {})
       mergeRequest(result.supportRequest)
       setGuide(null)
     } catch (caught) {

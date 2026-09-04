@@ -8,7 +8,7 @@
   },
   "types": "./src/index.ts",
   "dependencies": {
-    "@mite/api-client": "*"
+    "@mite/client-api": "*"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json --noEmit",

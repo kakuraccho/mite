@@ -1,6 +1,15 @@
 import type {
+  AcceptSupportSessionInput,
   Artifact,
   ArtifactPurpose,
+  CallSupportRequestInput,
+  CompleteGuideMaterialBatchInput,
+  CompleteGuideRunInput,
+  CreateGuideMaterialBatchInput,
+  CreateGuideRunInput,
+  CreateSupportRequestFromGuideRunInput,
+  CreateSupportRequestInput,
+  EndSupportSessionWithoutGuideInput,
   GuideDetail,
   GuideDraft,
   GuideGenerationJob,
@@ -9,10 +18,14 @@ import type {
   GuideRun,
   GuideSummary,
   LiveKitConnectionInfo,
-  SupportConsent,
+  ResolveSupportSessionInput,
+  RetryGuideGenerationJobInput,
+  SaveGuideDraftInput,
   SupportRequest,
   SupportRequestStatus,
   SupportSession,
+  UpdateGuideDraftInput,
+  UpdateGuideRunInput,
 } from './types'
 
 export interface IdempotentOperation {
@@ -41,40 +54,31 @@ export interface MiteApi {
   ): Promise<Artifact>
   getArtifactContent(artifactId: string): Promise<Blob>
   createSupportRequest(
-    input: { initialScreenshotArtifactId: string; comment: string },
+    input: CreateSupportRequestInput,
     operation: IdempotentOperation,
   ): Promise<SupportRequest>
   listSupportRequests(status?: SupportRequestStatus): Promise<SupportRequest[]>
   getSupportRequest(supportRequestId: string): Promise<SupportRequest>
   callSupportRequest(
     supportRequestId: string,
-    input: { expectedRequestRevision: number },
+    input: CallSupportRequestInput,
     operation: IdempotentOperation,
   ): Promise<{ supportRequest: SupportRequest; supportSession: SupportSession }>
   getSupportSession(supportSessionId: string): Promise<SupportSession>
   acceptSupportSession(
     supportSessionId: string,
-    input: { expectedSessionRevision: number; consent: SupportConsent },
+    input: AcceptSupportSessionInput,
     operation: IdempotentOperation,
   ): Promise<{ supportRequest: SupportRequest; supportSession: SupportSession }>
   getLiveKitToken(supportSessionId: string): Promise<LiveKitConnectionInfo>
   resolveSupportSession(
     supportSessionId: string,
-    input: {
-      expectedSessionRevision: number
-      guideDecision: 'CREATE' | 'SKIP'
-    },
+    input: ResolveSupportSessionInput,
     operation: IdempotentOperation,
   ): Promise<{ supportRequest: SupportRequest; supportSession: SupportSession }>
   createGuideMaterialBatch(
     supportSessionId: string,
-    input: {
-      expectedSessionRevision: number
-      captureIntervalSeconds: 5
-      capturedFrom: string | null
-      capturedTo: string | null
-      expectedItemCount: number
-    },
+    input: CreateGuideMaterialBatchInput,
     operation: IdempotentOperation,
   ): Promise<{ batch: GuideMaterialBatch; supportSession: SupportSession }>
   getGuideMaterialBatch(
@@ -87,7 +91,7 @@ export interface MiteApi {
   ): Promise<{ material: GuideMaterial; batch: GuideMaterialBatch }>
   completeGuideMaterialBatch(
     batchId: string,
-    input: { expectedBatchRevision: number; expectedItemCount: number },
+    input: CompleteGuideMaterialBatchInput,
     operation: IdempotentOperation,
   ): Promise<{
     batch: GuideMaterialBatch
@@ -97,54 +101,43 @@ export interface MiteApi {
   getGuideGenerationJob(jobId: string): Promise<GuideGenerationJob>
   retryGuideGenerationJob(
     jobId: string,
-    input: { expectedJobRevision: number },
+    input: RetryGuideGenerationJobInput,
     operation: IdempotentOperation,
   ): Promise<GuideGenerationJob>
   getGuideDraft(draftId: string): Promise<GuideDraft>
   updateGuideDraft(
     draftId: string,
-    input: {
-      expectedRevision: number
-      title: string
-      steps: GuideDraft['steps']
-    },
+    input: UpdateGuideDraftInput,
   ): Promise<GuideDraft>
   saveGuideDraft(
     draftId: string,
-    input: { expectedRevision: number },
+    input: SaveGuideDraftInput,
     operation: IdempotentOperation,
   ): Promise<{ guide: GuideDetail; supportSession: SupportSession }>
   listGuides(): Promise<GuideSummary[]>
   getGuide(guideId: string): Promise<GuideDetail>
   createGuideRun(
-    input: { guideId: string },
+    input: CreateGuideRunInput,
     operation: IdempotentOperation,
   ): Promise<GuideRun>
   getGuideRun(guideRunId: string): Promise<GuideRun>
   moveGuideRun(
     guideRunId: string,
-    input: { expectedRevision: number; action: 'NEXT' | 'PREVIOUS' },
+    input: UpdateGuideRunInput,
   ): Promise<GuideRun>
   completeGuideRun(
     guideRunId: string,
-    input: { expectedRevision: number },
+    input: CompleteGuideRunInput,
     operation: IdempotentOperation,
   ): Promise<GuideRun>
   requestSupportFromGuideRun(
     guideRunId: string,
-    input: {
-      expectedRevision: number
-      initialScreenshotArtifactId: string
-      comment: string
-    },
+    input: CreateSupportRequestFromGuideRunInput,
     operation: IdempotentOperation,
   ): Promise<{ guideRun: GuideRun; supportRequest: SupportRequest }>
   endSupportSessionWithoutGuide(
     supportSessionId: string,
-    input: {
-      expectedSessionRevision: number
-      reason: 'GUIDE_CANCELLED' | 'NO_MATERIALS'
-    },
+    input: EndSupportSessionWithoutGuideInput,
     operation: IdempotentOperation,
   ): Promise<SupportSession>
 }

@@ -2,7 +2,7 @@ import {
   MiteApiError,
   type MiteApi,
   type SupportSession,
-} from '@mite/api-client'
+} from '@mite/client-api'
 import type { CaptureManifest, UserDesktopBridge } from './desktop'
 
 export interface MaterialUploadProgress {

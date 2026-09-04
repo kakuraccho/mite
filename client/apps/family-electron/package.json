@@ -19,7 +19,7 @@
     "make": "npm run build && electron-forge make"
   },
   "dependencies": {
-    "@mite/api-client": "*",
+    "@mite/client-api": "*",
     "@mite/client-core": "*",
     "@mite/ui": "*",
     "livekit-client": "^2.22.2",

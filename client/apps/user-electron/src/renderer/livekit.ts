@@ -5,7 +5,7 @@ import {
   type LocalTrackPublication,
   type RemoteTrack,
 } from 'livekit-client'
-import type { LiveKitConnectionInfo } from '@mite/api-client'
+import type { LiveKitConnectionInfo } from '@mite/client-api'
 import {
   decodeMarkingMessage,
   MITE_MARKING_TOPIC,
