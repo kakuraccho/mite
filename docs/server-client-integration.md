@@ -4,27 +4,7 @@
 
 ## 1. 起動
 
-Dockerを起動してリポジトリルートで次を実行します。
-
-```bash
-npx supabase start
-npx supabase db reset
-```
-
-`npx supabase status -o env` の出力を、次の対応でサーバー環境変数へ設定します。
-
-| Supabase CLI | サーバー |
-|---|---|
-| `DB_URL` | `DATABASE_URL` |
-| `API_URL` | `SUPABASE_URL` |
-| `SECRET_KEY` | `SUPABASE_SECRET_KEY` |
-
-残りの必須値は [`server/.env.example`](../server/.env.example) を参照してください。ローカルでは `SUPABASE_STORAGE_BUCKET=mite-artifacts` を使います。`.env` はGitへ追加せず、値を現在のshellへexportしてから起動します。
-
-```bash
-cd server
-go run ./cmd/api
-```
+初回の依存関係取得、`server/.env`とクライアントの`.env.local`の設定、起動手順は[セットアップガイド](setup.md)を参照してください。サーバーだけを起動する場合は「ローカルで起動する」の手順1〜3まで進めます。
 
 クライアントは通常 `MITE_API_BASE_URL=http://localhost:3000` を使います。別PCから接続する場合はサーバーPCのIPアドレスへ変え、そのOriginを `CLIENT_ORIGINS` に完全一致で追加してください。
 
@@ -64,6 +44,8 @@ REQUEST_SCREENSHOT登録
 ## 4. 再送と復旧
 
 状態変更POSTとmultipart POSTでは、操作前に `Idempotency-Key` を生成して端末へ保存します。応答が確定するまで、同じbody・同じfile bytes・同じkeyで再送してください。異なるbodyへ同じkeyを使うと `IDEMPOTENCY_KEY_REUSED` です。
+
+同一操作の完了済み応答を再送した場合、サーバーは初回と同じHTTP statusと、初回と同一バイト列のJSON本文を返します。空白、改行、オブジェクトのキー順も変わりません。`X-Request-ID` などのレスポンスヘッダーはリクエストごとに変わることがあり、この一致要件には含みません。
 
 `IDEMPOTENCY_REQUEST_IN_PROGRESS` の409では、`Retry-After` 秒後に同じrequestを再送します。CORSで `Retry-After` を公開済みなので、rendererから `response.headers.get("Retry-After")` で参照できます。
 
@@ -114,16 +96,7 @@ LiveKit tokenはSupportSessionが `ACTIVE` の間だけ取得できます。接�
 
 ## 8. 接続確認
 
-サーバーの通常確認は次です。
-
-```bash
-cd server
-go tool sqlc generate
-go test ./... -count=1
-go test -race ./... -count=1
-go vet ./...
-go build ./...
-```
+コード生成・テスト・静的解析・ビルドは[開発ガイドのGoサーバー検証](development.md#goサーバー)を参照してください。
 
 ローカルSupabaseとfake GuideGeneratorを使うHTTP/WebSocket E2Eは、秘密値を表示せず次のように実行できます。
 
@@ -139,13 +112,14 @@ go test ./cmd/api -run '^TestServerRuntimeE2E$' -count=1 -v
 
 実LiveKit Cloudと実Gemini APIは、有効な認証情報を明示的に用意した環境で別途smoke testが必要です。通常のローカルE2Eは外部へ接続しません。
 
-## 9. クライアント側に残る作業
+## 9. クライアント統合状況
 
-- クライアントbranch側の `client/packages/api-client` へ、rootの `packages/api-client` が公開する生成型を統合する
-- 既存の `HttpMiteApi` adapterを維持し、画面からHTTP詳細を分離する
-- generated clientが直接扱いにくいmultipart用wrapperを維持する
-- 初期スクリーンショットを最初のArtifact POST前に永続化する
-- Idempotency-Key、revision、最後のSupportRequest / GuideRun ID、capture manifestを端末へ保存する
-- RESTの5秒pollingとWebSocket再接続後GETによる復旧を実装する
-- LiveKit SDKの音声・画面共有・marking Data Packetを接続する
-- 2台のWindows PCと公開サーバーで、実LiveKit・実Geminiを含む最終E2Eを行う
+- rootの `packages/api-client` を生成型と最小clientの正本とし、`client/packages/client-api` の `HttpMiteApi` adapterはその公開型からrequestとresponseを派生する
+- multipart uploadとimage/jpeg取得は `HttpMiteApi` のwrapperへ隔離する
+- 通常の支援依頼とGuideRunからの支援依頼は、最初のArtifact POST前に同じJPEGとcapturedAtを端末へ保存する
+- Idempotency-Key、最後のSupportRequest / GuideRun IDおよびcapture manifestを端末へ保存する
+- RESTの5秒pollingとWebSocket再接続後GETによる復旧を実装済み
+- LiveKit SDKの音声・画面共有・marking Data Packetを実装済み
+- ローカルSupabase、Goサーバーおよびfake Geminiを使い、実 `HttpMiteApi` でA/B/Cフローを確認するintegration testを用意している
+
+残る最終確認は、2台のWindows PCと公開サーバーで実LiveKit・実Geminiを含むE2Eを行うことである。Windows AppBar固有の確認項目は [READMEの既知の未確認事項](../README.md#既知の未確認事項) を参照する。

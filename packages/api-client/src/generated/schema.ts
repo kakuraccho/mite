@@ -964,6 +964,7 @@ export interface components {
     };
     parameters: {
         ResourceId: string;
+        /** @description 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。 */
         IdempotencyKey: string;
     };
     requestBodies: never;
@@ -976,6 +977,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path?: never;
@@ -1062,6 +1064,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path?: never;
@@ -1120,6 +1123,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -1180,6 +1184,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -1247,6 +1252,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -1281,6 +1287,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -1316,6 +1323,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -1376,6 +1384,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -1421,6 +1430,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -1481,6 +1491,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -1573,6 +1584,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -1656,6 +1668,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path?: never;
@@ -1746,6 +1759,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -1780,6 +1794,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {

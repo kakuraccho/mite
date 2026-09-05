@@ -1,0 +1,472 @@
+:root {
+  font-family:
+    Inter, 'Yu Gothic UI', 'Hiragino Kaku Gothic ProN', system-ui, sans-serif;
+  color: #22312c;
+  background: #eef3f0;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  --mite-ink: #22312c;
+  --mite-muted: #65726d;
+  --mite-green-950: #17372f;
+  --mite-green-900: #1d4439;
+  --mite-green-800: #285548;
+  --mite-green-700: #33705d;
+  --mite-green-600: #438872;
+  --mite-green-200: #c8ddd4;
+  --mite-green-100: #e5f0eb;
+  --mite-green-50: #f2f8f5;
+  --mite-cream: #fbfaf5;
+  --mite-gold: #d7a852;
+  --mite-gold-soft: #f5ead1;
+  --mite-danger: #a33f3f;
+  --mite-danger-soft: #faeaea;
+  --mite-warning: #8a5a14;
+  --mite-warning-soft: #fff3d8;
+  --mite-line: #dce3df;
+  --mite-shadow: 0 18px 50px rgb(26 49 41 / 14%);
+  --mite-soft-shadow: 0 10px 30px rgb(30 53 46 / 9%);
+  --mite-radius-sm: 10px;
+  --mite-radius-md: 16px;
+  --mite-radius-lg: 24px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-width: 320px;
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  min-height: 100vh;
+  background:
+    radial-gradient(
+      circle at 80% -10%,
+      rgb(218 235 227 / 82%),
+      transparent 36%
+    ),
+    #eef3f0;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button,
+a,
+input,
+textarea,
+select {
+  outline: 3px solid transparent;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline-color: #a95600;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 5px rgb(255 255 255 / 90%);
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin-top: 0;
+}
+
+.mite-app-shell {
+  min-height: 100vh;
+}
+
+.mite-app-header {
+  position: sticky;
+  z-index: 20;
+  top: 0;
+  display: grid;
+  grid-template-columns: minmax(190px, auto) 1fr auto;
+  align-items: center;
+  gap: 24px;
+  min-height: 76px;
+  padding: 12px 28px;
+  border-bottom: 1px solid rgb(29 68 57 / 12%);
+  background: rgb(251 252 250 / 94%);
+  backdrop-filter: blur(16px);
+}
+
+.mite-brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.mite-brand__mark {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 14px 14px 14px 5px;
+  color: white;
+  background: var(--mite-green-800);
+  font-size: 22px;
+  font-weight: 850;
+}
+
+.mite-brand__copy {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.mite-brand__copy strong {
+  color: var(--mite-green-950);
+  font-size: 18px;
+}
+
+.mite-brand__copy small {
+  margin-top: 4px;
+  color: var(--mite-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.mite-app-header__title h1 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.mite-app-header__title p {
+  margin: 3px 0 0;
+  color: var(--mite-muted);
+  font-size: 13px;
+}
+
+.mite-app-header__tools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.mite-app-main {
+  width: min(1240px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: 32px 0 48px;
+}
+
+.mite-button {
+  display: inline-flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 11px 20px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  font-weight: 800;
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease,
+    background 120ms ease;
+}
+
+.mite-button:not(:disabled):hover {
+  transform: translateY(-1px);
+}
+
+.mite-button--primary {
+  color: white;
+  background: var(--mite-green-800);
+  box-shadow: 0 7px 18px rgb(40 85 72 / 22%);
+}
+
+.mite-button--primary:not(:disabled):hover {
+  background: var(--mite-green-900);
+}
+
+.mite-button--secondary {
+  border-color: var(--mite-green-200);
+  color: var(--mite-green-900);
+  background: white;
+}
+
+.mite-button--quiet {
+  color: var(--mite-green-800);
+  background: var(--mite-green-50);
+}
+
+.mite-button--danger {
+  color: white;
+  background: var(--mite-danger);
+}
+
+.mite-button--call {
+  color: white;
+  background: #2f7d60;
+  box-shadow: 0 7px 18px rgb(47 125 96 / 24%);
+}
+
+.mite-button--large {
+  min-height: 58px;
+  padding: 15px 26px;
+  border-radius: 15px;
+  font-size: 17px;
+}
+
+.mite-button--block {
+  width: 100%;
+}
+
+.mite-button__icon {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  font-size: 20px;
+}
+
+.mite-status {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  padding: 5px 11px;
+  border: 1px solid var(--mite-line);
+  border-radius: 999px;
+  color: var(--mite-muted);
+  background: white;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.mite-status--waiting {
+  border-color: #ebd49d;
+  color: var(--mite-warning);
+  background: var(--mite-warning-soft);
+}
+
+.mite-status--active {
+  border-color: var(--mite-green-200);
+  color: var(--mite-green-900);
+  background: var(--mite-green-100);
+}
+
+.mite-status--success {
+  border-color: #add4bd;
+  color: #245c3c;
+  background: #e5f5eb;
+}
+
+.mite-status--warning {
+  border-color: #ebd49d;
+  color: var(--mite-warning);
+  background: var(--mite-warning-soft);
+}
+
+.mite-status--danger {
+  border-color: #e8b8b8;
+  color: var(--mite-danger);
+  background: var(--mite-danger-soft);
+}
+
+.mite-surface {
+  padding: 28px;
+  border: 1px solid rgb(31 63 53 / 11%);
+  border-radius: var(--mite-radius-lg);
+  background: rgb(255 255 253 / 96%);
+}
+
+.mite-surface--elevated {
+  box-shadow: var(--mite-soft-shadow);
+}
+
+.mite-screen-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.mite-screen-heading h2 {
+  margin-bottom: 8px;
+  color: var(--mite-ink);
+  font-size: clamp(25px, 3vw, 34px);
+  line-height: 1.25;
+}
+
+.mite-screen-heading p {
+  max-width: 700px;
+  margin-bottom: 0;
+  color: var(--mite-muted);
+  line-height: 1.7;
+}
+
+.mite-eyebrow {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--mite-green-700);
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+}
+
+.mite-notice {
+  display: flex;
+  gap: 13px;
+  padding: 16px 18px;
+  border: 1px solid var(--mite-green-200);
+  border-radius: var(--mite-radius-md);
+  background: var(--mite-green-50);
+  line-height: 1.6;
+}
+
+.mite-notice__symbol {
+  display: grid;
+  flex: 0 0 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 50%;
+  color: white;
+  background: var(--mite-green-700);
+  font-weight: 900;
+}
+
+.mite-notice strong {
+  display: block;
+  margin-bottom: 2px;
+}
+
+.mite-notice--success {
+  border-color: #add4bd;
+  background: #eaf7ef;
+}
+
+.mite-notice--warning {
+  border-color: #ebd49d;
+  background: var(--mite-warning-soft);
+}
+
+.mite-notice--warning .mite-notice__symbol {
+  background: var(--mite-warning);
+}
+
+.mite-notice--danger {
+  border-color: #e8b8b8;
+  background: var(--mite-danger-soft);
+}
+
+.mite-notice--danger .mite-notice__symbol {
+  background: var(--mite-danger);
+}
+
+.mite-loading,
+.mite-empty-state {
+  display: grid;
+  min-height: 320px;
+  place-items: center;
+  align-content: center;
+  padding: 40px;
+  color: var(--mite-muted);
+  text-align: center;
+}
+
+.mite-loading p,
+.mite-empty-state p {
+  max-width: 540px;
+  margin: 12px 0 0;
+  line-height: 1.7;
+}
+
+.mite-loading__spinner {
+  width: 38px;
+  height: 38px;
+  border: 4px solid var(--mite-green-100);
+  border-top-color: var(--mite-green-700);
+  border-radius: 50%;
+  animation: mite-spin 800ms linear infinite;
+}
+
+.mite-empty-state__symbol {
+  display: grid;
+  width: 76px;
+  height: 76px;
+  margin-bottom: 18px;
+  place-items: center;
+  border-radius: 26px;
+  color: white;
+  background: var(--mite-green-700);
+  font-size: 34px;
+  font-weight: 900;
+  box-shadow: var(--mite-soft-shadow);
+}
+
+.mite-empty-state h2 {
+  margin-bottom: 0;
+  color: var(--mite-ink);
+  font-size: 28px;
+}
+
+.mite-empty-state__action {
+  margin-top: 22px;
+}
+
+@keyframes mite-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 760px) {
+  .mite-app-header {
+    grid-template-columns: 1fr auto;
+    padding-inline: 18px;
+  }
+
+  .mite-app-header__title {
+    display: none;
+  }
+
+  .mite-app-main {
+    width: min(100% - 24px, 1240px);
+    padding-top: 18px;
+  }
+
+  .mite-surface {
+    padding: 20px;
+    border-radius: 18px;
+  }
+
+  .mite-screen-heading {
+    flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
