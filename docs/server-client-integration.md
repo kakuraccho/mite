@@ -11,15 +11,9 @@ npx supabase start
 npx supabase db reset
 ```
 
-[`server/.env.example`](../server/.env.example) からGit管理外の `server/.env` を作成した場合は、先に読み込みます。サーバー自身は `.env` を自動で読み込みません。
+[`server/.env.example`](../server/.env.example) を参考に、Git管理外の `server/.env` へ設定を記入します。`server/` を作業ディレクトリとして起動すると、サーバーが `.env` を自動で読み込みます。既存の環境変数（空文字を含む）を優先して未設定項目だけを補い、ファイルがなければ環境変数だけを使います。
 
-```bash
-set -a
-source server/.env
-set +a
-```
-
-その後、`npx supabase status -o env` の現行ローカル値を、次の対応でサーバー環境変数へ上書きします。ローカルSupabaseの再起動やresetでSecret keyが変わることがあるため、順序を逆にして `.env` の古い値で上書きしてはいけません。
+Supabaseの設定値は利用者が最新化します。`npx supabase status -o env` の現行ローカル値を、次の対応で `.env` またはサーバー環境変数へ設定してください。ローカルSupabaseの再起動やresetでSecret keyが変わることがあります。環境変数へ設定済みの場合は、そちらも更新するか解除してください。
 
 | Supabase CLI | サーバー |
 |---|---|
@@ -27,7 +21,7 @@ set +a
 | `API_URL` | `SUPABASE_URL` |
 | `SECRET_KEY` | `SUPABASE_SECRET_KEY` |
 
-CLIの秘密値を画面へ表示せず、同じshellで次を実行します。
+環境変数へ設定する場合は、サーバーを起動する同じBashで次を実行します。CLIの秘密値は画面へ表示しません。
 
 ```bash
 eval "$(npx supabase status -o env 2>/dev/null)"
@@ -36,7 +30,7 @@ export SUPABASE_URL="$API_URL"
 export SUPABASE_SECRET_KEY="$SECRET_KEY"
 ```
 
-残りの必須値は `server/.env` または実行環境へ設定してください。ローカルでは `SUPABASE_STORAGE_BUCKET=mite-artifacts` を使います。`.env` はGitへ追加しません。
+残りの必須値は `server/.env` または実行環境へ設定してください。ローカルでは `SUPABASE_STORAGE_BUCKET=mite-artifacts` を使います。`.env` はGitへ追加しません。ファイルの読込不能、不正な書式、必須設定の不足では起動に失敗します。
 
 ```bash
 cd server

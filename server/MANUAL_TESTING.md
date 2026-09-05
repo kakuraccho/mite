@@ -62,15 +62,9 @@ migrationにより `user_demo`、`family_demo`、固定ペア、非公開bucket 
 
 ### 3.3 サーバー環境変数
 
-秘密値をコマンド履歴へ残したくない場合は、Gitに無視される `server/.env` を [`server/.env.example`](./.env.example) から作成し、値を設定してから次のように現在のshellへ読み込む。サーバー自身は `.env` を自動で読み込まない。
+秘密値をコマンド履歴へ残したくない場合は、Gitに無視される `server/.env` を [`server/.env.example`](./.env.example) から作成し、値を設定する。`server/` を作業ディレクトリとして起動すると、サーバーが `.env` を自動で読み込む。既存の環境変数（空文字を含む）を優先して未設定項目だけを補い、ファイルがなければ環境変数だけを使う。
 
-```bash
-set -a
-source server/.env
-set +a
-```
-
-`.env` を使う場合も使わない場合も、ローカルSupabaseの値は必ずその後に取得し、サーバー用の3変数へ上書きする。ローカルSupabaseの再起動やresetでSecret keyが変わることがあり、`.env` に残った古い値を使うとDB接続またはStorage操作が失敗するためである。次のコマンドはCLI出力をshell内で評価し、秘密値を画面へ表示しない。
+`.env` を使う場合も使わない場合も、利用者がローカルSupabaseの最新値を取得し、サーバー用の3変数へ設定する。ローカルSupabaseの再起動やresetでSecret keyが変わることがあり、古い値を使うとDB接続またはStorage操作が失敗するためである。次のコマンドはBashでCLI出力を評価し、秘密値を画面へ表示せず環境変数を上書きする。`.env` へ直接記入する場合も、既存の環境変数があればそちらを更新するか解除する。
 
 ```bash
 eval "$(npx supabase status -o env 2>/dev/null)"
@@ -104,7 +98,7 @@ export GEMINI_API_KEY=manual-gemini-key
 
 この設定のLiveKit tokenは形式確認用であり、LiveKit Cloudへは接続できない。`guideDecision=SKIP` のフローではGemini APIを呼ばない。
 
-実LiveKitまたはAI生成成功まで確認するときは、上のダミー値を設定せず、Git管理外の安全な環境または先に読み込んだ `.env` から実際の認証情報を設定する。Geminiの接続先は次を使う。
+実LiveKitまたはAI生成成功まで確認するときは、上のダミー値を設定せず、Git管理外の安全な環境または `server/.env` へ実際の認証情報を設定する。以前のダミー値が環境変数に残っている場合は更新するか解除する。Geminiの接続先は次を使う。
 
 ```bash
 export AI_BASE_URL=https://generativelanguage.googleapis.com/v1beta
@@ -993,7 +987,7 @@ manualSocket.close();
 npx supabase db reset
 ```
 
-リセット後は第3.3節の順序に従い、必要なら `.env` を先に読み込んだ後、`eval "$(npx supabase status -o env 2>/dev/null)"` と `DATABASE_URL`、`SUPABASE_URL`、`SUPABASE_SECRET_KEY` への上書きを再実行する。ガイド途中からの支援依頼を作成した場合、resetせずに再実行すると `DUPLICATE_ACTIVE_REQUEST` になる。
+リセット後は第3.3節に従い、`eval "$(npx supabase status -o env 2>/dev/null)"` と `DATABASE_URL`、`SUPABASE_URL`、`SUPABASE_SECRET_KEY` への上書きを再実行する。`.env` へ直接記入した場合はそちらを最新化し、サーバーを再起動する。ガイド途中からの支援依頼を作成した場合、resetせずに再実行すると `DUPLICATE_ACTIVE_REQUEST` になる。
 
 ## 13. 結果記録
 
