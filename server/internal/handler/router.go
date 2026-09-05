@@ -46,12 +46,14 @@ func NewRouterWithEvents(
 				},
 			},
 		)
-		router.Group(func(rest chi.Router) {
-			rest.Use(AccessLog(logger))
-			rest.Use(CORS(cfg.ClientOrigins))
-			rest.Use(NewAuthenticator(cfg.DemoUserToken, cfg.DemoFamilyToken).Middleware)
-			generated.HandlerFromMux(strictHandler, rest)
-		})
+		// A mounted router runs CORS before matching generated REST methods.
+		// An inline group would reject OPTIONS before its middleware runs.
+		rest := chi.NewRouter()
+		rest.Use(AccessLog(logger))
+		rest.Use(CORS(cfg.ClientOrigins))
+		rest.Use(NewAuthenticator(cfg.DemoUserToken, cfg.DemoFamilyToken).Middleware)
+		generated.HandlerFromMux(strictHandler, rest)
+		router.Mount("/", rest)
 	}
 	return router
 }
