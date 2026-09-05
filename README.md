@@ -40,10 +40,14 @@ MVPでは固定の1対1とデモ用Bearerトークンを使用します。遠隔
 
 ## ドキュメント
 
-- [MVP実装仕様書](docs/specification.md): 実装の正本となるMVPの範囲、構成、API、状態、画面および受け入れ条件
-- [プロダクトシート](docs/PS.md): 対象ユーザー、課題、提供価値および初期構想
-- [サーバー・クライアント接続ガイド](docs/server-client-integration.md): ローカル起動、トークン、再送およびE2E確認手順
-- [サーバー手動検証ガイド](server/MANUAL_TESTING.md): REST APIとWebSocketを`curl`で確認する手順
+| 目的 | ドキュメント |
+| ---- | ------------ |
+| 初回セットアップ・環境変数の設定・ローカル起動 | [セットアップガイド](docs/setup.md) |
+| コード生成・テスト・ビルド・Windows配布 | [開発ガイド](docs/development.md) |
+| API接続・再送・復旧・E2E確認 | [サーバー・クライアント接続ガイド](docs/server-client-integration.md) |
+| REST APIとWebSocketの手動確認 | [サーバー手動検証ガイド](server/MANUAL_TESTING.md) |
+| MVPの範囲・API・状態・画面・受け入れ条件 | [MVP実装仕様書](docs/specification.md) |
+| 対象ユーザー・課題・提供価値 | [プロダクトシート](docs/PS.md) |
 
 実装時の判断はMVP実装仕様書を優先してください。
 
@@ -56,207 +60,23 @@ MVPでは固定の1対1とデモ用Bearerトークンを使用します。遠隔
 ├── packages/   # 共有APIクライアント
 ├── docs/       # プロダクトに関する仕様・資料
 ├── mock/       # 画面・動作検証用のプロトタイプ
-├── other/      # その他の参考資料
 ├── server/     # Go・ChiによるMiteサーバー
 └── supabase/   # PostgreSQL migrationとseed
 ```
 
 ルートと`client/`は別のnpm workspaceです。ルートはAPI生成と共有APIクライアント、`client/`は2つのElectronアプリとクライアント共通packageを管理します。
 
-## 必要な環境
+## 起動する
 
-- Git
-- Node.js 24 LTS
-- npm 11
-- Go 1.26系
-- Docker（ローカルSupabaseを使う場合）
-- Windows 11（Windows AppBarの実動作確認とWindows向け配布物の作成を行う場合）
+初回は[セットアップガイド](docs/setup.md)に沿って依存関係を取得し、`server/.env`と両クライアントの`.env.local`を設定してください。
 
-Supabase CLIはルートのJavaScript依存関係に含まれるため、グローバルインストールは不要です。`oapi-codegen`と`sqlc`も`server/go.mod`のtool dependencyとして固定しています。
+設定済みの場合は、リポジトリルートで`npx supabase start`を実行し、次をそれぞれ別のターミナルで起動します。共有Supabaseを使う場合、ローカルSupabaseの起動は不要です。
 
-## セットアップ
-
-### 1. リポジトリを取得する
-
-```bash
-git clone git@github.com:kakuraccho/mite.git
-cd mite
-```
-
-GitHubへSSH接続するための設定が必要です。
-
-### 2. 依存関係を取得する
-
-ルートとクライアントで、それぞれ依存関係を取得します。
-
-```bash
-# リポジトリルート
-npm install
-
-cd client
-npm install
-cd ..
-```
-
-### 3. API型とDBアクセスコードを生成する
-
-生成物はリポジトリに含まれていますが、生成元との一致を確認する場合は次を実行します。自動生成ファイルは直接編集しないでください。
-
-```bash
-# リポジトリルート
-npm run generate:api
-
-cd server
-go tool sqlc generate
-cd ..
-```
-
-## ローカルで起動する
-
-以下は、ローカルSupabase、Goサーバー、利用者側Electron、家族側Electronを同じ開発環境で起動する手順です。ローカルSupabaseの代わりに共有環境を使う場合は、DBやStorageを初期化せず、その環境用のサーバー環境変数を設定してください。
-
-### 1. ローカルSupabaseを起動する
-
-Dockerを起動し、リポジトリルートで次を実行します。
-
-```bash
-npx supabase start
-npx supabase db reset
-```
-
-`npx supabase db reset`は、このリポジトリのローカルDBを削除してmigrationとseedを再適用します。共有開発環境、デモ環境、本番環境には実行しないでください。
-
-### 2. サーバー環境変数を設定する
-
-[`server/.env.example`](server/.env.example)を参考にGit管理外の`server/.env`を作成し、デモ用トークンと外部サービスの設定を入力します。既に`.env`がある場合はコピーせず、必要な値を更新してください。`DEMO_USER_TOKEN`と`DEMO_FAMILY_TOKEN`には異なる値を設定してください。実際のトークン、DB接続文字列、APIキーをGitへ含めないでください。
-
-```bash
-cp server/.env.example server/.env
-```
-
-Goサーバーは起動時の作業ディレクトリにある`.env`を自動で読み込みます。`server/`で起動すると`server/.env`を使い、既存の環境変数（空文字を含む）を優先して未設定項目だけを補います。ファイルがなければ環境変数だけを使います。
-
-書式は`KEY=VALUE`で、キーは英字または`_`で始まる英数字・`_`です。空行、`#`で始まるコメント行、値全体を囲む一重・二重引用符、WindowsのCRLFとUTF-8 BOMに対応します。引用符の外側の空白は除き、同じキーが複数あれば最後の値を使います。値は1行で記述し、変数展開、コマンド実行、エスケープ変換、行末コメントの解釈は行いません。読込不能、不正な書式、必須設定の不足では起動に失敗します。
-
-Supabaseの設定値は利用者が最新化してください。ローカルSupabaseの再起動やreset後は、現在の接続先とSecret keyを`server/.env`または環境変数へ設定します。環境変数が残っている場合は`.env`の変更より優先されるため、そちらも更新するか解除してください。環境変数へ設定する場合は、サーバーを起動する同じBashで次を実行します。`.env`へ直接記入する場合の対応は[接続ガイド](docs/server-client-integration.md#1-起動)を参照してください。
-
-```bash
-# リポジトリルート
-eval "$(npx supabase status -o env 2>/dev/null)"
-export DATABASE_URL="$DB_URL"
-export SUPABASE_URL="$API_URL"
-export SUPABASE_SECRET_KEY="$SECRET_KEY"
-```
-
-`server/.env.example`のLiveKitとGeminiのプレースホルダーでもサーバープロセス自体は起動できますが、音声・画面共有・マーキングとAIガイド生成は利用できません。これらを確認するときは、LiveKit CloudとGemini APIの有効な認証情報をサーバーだけに設定してください。
-
-### 3. サーバーを起動する
-
-環境変数を設定した同じターミナルで実行します。
-
-```bash
-cd server
-go run ./cmd/api
-```
-
-既定では`http://localhost:3000`で待ち受けます。専用のhealth endpointはないため、起動ログまたはAPIへのリクエストで確認してください。
-
-### 4. クライアント環境変数を設定する
-
-別のターミナルで、利用者側と家族側それぞれの`.env.local`を作成します。
-
-```bash
-# リポジトリルート
-cp client/apps/user-electron/.env.example client/apps/user-electron/.env.local
-cp client/apps/family-electron/.env.example client/apps/family-electron/.env.local
-```
-
-各ファイルの`MITE_DEMO_TOKEN`を次のようにサーバーと一致させます。
-
-| クライアント | 対応するサーバー環境変数 |
-| ------------ | ------------------------ |
-| 利用者側     | `DEMO_USER_TOKEN`        |
-| 家族側       | `DEMO_FAMILY_TOKEN`      |
-
-ローカルでは`MITE_API_BASE_URL=http://localhost:3000`を使用します。`.env.local`はGit管理されず、次の開発コマンドだけが読み込みます。Supabase、LiveKit、Geminiの秘密情報をクライアントへ設定しないでください。
-
-### 5. 両クライアントを起動する
-
-利用者側と家族側を別々のターミナルで起動します。
-
-```bash
-# ターミナル1
-cd client
-npm run dev:user
-```
-
-```bash
-# ターミナル2
-cd client
-npm run dev:family
-```
-
-利用者側は`http://127.0.0.1:5173`、家族側は`http://127.0.0.1:5174`のVite開発サーバーをElectronで表示します。
-
-利用者側は通常のメインウィンドウを持ちません。Windowsではプライマリ画面の左端をAppBarとして使用します。LinuxではOSの作業領域を予約せず、画面位置とサイズ変更だけを疑似動作させます。
-
-### 2台のPCで接続する場合
-
-利用者側と家族側を別のPCで起動する場合は、両方の`MITE_API_BASE_URL`を`http://<サーバーPCのIPアドレス>:3000`へ変更します。`localhost`のままでは別PCのサーバーへ接続できません。公開デモではHTTPS/WSSで公開した同一のGoサーバーを指定します。
-
-## Windows向け配布物
-
-Windows上で、クライアントの依存関係を取得してから実行します。
-
-```bash
-cd client
-npm run make:user
-npm run make:family
-```
-
-生成物は各アプリの`out/`に出力されます。インストーラーを作る前のパッケージ確認には`npm run package:user`と`npm run package:family`を使用できます。
-
-Windows向けの`npm install`、package、makeはWindows上で実行してください。WSL2上で生成したLinux配布物ではWindows AppBarの動作を確認できません。コード署名はMVPの配布方法を確定した後に設定します。
-
-配布版は`.env.local`を読みません。起動するWindowsユーザーの環境変数へ`MITE_API_BASE_URL`と`MITE_DEMO_TOKEN`を設定してください。利用者側では必要に応じて`CAPTURE_INTERVAL_MS`と`CAPTURE_MAX_COUNT`も設定できます。
-
-## 検証
-
-### API生成と共有APIクライアント
-
-リポジトリルートで実行します。
-
-```bash
-npm run generate:api
-npm run typecheck
-npm run lint
-npm run build
-```
-
-### Electronクライアント
-
-`client/`で実行します。
-
-```bash
-npm run format:check
-npm run lint
-npm run typecheck
-npm run test
-npm run build
-```
-
-### Goサーバー
-
-`server/`で実行します。
-
-```bash
-go tool sqlc generate
-go test ./...
-go vet ./...
-go build ./...
-```
-
-主要APIをローカルSupabaseと`curl`で順番に確認する場合は、[サーバー手動検証ガイド](server/MANUAL_TESTING.md)を参照してください。
+| 対象 | 作業ディレクトリ | コマンド |
+| ---- | ---------------- | -------- |
+| Goサーバー | `server/` | `go run ./cmd/api` |
+| 利用者側アプリ | `client/` | `npm run dev:user` |
+| 家族側アプリ | `client/` | `npm run dev:family` |
 
 ## 既知の未確認事項
 

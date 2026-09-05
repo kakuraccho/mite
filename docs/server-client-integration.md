@@ -4,38 +4,7 @@
 
 ## 1. 起動
 
-Dockerを起動してリポジトリルートで次を実行します。
-
-```bash
-npx supabase start
-npx supabase db reset
-```
-
-[`server/.env.example`](../server/.env.example) を参考に、Git管理外の `server/.env` へ設定を記入します。`server/` を作業ディレクトリとして起動すると、サーバーが `.env` を自動で読み込みます。既存の環境変数（空文字を含む）を優先して未設定項目だけを補い、ファイルがなければ環境変数だけを使います。
-
-Supabaseの設定値は利用者が最新化します。`npx supabase status -o env` の現行ローカル値を、次の対応で `.env` またはサーバー環境変数へ設定してください。ローカルSupabaseの再起動やresetでSecret keyが変わることがあります。環境変数へ設定済みの場合は、そちらも更新するか解除してください。
-
-| Supabase CLI | サーバー |
-|---|---|
-| `DB_URL` | `DATABASE_URL` |
-| `API_URL` | `SUPABASE_URL` |
-| `SECRET_KEY` | `SUPABASE_SECRET_KEY` |
-
-環境変数へ設定する場合は、サーバーを起動する同じBashで次を実行します。CLIの秘密値は画面へ表示しません。
-
-```bash
-eval "$(npx supabase status -o env 2>/dev/null)"
-export DATABASE_URL="$DB_URL"
-export SUPABASE_URL="$API_URL"
-export SUPABASE_SECRET_KEY="$SECRET_KEY"
-```
-
-残りの必須値は `server/.env` または実行環境へ設定してください。ローカルでは `SUPABASE_STORAGE_BUCKET=mite-artifacts` を使います。`.env` はGitへ追加しません。ファイルの読込不能、不正な書式、必須設定の不足では起動に失敗します。
-
-```bash
-cd server
-go run ./cmd/api
-```
+初回の依存関係取得、`server/.env`とクライアントの`.env.local`の設定、起動手順は[セットアップガイド](setup.md)を参照してください。サーバーだけを起動する場合は「ローカルで起動する」の手順1〜3まで進めます。
 
 クライアントは通常 `MITE_API_BASE_URL=http://localhost:3000` を使います。別PCから接続する場合はサーバーPCのIPアドレスへ変え、そのOriginを `CLIENT_ORIGINS` に完全一致で追加してください。
 
@@ -127,16 +96,7 @@ LiveKit tokenはSupportSessionが `ACTIVE` の間だけ取得できます。接�
 
 ## 8. 接続確認
 
-サーバーの通常確認は次です。
-
-```bash
-cd server
-go tool sqlc generate
-go test ./... -count=1
-go test -race ./... -count=1
-go vet ./...
-go build ./...
-```
+コード生成・テスト・静的解析・ビルドは[開発ガイドのGoサーバー検証](development.md#goサーバー)を参照してください。
 
 ローカルSupabaseとfake GuideGeneratorを使うHTTP/WebSocket E2Eは、秘密値を表示せず次のように実行できます。
 

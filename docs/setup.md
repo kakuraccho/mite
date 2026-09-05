@@ -1,0 +1,156 @@
+# セットアップ・ローカル起動
+
+[README](../README.md)へ戻る。コード生成・検証・Windows配布は[開発ガイド](development.md)を参照してください。
+
+## 必要な環境
+
+- Git
+- Node.js 24 LTS
+- npm 11
+- Go 1.26系
+- Docker（ローカルSupabaseを使う場合）
+- Windows 11（Windows AppBarの実動作確認とWindows向け配布物の作成を行う場合）
+
+Supabase CLIはルートのJavaScript依存関係に含まれるため、グローバルインストールは不要です。`oapi-codegen`と`sqlc`も`server/go.mod`のtool dependencyとして固定しています。
+
+## セットアップ
+
+### 1. リポジトリを取得する
+
+```bash
+git clone git@github.com:kakuraccho/mite.git
+cd mite
+```
+
+GitHubへSSH接続するための設定が必要です。
+
+### 2. 依存関係を取得する
+
+ルートとクライアントで、それぞれ依存関係を取得します。
+
+```bash
+# リポジトリルート
+npm install
+
+cd client
+npm install
+cd ..
+```
+
+API型とDBアクセスコードの生成物はリポジトリに含まれています。再生成する場合は[コード生成](development.md#コード生成)を参照してください。
+
+## ローカルで起動する
+
+以下は、ローカルSupabase、Goサーバー、利用者側Electron、家族側Electronを同じ開発環境で起動する手順です。ローカルSupabaseの代わりに共有環境を使う場合は、DBやStorageを初期化せず、その環境用のサーバー環境変数を設定してください。
+
+### 1. ローカルSupabaseを起動する
+
+Dockerを起動し、リポジトリルートで次を実行します。
+
+```bash
+npx supabase start
+npx supabase db reset
+```
+
+`npx supabase db reset`は、このリポジトリのローカルDBを削除してmigrationとseedを再適用します。共有開発環境、デモ環境、本番環境には実行しないでください。
+
+### 2. サーバー環境変数を設定する
+
+[`server/.env.example`](../server/.env.example)を参考にGit管理外の`server/.env`を作成し、デモ用トークンと外部サービスの設定を入力します。既に`.env`がある場合はコピーせず、必要な値を更新してください。`DEMO_USER_TOKEN`と`DEMO_FAMILY_TOKEN`には異なる値を設定してください。実際のトークン、DB接続文字列、APIキーをGitへ含めないでください。
+
+```bash
+cp server/.env.example server/.env
+```
+
+Goサーバーは起動時の作業ディレクトリにある`.env`を自動で読み込みます。`server/`で起動すると`server/.env`を使い、既存の環境変数（空文字を含む）を優先して未設定項目だけを補います。ファイルがなければ環境変数だけを使います。
+
+Supabaseの設定値は、リポジトリルートで次のコマンドを実行して確認します。
+
+```bash
+npx supabase status -o env
+```
+
+`server/.env`をエディタで開き、表示された値を次の対応で転記してください。`$DB_URL`などの変数名ではなく、実際の値を記入します。
+
+| コマンドの出力 | `server/.env`の設定項目 |
+| -------------- | ---------------------- |
+| `DB_URL`       | `DATABASE_URL`         |
+| `API_URL`      | `SUPABASE_URL`         |
+| `SECRET_KEY`   | `SUPABASE_SECRET_KEY`  |
+
+ローカルでは`SUPABASE_STORAGE_BUCKET=mite-artifacts`を使います。Supabaseの再起動やreset後は、再度コマンドで現在の値を確認し、`server/.env`を更新してください。以前に`export`などで同じ環境変数を設定している場合は、`.env`より優先されるため解除してください。書式の詳細や環境変数へ直接設定する手順は[サーバー設定の補足](#サーバー設定の補足)を参照してください。
+
+`server/.env.example`のLiveKitとGeminiのプレースホルダーでもサーバープロセス自体は起動できますが、音声・画面共有・マーキングとAIガイド生成は利用できません。これらを確認するときは、LiveKit CloudとGemini APIの有効な認証情報をサーバーだけに設定してください。
+
+### 3. サーバーを起動する
+
+リポジトリルートから次を実行します。サーバーが`server/.env`を自動で読み込むため、事前の`export`は不要です。
+
+```bash
+cd server
+go run ./cmd/api
+```
+
+既定では`http://localhost:3000`で待ち受けます。専用のhealth endpointはないため、起動ログまたはAPIへのリクエストで確認してください。
+
+### 4. クライアント環境変数を設定する
+
+別のターミナルで、利用者側と家族側それぞれの`.env.local`を作成します。既にファイルがある場合はコピーせず、必要な値を更新してください。
+
+```bash
+# リポジトリルート
+cp client/apps/user-electron/.env.example client/apps/user-electron/.env.local
+cp client/apps/family-electron/.env.example client/apps/family-electron/.env.local
+```
+
+各ファイルの`MITE_DEMO_TOKEN`を次のようにサーバーと一致させます。
+
+| クライアント | 対応するサーバー環境変数 |
+| ------------ | ------------------------ |
+| 利用者側     | `DEMO_USER_TOKEN`        |
+| 家族側       | `DEMO_FAMILY_TOKEN`      |
+
+ローカルでは`MITE_API_BASE_URL=http://localhost:3000`を使用します。`.env.local`はGit管理されず、次の開発コマンドだけが読み込みます。Supabase、LiveKit、Geminiの秘密情報をクライアントへ設定しないでください。
+
+### 5. 両クライアントを起動する
+
+利用者側と家族側を別々のターミナルで起動します。
+
+```bash
+# ターミナル1
+cd client
+npm run dev:user
+```
+
+```bash
+# ターミナル2
+cd client
+npm run dev:family
+```
+
+利用者側は`http://127.0.0.1:5173`、家族側は`http://127.0.0.1:5174`のVite開発サーバーをElectronで表示します。
+
+利用者側は通常のメインウィンドウを持ちません。Windowsではプライマリ画面の左端をAppBarとして使用します。LinuxではOSの作業領域を予約せず、画面位置とサイズ変更だけを疑似動作させます。
+
+### 2台のPCで接続する場合
+
+利用者側と家族側を別のPCで起動する場合は、両方の`MITE_API_BASE_URL`を`http://<サーバーPCのIPアドレス>:3000`へ変更します。`localhost`のままでは別PCのサーバーへ接続できません。公開デモではHTTPS/WSSで公開した同一のGoサーバーを指定します。
+
+## サーバー設定の補足
+
+### `.env`の書式
+
+書式は`KEY=VALUE`で、キーは英字または`_`で始まる英数字・`_`です。空行、`#`で始まるコメント行、値全体を囲む一重・二重引用符、WindowsのCRLFとUTF-8 BOMに対応します。引用符の外側の空白は除き、同じキーが複数あれば最後の値を使います。値は1行で記述し、変数展開、コマンド実行、エスケープ変換、行末コメントの解釈は行いません。読込不能、不正な書式、必須設定の不足では起動に失敗します。
+
+### 環境変数へ直接設定する場合
+
+通常のローカル起動では`server/.env`へ記入します。環境変数へ設定する場合は、サーバーを起動する同じBashで次を実行します。CLIの秘密値は画面へ表示しません。
+
+```bash
+eval "$(npx supabase status -o env 2>/dev/null)"
+export DATABASE_URL="$DB_URL"
+export SUPABASE_URL="$API_URL"
+export SUPABASE_SECRET_KEY="$SECRET_KEY"
+```
+
+このコマンドはリポジトリルートで実行してください。残りの必須値は`server/.env`または同じBashの環境変数へ設定し、`cd server`、`go run ./cmd/api`で起動します。
