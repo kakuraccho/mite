@@ -16,31 +16,70 @@ Miteは、PC操作の途中で次に何をすればよいか分からなくな�
 
 ## 現在の開発状況
 
-現在は、MVPの仕様策定とプロトタイプによる検証を進めています。フロントエンドとバックエンドの技術構成、セットアップ方法および起動方法は、決定後にこのREADMEへ追記します。
+MVP実装仕様に基づき、利用者・家族向けElectronクライアント、API契約、共有APIクライアント、DBスキーマおよびGoサーバーのA/B/Cフローを実装しています。ローカル統合確認後、Windows実機と外部サービスを使った最終E2Eへ進みます。
+
+## MVPの構成
+
+- 利用者側と家族側で、それぞれ独立したWindows向けElectronアプリを提供する
+- 利用者本人が操作し、家族は音声、画面共有、マーキングで支援する
+- 支援中の画面からガイドの下書きを生成し、家族が確認・編集して保存する
+- 保存したガイドを利用者が1ステップずつ実行し、途中から家族へ相談できる
+
+### 採用技術
+
+| 対象                       | 技術                                  |
+| -------------------------- | ------------------------------------- |
+| クライアント               | Electron、React、TypeScript、Vite     |
+| サーバー                   | Go 1.26系、Chi v5                     |
+| API契約                    | OpenAPI 3.0.3                         |
+| データ・画像保存           | Supabase PostgreSQL、Supabase Storage |
+| 音声・画面共有・マーキング | LiveKit Cloud                         |
+| ガイド生成                 | Gemini API                            |
+
+MVPでは固定の1対1とデモ用Bearerトークンを使用します。遠隔操作、カメラ映像、通話録音、本格的なアカウント機能、外部プッシュ通知は対象外です。
 
 ## ドキュメント
 
-- [プロダクト仕様書](docs/specification.md): 現在の決定事項、MVPの範囲、各フローおよび今後の検討事項
-- [プロダクトシート](docs/PS.md): 対象ユーザー、課題、提供価値および初期構想
+| 目的 | ドキュメント |
+| ---- | ------------ |
+| 初回セットアップ・環境変数の設定・ローカル起動 | [セットアップガイド](docs/setup.md) |
+| コード生成・テスト・ビルド・Windows配布 | [開発ガイド](docs/development.md) |
+| API接続・再送・復旧・E2E確認 | [サーバー・クライアント接続ガイド](docs/server-client-integration.md) |
+| REST APIとWebSocketの手動確認 | [サーバー手動検証ガイド](server/MANUAL_TESTING.md) |
+| MVPの範囲・API・状態・画面・受け入れ条件 | [MVP実装仕様書](docs/specification.md) |
+| 対象ユーザー・課題・提供価値 | [プロダクトシート](docs/PS.md) |
 
-仕様の詳細や決定状況は、プロダクト仕様書を参照してください。
+実装時の判断はMVP実装仕様書を優先してください。
 
 ## ディレクトリ構成
 
 ```text
 .
-├── back/     # バックエンド（構成検討中）
-├── docs/     # プロダクトに関する仕様・資料
-├── front/    # フロントエンド（構成検討中）
-├── mock/     # 画面・動作検証用のプロトタイプ
-└── other/    # その他の参考資料
+├── api/        # OpenAPIによるAPI契約
+├── client/     # 利用者・家族向けElectronクライアント
+├── packages/   # 共有APIクライアント
+├── docs/       # プロダクトに関する仕様・資料
+├── mock/       # 画面・動作検証用のプロトタイプ
+├── server/     # Go・ChiによるMiteサーバー
+└── supabase/   # PostgreSQL migrationとseed
 ```
 
-## リポジトリの取得
+ルートと`client/`は別のnpm workspaceです。ルートはAPI生成と共有APIクライアント、`client/`は2つのElectronアプリとクライアント共通packageを管理します。
 
-```bash
-git clone git@github.com:kakuraccho/mite.git
-cd mite
-```
+## 起動する
 
-GitHubへSSH接続するための設定が必要です。
+初回は[セットアップガイド](docs/setup.md)に沿って依存関係を取得し、`server/.env`と両クライアントの`.env.local`を設定してください。
+
+設定済みの場合は、リポジトリルートで`npx supabase start`を実行し、次をそれぞれ別のターミナルで起動します。共有Supabaseを使う場合、ローカルSupabaseの起動は不要です。
+
+| 対象 | 作業ディレクトリ | コマンド |
+| ---- | ---------------- | -------- |
+| Goサーバー | `server/` | `go run ./cmd/api` |
+| 利用者側アプリ | `client/` | `npm run dev:user` |
+| 家族側アプリ | `client/` | `npm run dev:family` |
+
+## 既知の未確認事項
+
+- Windows AppBarの登録、他アプリの最大化との共存、DPI・表示設定変更、タスクバーとの競合および終了時の予約解除は、Windows 11実機での確認が必要です。
+- 実LiveKit Cloudによる音声・画面共有・マーキングと、実Gemini APIによるガイド生成は、有効な認証情報を用意した環境でのsmoke testが必要です。
+- 2台のWindows PCと公開Goサーバーを使う最終E2Eは未実施です。

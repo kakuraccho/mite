@@ -1,16 +1,94 @@
-# mite AGENTS.md
+# Mite AGENTS.md
 
-## file tree
-/
+このファイルは、リポジトリ全体で作業するAIエージェント向けの指示です。下位ディレクトリに別の `AGENTS.md` がある場合、そのディレクトリ内では下位の指示も適用してください。指示が競合する場合は、より対象範囲の狭い指示を優先します。
+
+## プロジェクト概要
+
+Miteは、PC操作の途中で次に何をすればよいか分からなくなった高齢者を、離れた家族が支援するためのサービスです。
+
+家族が利用者の画面を見ながら操作する場所を伝え、利用者本人が操作して解決することを支援します。役立った支援内容はガイドとして残し、次回は利用者が一人でも操作できるようになる循環を目指します。
+
+現在はMVP実装仕様に基づいて実装を開始する段階です。利用者側と家族側のクライアントにはElectron、React、TypeScript、Viteを、サーバーにはGo 1.26系とChi v5を採用します。
+
+## ディレクトリ構成
+
+```text
+.
 ├── AGENTS.md
-├── back
-├── docs
-│   ├── PS.md
-│   └── specification.md
-├── front
-├── mock
-│   ├── 01-except-use-guide
-│   └── 02-specification
-├── other
-│   └── mock01
+├── README.md
+├── client/                # 利用者・家族向けElectronクライアント
+├── docs/
+│   ├── PS.md              # プロダクトシート
+│   └── specification.md   # MVP実装仕様書（仕様の正本）
+├── mock/                   # 画面・動作検証用のプロトタイプ
+│   ├── 01-except-use-guide/
+│   └── 02-specification/
+├── other/                  # その他の参考資料
+│   └── mock01/
+└── server/                # Go・ChiによるMiteサーバー
+```
 
+## 仕様の参照
+
+- 実装やドキュメント作成の前に、プロダクトと技術の正本である `docs/specification.md` を確認してください。
+- `docs/PS.md` は、対象ユーザー、課題、提供価値および初期構想の背景資料として参照してください。
+- `mock/` と `other/` はプロトタイプおよび参考資料です。プロダクト仕様書と競合する場合、参考資料の内容を確定仕様として扱わないでください。
+- `docs/specification_before_review.md` はレビュー前の履歴資料です。現行仕様の根拠として使用しないでください。
+- 仕様書内のMVP制限、MVP対象外、今後の検討事項の区別を維持してください。
+- 未決定事項を推測で確定したり、MVP外の機能を独断で追加したりしないでください。
+- 資料間の矛盾や、実装に必要な情報の不足を発見した場合は、該当箇所と選択肢を示してユーザーへ確認してください。
+
+## 作業方針
+
+- 依頼された範囲に必要な変更だけを行ってください。
+- 既存の設計、命名およびディレクトリ構成を尊重してください。
+- ユーザーの既存変更を、許可なく削除、上書きまたは差し戻さないでください。
+- `docs/specification.md` に定められていない依存関係、技術スタックまたは外部サービスを導入する前に、必要性と影響を説明してユーザーへ確認してください。
+- APIやデータ構造を変更する場合は、`client/` と `server/` の両方への影響を確認してください。
+- 秘密情報、認証情報、個人情報および実データをコミットしないでください。
+- READMEには人向けの概要と利用方法を、AGENTS.mdにはAIエージェント向けの作業規則を記載してください。
+
+## ブランチ運用
+
+- 作業ブランチは `dev` から作成し、原則としてPull Requestを通して `dev` へマージしてください。
+- ブランチ名は原則として `<type>/<scope>/<description>` の形式にしてください。
+- `description` は英小文字のkebab-caseで、変更内容を短く具体的に表してください。
+
+### type
+
+- `feat`: 新機能
+- `fix`: 不具合修正
+- `update`: 既存機能や仕様の変更・改善
+- `docs`: ドキュメントのみの変更
+- `refactor`: 挙動を変えないコード整理
+- `test`: テストのみの変更
+- `chore`: 設定、依存関係または保守作業
+
+### scope
+
+- `client`: クライアント
+- `server`: サーバー
+- `system`: クライアントとサーバーの両方
+- `project`: README、AGENTS.mdなど、プロジェクト全体
+- `spec`: プロダクト仕様
+
+例:
+
+```text
+feat/client/add-support-request
+fix/server/validate-session-id
+update/system/change-user-profile
+docs/project/update-readme
+docs/spec/update-support-flow
+chore/project/update-dependencies
+```
+
+## 動作確認
+
+- 変更後は、対象範囲に応じてテスト、Lint、型チェックおよびビルドを実行してください。
+- ドキュメント変更では、リンク、コマンド、見出し構造および記述内容が現在のリポジトリと一致していることを確認してください。
+- API生成はリポジトリルートで `npm run generate:api` を実行してください。
+- TypeScript共有packageはリポジトリルートで `npm run typecheck`、`npm run lint`、`npm run build` を実行してください。
+- Electronクライアントは `client/` で `npm run format:check`、`npm run lint`、`npm run typecheck`、`npm run test`、`npm run build` を実行してください。
+- サーバーは `server/` で `go tool sqlc generate`、`go test ./...`、`go vet ./...`、`go build ./...` を実行してください。
+- 実行できなかった確認項目がある場合は、完了報告で項目と理由を明記してください。
