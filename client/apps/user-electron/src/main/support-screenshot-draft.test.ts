@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -33,6 +33,26 @@ describe('SupportScreenshotDraftStore', () => {
       capturedAt: '2026-09-04T10:00:00Z',
       bytes,
     })
+  })
+
+  it('can save the same screenshot again and replace it with a new capture', async () => {
+    const { directory, store } = await makeStore()
+    const original = new Uint8Array([0xff, 0xd8, 1, 0xff, 0xd9])
+    const replacement = new Uint8Array([0xff, 0xd8, 2, 0xff, 0xd9])
+
+    await store.save('draft_01', '2026-09-04T10:00:00Z', original)
+    await store.save('draft_01', '2026-09-04T10:00:00Z', original)
+    await store.save('draft_01', '2026-09-04T10:00:05Z', replacement)
+
+    expect(await store.load('draft_01')).toEqual({
+      draftId: 'draft_01',
+      capturedAt: '2026-09-04T10:00:05Z',
+      bytes: replacement,
+    })
+    const files = await readdir(path.join(directory, 'draft_01'))
+    expect(files).toHaveLength(2)
+    expect(files).toContain('manifest.json')
+    expect(files.some((filename) => filename.endsWith('.tmp'))).toBe(false)
   })
 
   it('keeps the previous complete draft until a replacement manifest exists', async () => {
