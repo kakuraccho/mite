@@ -128,20 +128,20 @@ npx supabase db reset
 
 ### 2. サーバー環境変数を設定する
 
-Git管理外の`server/.env`を作成し、デモ用トークンと外部サービスの設定を入力します。`DEMO_USER_TOKEN`と`DEMO_FAMILY_TOKEN`には異なる値を設定してください。実際のトークン、DB接続文字列、APIキーをGitへ含めないでください。
+[`server/.env.example`](server/.env.example)を参考にGit管理外の`server/.env`を作成し、デモ用トークンと外部サービスの設定を入力します。既に`.env`がある場合はコピーせず、必要な値を更新してください。`DEMO_USER_TOKEN`と`DEMO_FAMILY_TOKEN`には異なる値を設定してください。実際のトークン、DB接続文字列、APIキーをGitへ含めないでください。
 
 ```bash
 cp server/.env.example server/.env
 ```
 
-Goサーバーは`.env`を自動で読み込みません。サーバーを起動するターミナルで読み込んだ後、ローカルSupabaseの現在値でDB、API、Storage用の3変数を上書きします。Supabaseの再起動やreset後に古いSecret keyを使わないため、この順序で実行してください。
+Goサーバーは起動時の作業ディレクトリにある`.env`を自動で読み込みます。`server/`で起動すると`server/.env`を使い、既存の環境変数（空文字を含む）を優先して未設定項目だけを補います。ファイルがなければ環境変数だけを使います。
+
+書式は`KEY=VALUE`で、キーは英字または`_`で始まる英数字・`_`です。空行、`#`で始まるコメント行、値全体を囲む一重・二重引用符、WindowsのCRLFとUTF-8 BOMに対応します。引用符の外側の空白は除き、同じキーが複数あれば最後の値を使います。値は1行で記述し、変数展開、コマンド実行、エスケープ変換、行末コメントの解釈は行いません。読込不能、不正な書式、必須設定の不足では起動に失敗します。
+
+Supabaseの設定値は利用者が最新化してください。ローカルSupabaseの再起動やreset後は、現在の接続先とSecret keyを`server/.env`または環境変数へ設定します。環境変数が残っている場合は`.env`の変更より優先されるため、そちらも更新するか解除してください。環境変数へ設定する場合は、サーバーを起動する同じBashで次を実行します。`.env`へ直接記入する場合の対応は[接続ガイド](docs/server-client-integration.md#1-起動)を参照してください。
 
 ```bash
 # リポジトリルート
-set -a
-source server/.env
-set +a
-
 eval "$(npx supabase status -o env 2>/dev/null)"
 export DATABASE_URL="$DB_URL"
 export SUPABASE_URL="$API_URL"

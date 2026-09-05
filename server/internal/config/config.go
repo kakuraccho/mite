@@ -34,7 +34,17 @@ type Config struct {
 type lookupEnv func(string) (string, bool)
 
 func Load() (Config, error) {
-	return load(os.LookupEnv)
+	values, err := readDotEnv(".env")
+	if err != nil {
+		return Config{}, err
+	}
+	return load(func(name string) (string, bool) {
+		if value, ok := os.LookupEnv(name); ok {
+			return value, true
+		}
+		value, ok := values[name]
+		return value, ok
+	})
 }
 
 func load(lookup lookupEnv) (Config, error) {
