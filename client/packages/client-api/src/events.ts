@@ -29,7 +29,7 @@ const eventTypes = new Set<MiteEventType>([
 ])
 
 const eventUrlFromApi = (apiBaseUrl: string) => {
-  const url = new URL('/v1/events', apiBaseUrl)
+  const url = new URL(`${apiBaseUrl.replace(/\/$/, '')}/v1/events`)
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
   return url.toString()
 }
