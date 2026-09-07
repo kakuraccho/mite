@@ -9,7 +9,7 @@
 - npm 11
 - Go 1.26系
 - Docker（ローカルSupabaseを使う場合）
-- Windows 11（Windows AppBarの実動作確認とWindows向け配布物の作成を行う場合）
+- Windows 11（Windows画面の撮影・共有、Windows AppBarの実動作確認およびWindows向け配布物の作成を行う場合）
 
 Supabase CLIはルートのJavaScript依存関係に含まれるため、グローバルインストールは不要です。`oapi-codegen`と`sqlc`も`server/go.mod`のtool dependencyとして固定しています。
 
@@ -131,6 +131,28 @@ npm run dev:family
 利用者側は`http://127.0.0.1:5173`、家族側は`http://127.0.0.1:5174`のVite開発サーバーをElectronで表示します。
 
 利用者側は通常のメインウィンドウを持ちません。Windowsではプライマリ画面の左端をAppBarとして使用します。LinuxではOSの作業領域を予約せず、画面位置とサイズ変更だけを疑似動作させます。
+
+### WSLでスクリーンショットが真っ黒になる場合
+
+WSLで起動したLinux版Electronの `desktopCapturer` は、WSLg側の画面を取得します。Windowsのデスクトップ全体を取得する処理にはなりません。WSLgはLinuxの各ウィンドウをWindowsへ転送する構成です（[Microsoftの構成説明](https://devblogs.microsoft.com/commandline/wslg-architecture/)）。MiteではWSLからの撮影・共有を開始せず、Windows用アプリの起動を案内します。保存済みの相談画像もWSLでは復元しませんが、削除はしません。
+
+Windowsの画面を撮影・共有するときは、利用者側をWindowsのPowerShellからWindows版Node.js 24で起動してください。GoサーバーはWSL側で実行したままにできます。
+
+1. 今回の変更を含むソースをWindows側の作業フォルダー（例: `C:\dev\mite`）へ用意します。WSLの未コミット変更は通常のcloneでは引き継がれないため、変更したファイルも反映してください。WSLの `node_modules`、`dist`、`dist-electron`、`out` は持ち込まず、Windows上で依存関係を取得し直します。
+2. Windows側の `client/apps/user-electron/.env.local` を第4項の手順で設定し、`MITE_API_BASE_URL` をWindowsから到達できるサーバーのURLにします。
+3. WindowsのPowerShellで次を実行します。`node -p` の結果が `win32` であることを確認してください。`npm.cmd` を使うことでPowerShellのスクリプト実行ポリシーの変更は不要です。
+
+```powershell
+cd C:\dev\mite
+node -p "process.platform"
+node --version
+npm.cmd install
+cd client
+npm.cmd install
+npm.cmd run dev:user
+```
+
+家族側もWindowsで起動する場合は、家族用 `.env.local` を設定し、別のPowerShellから `client/` で `npm.cmd run dev:family` を実行します。
 
 ### 2台のPCで接続する場合
 

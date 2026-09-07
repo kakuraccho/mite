@@ -1,8 +1,7 @@
 import type { RuntimeConfig } from '@mite/client-core'
 import type { UserOverlayLayout, UserOverlayMode } from '../shared/overlay'
 
-export interface ScreenSourceSummary {
-  id: string
+export interface ScreenSharePreview {
   name: string
   thumbnailDataUrl: string
 }
@@ -35,11 +34,8 @@ export interface SupportScreenshotDraft {
 export interface UserDesktopBridge {
   getRuntimeConfig(): Promise<RuntimeConfig>
   setOverlayMode(mode: UserOverlayMode): Promise<UserOverlayLayout>
-  listScreenSources(): Promise<ScreenSourceSummary[]>
-  selectScreenSource(sourceId: string): Promise<void>
-  capturePreview(
-    sourceId: string,
-  ): Promise<{ capturedAt: string; bytes: Uint8Array }>
+  prepareScreenShare(): Promise<ScreenSharePreview>
+  capturePreview(): Promise<{ capturedAt: string; bytes: Uint8Array }>
   saveSupportScreenshotDraft(
     draftId: string,
     capturedAt: string,

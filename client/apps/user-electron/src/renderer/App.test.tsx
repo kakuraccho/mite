@@ -1,7 +1,9 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
   Artifact,
+  GuideDetail,
+  GuideRun,
   MiteApi,
   SupportRequest,
   SupportSession,
@@ -9,7 +11,7 @@ import type {
 import { MemoryStorage, type RuntimeConfig } from '@mite/client-core'
 import { App, EdgeHelpEntry, UserClient } from './App'
 import type { CaptureManifest, UserDesktopBridge } from './desktop'
-import type { UserMediaSession } from './livekit'
+import type { UserMediaCallbacks, UserMediaSession } from './livekit'
 
 const timestamp = '2026-09-03T10:00:00Z'
 const runtime: RuntimeConfig = {
@@ -81,8 +83,7 @@ const artifact: Artifact = {
 }
 
 const source = {
-  id: 'window:1:0',
-  name: '相談したい画面',
+  name: '画面全体',
   thumbnailDataUrl: 'data:image/jpeg;base64,AQID',
 }
 
@@ -99,7 +100,7 @@ const makeDesktop = (): UserDesktopBridge =>
       },
       reservedBounds: { x: 0, y: 0, width: 4, height: 800 },
     })),
-    listScreenSources: vi.fn().mockResolvedValue([source]),
+    prepareScreenShare: vi.fn().mockResolvedValue(source),
     capturePreview: vi.fn().mockResolvedValue({
       bytes: new Uint8Array([1, 2, 3]),
       capturedAt: timestamp,
@@ -126,6 +127,54 @@ const eventStreamFactory = () => ({
   start: vi.fn(),
   stop: vi.fn(),
 })
+
+const openConsultation = async () => {
+  fireEvent.focus(
+    await screen.findByRole('button', {
+      name: '家族に相談するメニューを開く',
+    }),
+  )
+  fireEvent.click(screen.getByRole('button', { name: '家族に相談する' }))
+}
+
+const guideRun: GuideRun = {
+  id: 'run_01',
+  guideId: 'guide_01',
+  guideVersionNumber: 1,
+  userId: 'user_demo',
+  status: 'IN_PROGRESS',
+  currentStepNumber: 1,
+  supportRequestId: null,
+  startedAt: timestamp,
+  completedAt: null,
+  pausedAt: null,
+  updatedAt: timestamp,
+  revision: 1,
+}
+
+const guide: GuideDetail = {
+  id: 'guide_01',
+  userId: 'user_demo',
+  title: '購入画面に戻る',
+  currentVersionNumber: 1,
+  revision: 1,
+  createdAt: timestamp,
+  updatedAt: timestamp,
+  representativeArtifactId: 'artifact_01',
+  currentVersion: {
+    versionNumber: 1,
+    title: '購入画面に戻る',
+    createdBy: 'family_demo',
+    createdAt: timestamp,
+    steps: [
+      {
+        position: 1,
+        artifactId: 'artifact_01',
+        instruction: '戻るボタンを押します',
+      },
+    ],
+  },
+}
 
 const readBlob = (blob: Blob) =>
   new Promise<Uint8Array>((resolve, reject) => {
@@ -217,6 +266,390 @@ describe('EdgeHelpEntry', () => {
 })
 
 describe('UserClient', () => {
+  it('explains an unsupported WSL launch without restoring or uploading a black screenshot', async () => {
+    const desktop = makeDesktop()
+    const error = new Error(
+      "Error invoking remote method 'support-draft:load-screenshot': Error: WSL_SCREEN_CAPTURE_UNAVAILABLE",
+    )
+    vi.mocked(desktop.loadSupportScreenshotDraft).mockRejectedValue(error)
+    vi.mocked(desktop.capturePreview).mockRejectedValue(error)
+    const uploadArtifact = vi.fn()
+    render(
+      <UserClient
+        api={makeApi({ uploadArtifact })}
+        runtime={runtime}
+        desktop={desktop}
+        storage={new MemoryStorage()}
+        createEventStream={eventStreamFactory}
+      />,
+    )
+    await openConsultation()
+    await screen.findByText(
+      'この起動方法では画面を撮影・共有できません。Windows用のMiteを起動してください。',
+    )
+    expect(screen.queryByAltText('家族に送る画面')).toBeNull()
+    expect(
+      screen.getByRole('button', { name: '家族に相談する' }),
+    ).toHaveProperty('disabled', true)
+    fireEvent.click(screen.getByRole('button', { name: '画面を撮影する' }))
+    await screen.findByText(
+      'この起動方法では画面を撮影・共有できません。Windows用のMiteを起動してください。',
+    )
+    expect(desktop.saveSupportScreenshotDraft).not.toHaveBeenCalled()
+    expect(uploadArtifact).not.toHaveBeenCalled()
+  })
+  it('automatically captures the full screen and sends the retaken image while preserving the comment', async () => {
+    const desktop = makeDesktop()
+    const retaken = {
+      capturedAt: '2026-09-03T10:00:10Z',
+      bytes: new Uint8Array([4, 5, 6]),
+    }
+    const uploadArtifact = vi.fn().mockResolvedValue(artifact)
+    const createSupportRequest = vi.fn().mockResolvedValue(supportRequest())
+    render(
+      <UserClient
+        api={makeApi({ uploadArtifact, createSupportRequest })}
+        runtime={runtime}
+        desktop={desktop}
+        storage={new MemoryStorage()}
+        createEventStream={eventStreamFactory}
+      />,
+    )
+    await openConsultation()
+    await screen.findByAltText('家族に送る画面')
+    expect(screen.queryByRole('radio')).toBeNull()
+    expect(desktop.capturePreview).toHaveBeenCalledExactlyOnceWith()
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: '戻る場所が分かりません' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Miteを左端へしまう' }))
+    expect(screen.queryByRole('textbox')).toBeNull()
+    fireEvent.focus(
+      screen.getByRole('button', { name: '家族に相談するメニューを開く' }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '入力中の相談に戻る' }))
+    expect(screen.getByRole('textbox')).toHaveProperty(
+      'value',
+      '戻る場所が分かりません',
+    )
+    expect(desktop.capturePreview).toHaveBeenCalledTimes(1)
+    let finish: (value: typeof retaken) => void = () => {}
+    vi.mocked(desktop.capturePreview).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '画面を撮り直す' }))
+    expect(
+      screen.getByRole('button', { name: '撮影しています…' }),
+    ).toHaveProperty('disabled', true)
+    expect(
+      screen.getByRole('button', { name: '家族に相談する' }),
+    ).toHaveProperty('disabled', true)
+    await act(async () => finish(retaken))
+    expect(screen.getByRole('textbox')).toHaveProperty(
+      'value',
+      '戻る場所が分かりません',
+    )
+    fireEvent.click(screen.getByRole('button', { name: '家族に相談する' }))
+    await screen.findByText('家族に知らせました')
+    const input = uploadArtifact.mock.calls[0]?.[0]
+    expect(input.capturedAt).toBe(retaken.capturedAt)
+    expect(await readBlob(input.file)).toEqual(retaken.bytes)
+    expect(createSupportRequest.mock.calls[0]?.[0].comment).toBe(
+      '戻る場所が分かりません',
+    )
+  })
+
+  it('lets the user retry a failed first screenshot and keeps the previous image after a failed retake', async () => {
+    const desktop = makeDesktop()
+    vi.mocked(desktop.capturePreview).mockRejectedValueOnce(
+      new Error('unavailable'),
+    )
+    render(
+      <UserClient
+        api={makeApi()}
+        runtime={runtime}
+        desktop={desktop}
+        storage={new MemoryStorage()}
+        createEventStream={eventStreamFactory}
+      />,
+    )
+    await openConsultation()
+    const retry = await screen.findByRole('button', { name: '画面を撮影する' })
+    expect(
+      screen.getByRole('button', { name: '家族に相談する' }),
+    ).toHaveProperty('disabled', true)
+    fireEvent.click(retry)
+    const image = await screen.findByAltText('家族に送る画面')
+    vi.mocked(desktop.capturePreview).mockRejectedValueOnce(
+      new Error('unavailable'),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '画面を撮り直す' }))
+    await screen.findByText(
+      '画面を撮影できませんでした。もう一度試してください。',
+    )
+    expect(screen.getByAltText('家族に送る画面')).toBe(image)
+    expect(
+      screen.getByRole('button', { name: '家族に相談する' }),
+    ).toHaveProperty('disabled', false)
+  })
+
+  it('retakes the full screen from a guide and reuses that image if upload must be retried', async () => {
+    const storage = new MemoryStorage()
+    storage.setItem('mite.user.guideRunId', guideRun.id)
+    const desktop = makeDesktop()
+    const drafts = new Map<
+      string,
+      { draftId: string; capturedAt: string; bytes: Uint8Array }
+    >()
+    vi.mocked(desktop.saveSupportScreenshotDraft).mockImplementation(
+      async (draftId, capturedAt, bytes) => {
+        const saved = { draftId, capturedAt, bytes: Uint8Array.from(bytes) }
+        drafts.set(draftId, saved)
+        return saved
+      },
+    )
+    vi.mocked(desktop.loadSupportScreenshotDraft).mockImplementation(
+      async (id) => drafts.get(id) ?? null,
+    )
+    const uploadArtifact = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError('connection lost'))
+      .mockResolvedValueOnce(artifact)
+    const requestSupportFromGuideRun = vi.fn().mockResolvedValue({
+      guideRun: {
+        ...guideRun,
+        status: 'PAUSED_FOR_SUPPORT',
+        supportRequestId: 'request_01',
+        revision: 2,
+      },
+      supportRequest: supportRequest(),
+    })
+    const api = makeApi({
+      getGuideRun: vi.fn().mockResolvedValue(guideRun),
+      getGuide: vi.fn().mockResolvedValue(guide),
+      getArtifactContent: vi.fn().mockResolvedValue(new Blob(['guide'])),
+      uploadArtifact,
+      requestSupportFromGuideRun,
+    })
+    render(
+      <UserClient
+        api={api}
+        runtime={runtime}
+        desktop={desktop}
+        storage={storage}
+        createEventStream={eventStreamFactory}
+      />,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: '家族に聞く' }))
+    await screen.findByAltText('家族に送る現在の画面')
+    expect(screen.queryByRole('radio')).toBeNull()
+    const retaken = {
+      capturedAt: '2026-09-03T10:00:10Z',
+      bytes: new Uint8Array([7, 8, 9]),
+    }
+    vi.mocked(desktop.capturePreview).mockResolvedValueOnce(retaken)
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: 'この次が分かりません' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '家族に聞く' }))
+    fireEvent.click(screen.getByRole('button', { name: '家族に聞く' }))
+    expect(screen.getByRole('textbox')).toHaveProperty(
+      'value',
+      'この次が分かりません',
+    )
+    fireEvent.click(screen.getByRole('button', { name: '画面を撮り直す' }))
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'この場所から家族に相談する' }),
+      ).toHaveProperty('disabled', false),
+    )
+    fireEvent.click(
+      screen.getByRole('button', { name: 'この場所から家族に相談する' }),
+    )
+    await screen.findByText(
+      '通信できません。少し待ってから、もう一度試してください。',
+    )
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: '画面を撮り直す' }),
+      ).toHaveProperty('disabled', false),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '画面を撮り直す' }))
+    await screen.findByText(
+      '前回の送信結果を確認するため、保存済みの画面をそのまま再送します。',
+    )
+    expect(desktop.capturePreview).toHaveBeenCalledTimes(2)
+    fireEvent.click(
+      screen.getByRole('button', { name: 'この場所から家族に相談する' }),
+    )
+    await screen.findByText('家族に知らせました')
+    expect(uploadArtifact).toHaveBeenCalledTimes(2)
+    for (const [input] of uploadArtifact.mock.calls) {
+      expect(input.capturedAt).toBe(retaken.capturedAt)
+      expect(await readBlob(input.file)).toEqual(retaken.bytes)
+    }
+    expect(uploadArtifact.mock.calls[0]?.[1]).toEqual(
+      uploadArtifact.mock.calls[1]?.[1],
+    )
+    expect(requestSupportFromGuideRun).toHaveBeenCalledWith(
+      guideRun.id,
+      {
+        expectedRevision: guideRun.revision,
+        initialScreenshotArtifactId: artifact.id,
+        comment: 'この次が分かりません',
+      },
+      { idempotencyKey: expect.any(String) },
+    )
+  })
+
+  it('starts, stops and resumes screen sharing and periodic captures without a source picker', async () => {
+    const request = supportRequest(activeSession.id)
+    const api = makeApi({
+      listSupportRequests: vi.fn().mockResolvedValue([request]),
+      getSupportRequest: vi.fn().mockResolvedValue(request),
+      getSupportSession: vi.fn().mockResolvedValue(activeSession),
+      getLiveKitToken: vi.fn().mockResolvedValue({ token: 'token' }),
+    })
+    const desktop = makeDesktop()
+    const manifest = { captures: [] } as unknown as CaptureManifest
+    desktop.initializeCaptureSession = vi.fn().mockResolvedValue(manifest)
+    desktop.saveCapture = vi
+      .fn()
+      .mockResolvedValue({ manifest, reachedLimit: false })
+    let callbacks: UserMediaCallbacks | undefined
+    const media: UserMediaSession = {
+      connect: vi.fn<UserMediaSession['connect']>(
+        async (_connection, nextCallbacks) => {
+          callbacks = nextCallbacks
+          callbacks.onStateChange('CONNECTED')
+          return { screenTrackSid: 'TR_screen' }
+        },
+      ),
+      startScreenShare: vi
+        .fn()
+        .mockResolvedValue({ screenTrackSid: 'TR_screen' }),
+      stopScreenShare: vi.fn().mockResolvedValue(undefined),
+      setMicrophoneEnabled: vi.fn().mockResolvedValue(undefined),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+    }
+    render(
+      <UserClient
+        api={api}
+        runtime={runtime}
+        desktop={desktop}
+        storage={new MemoryStorage()}
+        createEventStream={eventStreamFactory}
+        createMediaSession={() => media}
+      />,
+    )
+    const start = await screen.findByRole('button', {
+      name: '画面全体を共有する',
+    })
+    vi.useFakeTimers()
+    await act(async () => fireEvent.click(start))
+    expect(desktop.saveCapture).toHaveBeenCalledTimes(1)
+    expect(desktop.prepareScreenShare).toHaveBeenCalledExactlyOnceWith()
+    expect(screen.queryByRole('radio')).toBeNull()
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000)
+    })
+    expect(desktop.saveCapture).toHaveBeenCalledTimes(2)
+    await act(async () =>
+      fireEvent.click(screen.getByRole('button', { name: '画面共有を止める' })),
+    )
+    expect(media.stopScreenShare).toHaveBeenCalledOnce()
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000)
+    })
+    expect(desktop.saveCapture).toHaveBeenCalledTimes(2)
+    await act(async () =>
+      fireEvent.click(
+        screen.getByRole('button', { name: '画面全体の共有を再開する' }),
+      ),
+    )
+    expect(media.startScreenShare).toHaveBeenCalledOnce()
+    expect(desktop.prepareScreenShare).toHaveBeenCalledTimes(2)
+    expect(desktop.saveCapture).toHaveBeenCalledTimes(3)
+    await act(async () => callbacks?.onStateChange('RECONNECTING'))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000)
+    })
+    expect(desktop.saveCapture).toHaveBeenCalledTimes(3)
+    expect(
+      screen.getByRole('button', { name: '画面全体の共有を再開する' }),
+    ).toHaveProperty('disabled', true)
+    await act(async () => callbacks?.onStateChange('CONNECTED'))
+    await act(async () =>
+      fireEvent.click(
+        screen.getByRole('button', { name: '画面全体の共有を再開する' }),
+      ),
+    )
+    expect(desktop.prepareScreenShare).toHaveBeenCalledTimes(3)
+    expect(desktop.saveCapture).toHaveBeenCalledTimes(4)
+  })
+
+  it('does not restart periodic capture if sharing is stopped during the first pending image', async () => {
+    const request = supportRequest(activeSession.id)
+    const api = makeApi({
+      listSupportRequests: vi.fn().mockResolvedValue([request]),
+      getSupportRequest: vi.fn().mockResolvedValue(request),
+      getSupportSession: vi.fn().mockResolvedValue(activeSession),
+      getLiveKitToken: vi.fn().mockResolvedValue({ token: 'token' }),
+    })
+    const desktop = makeDesktop()
+    const manifest = { captures: [] } as unknown as CaptureManifest
+    desktop.initializeCaptureSession = vi.fn().mockResolvedValue(manifest)
+    let finishCapture: (value: {
+      manifest: CaptureManifest
+      reachedLimit: boolean
+    }) => void = () => {}
+    desktop.saveCapture = vi.fn<UserDesktopBridge['saveCapture']>(
+      () =>
+        new Promise((resolve) => {
+          finishCapture = resolve
+        }),
+    )
+    const media: UserMediaSession = {
+      connect: vi.fn(async (_connection, callbacks) => {
+        callbacks.onStateChange('CONNECTED')
+        return { screenTrackSid: 'TR_screen' }
+      }),
+      startScreenShare: vi
+        .fn()
+        .mockResolvedValue({ screenTrackSid: 'TR_screen' }),
+      stopScreenShare: vi.fn().mockResolvedValue(undefined),
+      setMicrophoneEnabled: vi.fn().mockResolvedValue(undefined),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+    }
+    render(
+      <UserClient
+        api={api}
+        runtime={runtime}
+        desktop={desktop}
+        storage={new MemoryStorage()}
+        createEventStream={eventStreamFactory}
+        createMediaSession={() => media}
+      />,
+    )
+    const start = await screen.findByRole('button', {
+      name: '画面全体を共有する',
+    })
+    vi.useFakeTimers()
+    await act(async () => fireEvent.click(start))
+    expect(desktop.saveCapture).toHaveBeenCalledOnce()
+    await act(async () =>
+      fireEvent.click(screen.getByRole('button', { name: '画面共有を止める' })),
+    )
+    await act(async () => finishCapture({ manifest, reachedLimit: false }))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_000)
+    })
+    expect(desktop.saveCapture).toHaveBeenCalledOnce()
+    expect(media.stopScreenShare).toHaveBeenCalledOnce()
+  })
+
   it('accepts an incoming call only after all three consent items are checked', async () => {
     const ringingRequest: SupportRequest = {
       ...supportRequest(),
@@ -305,10 +738,6 @@ describe('UserClient', () => {
       }),
     )
     fireEvent.click(screen.getByRole('button', { name: '家族に相談する' }))
-    fireEvent.click(
-      await screen.findByRole('radio', { name: /相談したい画面/ }),
-    )
-    fireEvent.click(screen.getByRole('button', { name: 'この画面を撮影する' }))
     await screen.findByAltText('家族に送る画面')
     fireEvent.change(screen.getByRole('textbox'), {
       target: { value: '元の画面に戻れない' },
@@ -401,10 +830,6 @@ describe('UserClient', () => {
       }),
     )
     fireEvent.click(screen.getByRole('button', { name: '家族に相談する' }))
-    fireEvent.click(
-      await screen.findByRole('radio', { name: /相談したい画面/ }),
-    )
-    fireEvent.click(screen.getByRole('button', { name: 'この画面を撮影する' }))
     await screen.findByAltText('家族に送る画面')
     fireEvent.click(screen.getByRole('button', { name: '家族に相談する' }))
     await screen.findByText(
@@ -414,7 +839,7 @@ describe('UserClient', () => {
     expect(desktop.saveSupportScreenshotDraft).toHaveBeenCalled()
     const firstInput = uploadArtifact.mock.calls[0]?.[0]
     const firstOperation = uploadArtifact.mock.calls[0]?.[1]
-    fireEvent.click(screen.getByRole('button', { name: 'この画面を撮影する' }))
+    fireEvent.click(screen.getByRole('button', { name: '画面を撮り直す' }))
     await screen.findByText(
       '前回の送信結果を確認するため、保存済みの画面をそのまま再送します。',
     )
@@ -487,7 +912,6 @@ describe('UserClient', () => {
     })
     const desktop = {
       ...makeDesktop(),
-      selectScreenSource: vi.fn().mockResolvedValue(undefined),
       initializeCaptureSession: vi.fn().mockResolvedValue({
         ...oneCaptureManifest,
         captures: [],
@@ -520,7 +944,7 @@ describe('UserClient', () => {
 
     await screen.findByText('家族とつながっています')
     fireEvent.click(
-      await screen.findByRole('radio', { name: /相談したい画面/ }),
+      await screen.findByRole('button', { name: '画面全体を共有する' }),
     )
     await waitFor(() => expect(saveCapture).toHaveBeenCalledTimes(1))
     expect(
