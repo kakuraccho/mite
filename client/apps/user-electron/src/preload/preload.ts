@@ -26,14 +26,13 @@ const bridge = Object.freeze({
     ipcRenderer.invoke('runtime:get-config') as Promise<RuntimeConfig>,
   setOverlayMode: (mode: UserOverlayMode) =>
     ipcRenderer.invoke('overlay:set-mode', mode) as Promise<UserOverlayLayout>,
-  listScreenSources: () =>
-    ipcRenderer.invoke('screen:list-sources') as Promise<
-      Array<{ id: string; name: string; thumbnailDataUrl: string }>
-    >,
-  selectScreenSource: (sourceId: string) =>
-    ipcRenderer.invoke('screen:select-source', sourceId) as Promise<void>,
-  capturePreview: (sourceId: string) =>
-    ipcRenderer.invoke('screen:capture-preview', sourceId) as Promise<{
+  prepareScreenShare: () =>
+    ipcRenderer.invoke('screen:prepare-share') as Promise<{
+      name: string
+      thumbnailDataUrl: string
+    }>,
+  capturePreview: () =>
+    ipcRenderer.invoke('screen:capture-preview') as Promise<{
       capturedAt: string
       bytes: Uint8Array
     }>,
