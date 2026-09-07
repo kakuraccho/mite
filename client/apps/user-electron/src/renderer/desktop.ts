@@ -1,3 +1,4 @@
+import type { DesktopMark } from '../shared/marking-overlay'
 import type { RuntimeConfig } from '@mite/client-core'
 import type { UserOverlayLayout, UserOverlayMode } from '../shared/overlay'
 
@@ -32,6 +33,7 @@ export interface SupportScreenshotDraft {
 }
 
 export interface UserDesktopBridge {
+  setMarkings(marks: DesktopMark[]): Promise<void>
   getRuntimeConfig(): Promise<RuntimeConfig>
   setOverlayMode(mode: UserOverlayMode): Promise<UserOverlayLayout>
   prepareScreenShare(): Promise<ScreenSharePreview>

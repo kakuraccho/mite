@@ -54,6 +54,8 @@ import {
   uploadCapturedMaterials,
   type MaterialUploadProgress,
 } from './material-upload'
+import { CaptureStorageError } from './capture-storage'
+import type { DesktopMark } from '../shared/marking-overlay'
 import { screenCaptureFailureMessage } from '../shared/screen-capture-error'
 import './user.css'
 
@@ -120,6 +122,7 @@ const runIdempotent = async <TResult,>(
 }
 
 const messageForError = (error: unknown) => {
+  if (error instanceof CaptureStorageError) return error.message
   if (!(error instanceof MiteApiError)) {
     return '通信できません。少し待ってから、もう一度試してください。'
   }
@@ -684,12 +687,6 @@ function IncomingCallScreen({
   )
 }
 
-interface VisibleMark {
-  id: string
-  x: number
-  y: number
-}
-
 function ActiveSupportScreen({
   source,
   screenSharing,
@@ -698,7 +695,7 @@ function ActiveSupportScreen({
   audioLevel,
   captureCount,
   captureLimitReached,
-  marks,
+  captureError,
   busy,
   error,
   onStartSharing,
@@ -712,7 +709,7 @@ function ActiveSupportScreen({
   audioLevel: number
   captureCount: number
   captureLimitReached: boolean
-  marks: VisibleMark[]
+  captureError: string | null
   busy: boolean
   error: string | null
   onStartSharing(): void
@@ -724,7 +721,7 @@ function ActiveSupportScreen({
       <ScreenHeading
         eyebrow="家族が支援中"
         title="家族とつながっています"
-        description="操作はあなた自身が行います。家族が示した場所は、下の画面に丸で表示されます。"
+        description="操作はあなた自身が行います。家族が示した場所は、いま操作している画面に丸で表示されます。"
         aside={
           <StatusBadge tone={mediaState === 'CONNECTED' ? 'active' : 'warning'}>
             {mediaState === 'CONNECTED'
@@ -736,6 +733,11 @@ function ActiveSupportScreen({
         }
       />
       {error ? <ErrorNotice message={error} /> : null}
+      {captureError && screenSharing ? (
+        <Notice tone="warning" title="画面の保存をやり直しています">
+          {captureError}
+        </Notice>
+      ) : null}
       {captureLimitReached ? (
         <Notice tone="warning" title="保存できる画面が上限に達しました">
           通話と画面共有はそのまま続けられます。
@@ -760,20 +762,9 @@ function ActiveSupportScreen({
           {busy ? <p role="status">画面を共有しています…</p> : null}
         </div>
       ) : (
-        <div className="user-shared-view">
-          {source ? (
-            <img src={source.thumbnailDataUrl} alt="家族に共有中の画面" />
-          ) : null}
-          {marks.map((mark) => (
-            <span
-              aria-label="家族が示している場所"
-              className="user-mark"
-              key={mark.id}
-              style={{ left: `${mark.x * 100}%`, top: `${mark.y * 100}%` }}
-            />
-          ))}
-          <span className="user-sharing-label">画面全体を共有中</span>
-        </div>
+        <Notice tone="info" title="画面全体を共有中">
+          「しまう」でこのパネルを閉じて操作できます。家族が示す丸は、そのまま画面に表示されます。
+        </Notice>
       )}
       <div className="user-support-controls">
         <div className="user-audio-level">
@@ -1204,7 +1195,8 @@ export function UserClient({
   const [screenSharing, setScreenSharing] = useState(false)
   const [microphoneEnabled, setMicrophoneEnabled] = useState(true)
   const [audioLevel, setAudioLevel] = useState(0)
-  const [marks, setMarks] = useState<VisibleMark[]>([])
+  const [marks, setMarks] = useState<DesktopMark[]>([])
+  const [captureError, setCaptureError] = useState<string | null>(null)
   const [captureCount, setCaptureCount] = useState(0)
   const [captureLimitReached, setCaptureLimitReached] = useState(false)
   const [uploadProgress, setUploadProgress] =
@@ -1214,6 +1206,8 @@ export function UserClient({
   const requestRef = useRef<SupportRequest | null>(null)
   const sessionRef = useRef<SupportSession | null>(null)
   const refreshRef = useRef<() => Promise<void>>(async () => {})
+  const screenSharingRef = useRef(false)
+  const mediaGenerationRef = useRef(0)
   const mediaRef = useRef<UserMediaSession | null>(null)
   const captureTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const captureInFlightRef = useRef(false)
@@ -1265,16 +1259,31 @@ export function UserClient({
     captureTimerRef.current = null
   }, [])
 
+  const clearMarks = useCallback(() => {
+    setMarks([])
+    for (const timer of markTimers.current.values()) clearTimeout(timer)
+    markTimers.current.clear()
+    void desktop.setMarkings([]).catch(() => {})
+  }, [desktop])
+
+  useEffect(() => {
+    void desktop.setMarkings(marks).catch(() => {
+      if (marks.length) setError('家族が示した丸を表示できませんでした。')
+    })
+  }, [desktop, marks])
+
   const disconnectMedia = useCallback(async () => {
+    mediaGenerationRef.current += 1
+    screenSharingRef.current = false
     stopCapturing()
     const media = mediaRef.current
     mediaRef.current = null
     setScreenSharing(false)
-    setMarks([])
+    clearMarks()
     setAudioLevel(0)
     if (media) await media.disconnect()
     setMediaState('DISCONNECTED')
-  }, [stopCapturing])
+  }, [clearMarks, stopCapturing])
 
   const loadGuides = useCallback(async () => {
     setGuidesLoading(true)
@@ -1505,6 +1514,7 @@ export function UserClient({
     ) {
       return
     }
+    setUploadError(null)
     lastUploadRef.current = uploadKey
     uploadInFlightRef.current = session.id
     void uploadCapturedMaterials({
@@ -1532,11 +1542,15 @@ export function UserClient({
 
   useEffect(
     () => () => {
+      mediaGenerationRef.current += 1
+      screenSharingRef.current = false
       stopCapturing()
-      void mediaRef.current?.disconnect()
-      for (const timer of markTimers.current.values()) clearTimeout(timer)
+      const media = mediaRef.current
+      mediaRef.current = null
+      void media?.disconnect()
+      clearMarks()
     },
-    [stopCapturing],
+    [clearMarks, stopCapturing],
   )
 
   const acceptCall = async () => {
@@ -1574,29 +1588,36 @@ export function UserClient({
     }
   }
 
-  const recordMarking = useCallback((message: MarkingMessage) => {
-    if (message.type === 'mark.clear') {
-      setMarks([])
-      for (const timer of markTimers.current.values()) clearTimeout(timer)
-      markTimers.current.clear()
-      return
-    }
-    setMarks((current) => [
-      ...current.filter((mark) => mark.id !== message.markId),
-      { id: message.markId, x: message.x, y: message.y },
-    ])
-    const existing = markTimers.current.get(message.markId)
-    if (existing) clearTimeout(existing)
-    markTimers.current.set(
-      message.markId,
-      setTimeout(() => {
-        setMarks((current) =>
-          current.filter((mark) => mark.id !== message.markId),
-        )
-        markTimers.current.delete(message.markId)
-      }, message.ttlMs),
-    )
-  }, [])
+  const recordMarking = useCallback(
+    (message: MarkingMessage) => {
+      if (!screenSharingRef.current) return
+      if (message.type === 'mark.clear') {
+        clearMarks()
+        return
+      }
+      setMarks((current) => [
+        ...current.filter((mark) => mark.id !== message.markId),
+        {
+          id: message.markId,
+          x: message.x,
+          y: message.y,
+          expiresAt: Date.now() + message.ttlMs,
+        },
+      ])
+      const existing = markTimers.current.get(message.markId)
+      if (existing) clearTimeout(existing)
+      markTimers.current.set(
+        message.markId,
+        setTimeout(() => {
+          setMarks((current) =>
+            current.filter((mark) => mark.id !== message.markId),
+          )
+          markTimers.current.delete(message.markId)
+        }, message.ttlMs),
+      )
+    },
+    [clearMarks],
+  )
 
   const takeCapture = useCallback(
     async (supportSessionId: string): Promise<boolean> => {
@@ -1604,6 +1625,7 @@ export function UserClient({
       captureInFlightRef.current = true
       try {
         const result = await desktop.saveCapture(supportSessionId)
+        setCaptureError(null)
         setCaptureCount(result.manifest.captures.length)
         if (result.reachedLimit) {
           setCaptureLimitReached(true)
@@ -1611,8 +1633,8 @@ export function UserClient({
         }
         return result.reachedLimit
       } catch {
-        setError(
-          '画面を保存できませんでした。相談は続けられますが、手順の材料が不足する場合があります。',
+        setCaptureError(
+          '画面を保存できませんでした。通話と画面共有は続いています。自動で保存をやり直します。',
         )
         return false
       } finally {
@@ -1626,14 +1648,23 @@ export function UserClient({
     async (supportSessionId: string) => {
       stopCapturing()
       const generation = captureGenerationRef.current
-      const manifest = await desktop.initializeCaptureSession(supportSessionId)
+      try {
+        const manifest =
+          await desktop.initializeCaptureSession(supportSessionId)
+        if (generation !== captureGenerationRef.current) return
+        setCaptureCount(manifest.captures.length)
+        const alreadyAtLimit =
+          manifest.captures.length >= runtime.captureMaxCount
+        setCaptureLimitReached(alreadyAtLimit)
+        if (alreadyAtLimit) return
+        const reachedLimit = await takeCapture(supportSessionId)
+        if (reachedLimit) return
+      } catch {
+        setCaptureError(
+          '画面を保存する準備ができませんでした。通話と画面共有は続いています。自動で保存をやり直します。',
+        )
+      }
       if (generation !== captureGenerationRef.current) return
-      setCaptureCount(manifest.captures.length)
-      const alreadyAtLimit = manifest.captures.length >= runtime.captureMaxCount
-      setCaptureLimitReached(alreadyAtLimit)
-      if (alreadyAtLimit) return
-      const reachedLimit = await takeCapture(supportSessionId)
-      if (reachedLimit || generation !== captureGenerationRef.current) return
       captureTimerRef.current = setInterval(() => {
         void takeCapture(supportSessionId)
       }, runtime.captureIntervalMs)
@@ -1655,6 +1686,11 @@ export function UserClient({
     }
     setActionBusy(true)
     setError(null)
+    const generation = ++mediaGenerationRef.current
+    const isCurrentShare = () =>
+      generation === mediaGenerationRef.current &&
+      sessionRef.current?.id === session.id &&
+      sessionRef.current.status === 'ACTIVE'
     try {
       const current = await api.getSupportSession(session.id)
       mergeSession(current)
@@ -1663,17 +1699,27 @@ export function UserClient({
         if (activeRequest) await applySupportState(activeRequest, current)
         return
       }
+      if (!isCurrentShare()) return
       const source = await desktop.prepareScreenShare()
+      if (!isCurrentShare()) return
       let media = mediaRef.current
       if (!media || mediaState === 'DISCONNECTED') {
-        if (media) await media.disconnect()
+        if (media) {
+          mediaRef.current = null
+          await media.disconnect()
+        }
         media = createMediaSession()
         mediaRef.current = media
         const token = await api.getLiveKitToken(current.id)
+        if (!isCurrentShare()) return
         await media.connect(token, {
           onStateChange: (state) => {
+            if (mediaRef.current !== media) return
             setMediaState(state)
             if (state === 'RECONNECTING' || state === 'DISCONNECTED') {
+              mediaGenerationRef.current += 1
+              screenSharingRef.current = false
+              clearMarks()
               stopCapturing()
               setScreenSharing(false)
               setError(
@@ -1684,19 +1730,30 @@ export function UserClient({
           onMarking: recordMarking,
           onAudioLevel: setAudioLevel,
           onScreenShareStopped: () => {
+            if (mediaRef.current !== media) return
+            mediaGenerationRef.current += 1
+            screenSharingRef.current = false
             stopCapturing()
             setScreenSharing(false)
-            setMarks([])
+            clearMarks()
           },
         })
       } else {
         await media.startScreenShare()
       }
+      if (!isCurrentShare()) {
+        await media.disconnect()
+        return
+      }
+      clearMarks()
+      screenSharingRef.current = true
       setScreenSource(source)
       setScreenSharing(true)
       setMicrophoneEnabled(true)
       await startCapturing(current.id)
     } catch (caught) {
+      screenSharingRef.current = false
+      clearMarks()
       stopCapturing()
       setScreenSharing(false)
       if (caught instanceof MiteApiError) {
@@ -1715,9 +1772,11 @@ export function UserClient({
   }
 
   const stopSharing = async () => {
+    mediaGenerationRef.current += 1
+    screenSharingRef.current = false
     stopCapturing()
     setScreenSharing(false)
-    setMarks([])
+    clearMarks()
     try {
       await mediaRef.current?.stopScreenShare()
     } catch {
@@ -2022,7 +2081,7 @@ export function UserClient({
         audioLevel={audioLevel}
         captureCount={captureCount}
         captureLimitReached={captureLimitReached}
-        marks={marks}
+        captureError={captureError}
         busy={actionBusy}
         error={error}
         onStartSharing={() => void sharePrimaryScreen()}

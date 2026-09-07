@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { DesktopMark } from '../shared/marking-overlay'
 import type { RuntimeConfig } from '@mite/client-core'
 import type { UserOverlayLayout, UserOverlayMode } from '../shared/overlay'
 
@@ -22,6 +23,8 @@ interface CaptureManifest {
 }
 
 const bridge = Object.freeze({
+  setMarkings: (marks: DesktopMark[]) =>
+    ipcRenderer.invoke('marking:set', marks) as Promise<void>,
   getRuntimeConfig: () =>
     ipcRenderer.invoke('runtime:get-config') as Promise<RuntimeConfig>,
   setOverlayMode: (mode: UserOverlayMode) =>
