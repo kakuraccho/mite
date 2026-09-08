@@ -417,3 +417,63 @@ body {
     animation-iteration-count: 1 !important;
   }
 }
+
+.user-persistent-call-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.user-overlay-detail .mite-app-main {
+  padding-bottom: 16px;
+}
+.user-overlay-detail .mite-screen-heading {
+  margin-bottom: 16px;
+}
+.user-preview img,
+.user-ask-preview {
+  max-height: clamp(120px, 24dvh, 320px);
+}
+.user-guide-step {
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.user-guide-step > img,
+.user-guide-step > .user-image-fallback {
+  min-height: 0;
+  height: clamp(140px, 27dvh, 360px);
+}
+.user-guide-step > div:last-child {
+  padding: 0;
+}
+.user-actions {
+  position: sticky;
+  bottom: 0;
+  padding: 12px 0;
+  background: #fff;
+  z-index: 2;
+}
+.user-consent-copy {
+  padding: 16px;
+  margin-bottom: 0;
+}
+.user-persistent-call-controls {
+  position: sticky;
+  top: 0;
+  background: #eef3f0;
+  z-index: 3;
+  padding: 10px 0;
+}
+.user-ask-panel {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+.user-guide-card > img {
+  max-height: 180px;
+}
+.user-guide-card > div:last-child {
+  padding: 16px;
+}

@@ -46,7 +46,9 @@ describeIntegration('HttpMiteApi local A/B/C integration', () => {
     const capturedAt = new Date(
       Math.floor(Date.now() / 1_000) * 1_000,
     ).toISOString()
-    const capturedLater = new Date(Date.parse(capturedAt) + 5_000).toISOString()
+    const capturedLater = new Date(
+      Date.parse(capturedAt) + 10_000,
+    ).toISOString()
 
     const initialArtifact = await user.uploadArtifact(
       {
@@ -98,7 +100,7 @@ describeIntegration('HttpMiteApi local A/B/C integration', () => {
           audio: true,
           screenShare: true,
           periodicCapture: true,
-          textVersion: 'v1',
+          textVersion: 'v2',
         },
       },
       { idempotencyKey: operationKey('accept') },
@@ -134,7 +136,7 @@ describeIntegration('HttpMiteApi local A/B/C integration', () => {
       resolved.supportSession.id,
       {
         expectedSessionRevision: resolved.supportSession.revision,
-        captureIntervalSeconds: 5,
+        captureIntervalSeconds: 10,
         capturedFrom: capturedAt,
         capturedTo: capturedLater,
         expectedItemCount: 2,
@@ -201,7 +203,10 @@ describeIntegration('HttpMiteApi local A/B/C integration', () => {
       { expectedRevision: updatedDraft.revision },
       { idempotencyKey: operationKey('save-guide') },
     )
-    expect(saved.supportSession.status).toBe('ENDED')
+    expect(saved.supportSession.status).toBe('GUIDE_SAVED')
+    expect(saved.supportSession.endedAt).toBeNull()
+    await user.getLiveKitToken(saved.supportSession.id)
+    await family.getLiveKitToken(saved.supportSession.id)
     expect((await user.listGuides()).map((guide) => guide.id)).toContain(
       saved.guide.id,
     )
@@ -231,6 +236,23 @@ describeIntegration('HttpMiteApi local A/B/C integration', () => {
       { idempotencyKey: operationKey('complete-run') },
     )
     expect(completedRun.status).toBe('COMPLETED')
+
+    const endInput = { expectedSessionRevision: saved.supportSession.revision }
+    const endOptions = { idempotencyKey: operationKey('end-saved-call') }
+    const ended = await family.endSupportSession(
+      saved.supportSession.id,
+      endInput,
+      endOptions,
+    )
+    expect(ended.status).toBe('ENDED')
+    expect(ended.guideId).toBe(saved.guide.id)
+    expect(
+      await family.endSupportSession(
+        saved.supportSession.id,
+        endInput,
+        endOptions,
+      ),
+    ).toEqual(ended)
 
     const pausedRun = await user.createGuideRun(
       { guideId: saved.guide.id },

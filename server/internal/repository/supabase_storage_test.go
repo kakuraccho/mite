@@ -129,7 +129,11 @@ func TestSupabaseStorageIntegration(t *testing.T) {
 	if baseURL == "" || secret == "" {
 		t.Skip("MITE_TEST_SUPABASE_URL and MITE_TEST_SUPABASE_SECRET_KEY are not set")
 	}
-	storage, err := NewSupabaseStorage(baseURL, "mite-artifacts", secret, nil)
+	bucket := os.Getenv("MITE_TEST_STORAGE_BUCKET")
+	if bucket == "" {
+		bucket = "mite-artifacts"
+	}
+	storage, err := NewSupabaseStorage(baseURL, bucket, secret, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

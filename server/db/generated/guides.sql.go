@@ -966,54 +966,6 @@ func (q *Queries) FailGuideGenerationJob(ctx context.Context, arg FailGuideGener
 	return &i, err
 }
 
-const finishGuideSession = `-- name: FinishGuideSession :one
-UPDATE support_sessions
-SET
-    status = 'ENDED',
-    guide_material_batch_id = NULL,
-    guide_generation_job_id = NULL,
-    guide_id = $1,
-    ended_at = $2,
-    end_reason = 'GUIDE_SAVED',
-    updated_at = $2,
-    revision = revision + 1
-WHERE id = $3
-RETURNING id, support_request_id, user_id, family_id, livekit_room_name, status, guide_decision, guide_material_batch_id, guide_generation_job_id, guide_draft_id, guide_id, consent, consented_at, started_at, ended_at, end_reason, created_at, updated_at, revision
-`
-
-type FinishGuideSessionParams struct {
-	GuideID *string            `json:"guide_id"`
-	EndedAt pgtype.Timestamptz `json:"ended_at"`
-	ID      string             `json:"id"`
-}
-
-func (q *Queries) FinishGuideSession(ctx context.Context, arg FinishGuideSessionParams) (*SupportSession, error) {
-	row := q.db.QueryRow(ctx, finishGuideSession, arg.GuideID, arg.EndedAt, arg.ID)
-	var i SupportSession
-	err := row.Scan(
-		&i.ID,
-		&i.SupportRequestID,
-		&i.UserID,
-		&i.FamilyID,
-		&i.LivekitRoomName,
-		&i.Status,
-		&i.GuideDecision,
-		&i.GuideMaterialBatchID,
-		&i.GuideGenerationJobID,
-		&i.GuideDraftID,
-		&i.GuideID,
-		&i.Consent,
-		&i.ConsentedAt,
-		&i.StartedAt,
-		&i.EndedAt,
-		&i.EndReason,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.Revision,
-	)
-	return &i, err
-}
-
 const getGuideArtifactRow = `-- name: GetGuideArtifactRow :one
 SELECT a.id, a.owner_user_id, a.purpose, a.mime_type, a.storage_key, a.sha256, a.byte_size, a.width, a.height, a.captured_at, a.created_at, a.updated_at, a.revision
 FROM artifacts a
@@ -1599,7 +1551,9 @@ SELECT a.id
 FROM artifacts a
 JOIN guide_materials material ON material.artifact_id = a.id
 JOIN guide_material_batches batch ON batch.id = material.batch_id
+JOIN support_sessions session ON session.id = batch.support_session_id
 WHERE batch.support_session_id = $1
+  AND a.owner_user_id = session.user_id
   AND a.purpose = 'GUIDE_MATERIAL'
   AND NOT EXISTS (
       SELECT 1 FROM artifact_deletion_tasks task WHERE task.artifact_id = a.id
@@ -2252,6 +2206,52 @@ func (q *Queries) SaveGuideDraftRow(ctx context.Context, arg SaveGuideDraftRowPa
 		&i.Revision,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return &i, err
+}
+
+const saveGuideInSession = `-- name: SaveGuideInSession :one
+UPDATE support_sessions
+SET
+    status = 'GUIDE_SAVED',
+    guide_material_batch_id = NULL,
+    guide_generation_job_id = NULL,
+    guide_id = $1,
+    updated_at = $2,
+    revision = revision + 1
+WHERE id = $3
+RETURNING id, support_request_id, user_id, family_id, livekit_room_name, status, guide_decision, guide_material_batch_id, guide_generation_job_id, guide_draft_id, guide_id, consent, consented_at, started_at, ended_at, end_reason, created_at, updated_at, revision
+`
+
+type SaveGuideInSessionParams struct {
+	GuideID   *string            `json:"guide_id"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	ID        string             `json:"id"`
+}
+
+func (q *Queries) SaveGuideInSession(ctx context.Context, arg SaveGuideInSessionParams) (*SupportSession, error) {
+	row := q.db.QueryRow(ctx, saveGuideInSession, arg.GuideID, arg.UpdatedAt, arg.ID)
+	var i SupportSession
+	err := row.Scan(
+		&i.ID,
+		&i.SupportRequestID,
+		&i.UserID,
+		&i.FamilyID,
+		&i.LivekitRoomName,
+		&i.Status,
+		&i.GuideDecision,
+		&i.GuideMaterialBatchID,
+		&i.GuideGenerationJobID,
+		&i.GuideDraftID,
+		&i.GuideID,
+		&i.Consent,
+		&i.ConsentedAt,
+		&i.StartedAt,
+		&i.EndedAt,
+		&i.EndReason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Revision,
 	)
 	return &i, err
 }

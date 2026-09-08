@@ -318,6 +318,46 @@ func (q *Queries) SessionDeleteGuideMaterials(ctx context.Context, batchID strin
 	return err
 }
 
+const sessionEndSavedGuide = `-- name: SessionEndSavedGuide :one
+UPDATE support_sessions
+SET status = 'ENDED', ended_at = $2, end_reason = 'GUIDE_SAVED',
+    updated_at = $2, revision = revision + 1
+WHERE id = $1
+RETURNING id, support_request_id, user_id, family_id, livekit_room_name, status, guide_decision, guide_material_batch_id, guide_generation_job_id, guide_draft_id, guide_id, consent, consented_at, started_at, ended_at, end_reason, created_at, updated_at, revision
+`
+
+type SessionEndSavedGuideParams struct {
+	ID      string             `json:"id"`
+	EndedAt pgtype.Timestamptz `json:"ended_at"`
+}
+
+func (q *Queries) SessionEndSavedGuide(ctx context.Context, arg SessionEndSavedGuideParams) (*SupportSession, error) {
+	row := q.db.QueryRow(ctx, sessionEndSavedGuide, arg.ID, arg.EndedAt)
+	var i SupportSession
+	err := row.Scan(
+		&i.ID,
+		&i.SupportRequestID,
+		&i.UserID,
+		&i.FamilyID,
+		&i.LivekitRoomName,
+		&i.Status,
+		&i.GuideDecision,
+		&i.GuideMaterialBatchID,
+		&i.GuideGenerationJobID,
+		&i.GuideDraftID,
+		&i.GuideID,
+		&i.Consent,
+		&i.ConsentedAt,
+		&i.StartedAt,
+		&i.EndedAt,
+		&i.EndReason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Revision,
+	)
+	return &i, err
+}
+
 const sessionEndWithoutGuide = `-- name: SessionEndWithoutGuide :one
 UPDATE support_sessions
 SET

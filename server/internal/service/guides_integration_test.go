@@ -76,7 +76,7 @@ func TestGuideFlowPostgresIntegration(t *testing.T) {
 	}
 
 	capturedAt := now.Add(time.Second)
-	batchCommand := CreateGuideMaterialBatchCommand{Meta: userCommandMeta("batch-create"), SupportSessionID: guideIntegrationSession, ExpectedSessionRevision: 3, CaptureIntervalSeconds: 5, CapturedFrom: &capturedAt, CapturedTo: &capturedAt, ExpectedItemCount: 1}
+	batchCommand := CreateGuideMaterialBatchCommand{Meta: userCommandMeta("batch-create"), SupportSessionID: guideIntegrationSession, ExpectedSessionRevision: 3, CaptureIntervalSeconds: 10, CapturedFrom: &capturedAt, CapturedTo: &capturedAt, ExpectedItemCount: 1}
 	batchCreated, err := guideService.CreateGuideMaterialBatch(ctx, batchCommand)
 	if err != nil {
 		t.Fatalf("create batch: %v", err)
@@ -170,7 +170,7 @@ func TestGuideFlowPostgresIntegration(t *testing.T) {
 	}
 	generator.err = nil
 	clock = now.Add(3 * time.Second)
-	generator.output = domain.GeneratedGuide{Title: "設定を確認する", Steps: []domain.GeneratedGuideStep{{SourceArtifactID: guideIntegrationInitial, Instruction: "設定画面を確認する"}, {SourceArtifactID: materialCreated.Material.ArtifactID, Instruction: "保存ボタンを押す"}}}
+	generator.output = domain.GeneratedGuide{Title: "設定を確認する", Steps: []domain.GeneratedGuideStep{{SourceArtifactID: guideIntegrationInitial, Instruction: "設定画面を確認する"}}}
 	if processed, err := worker.RunOnce(ctx); err != nil || !processed {
 		t.Fatalf("run successful attempt: processed=%v err=%v", processed, err)
 	}
@@ -183,6 +183,52 @@ func TestGuideFlowPostgresIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get draft: %v", err)
 	}
+
+	// A family can add a same-session capture that the generator did not select.
+	if len(draft.Steps) != 1 {
+		t.Fatalf("expected one AI step: %+v", draft.Steps)
+	}
+	candidate := domain.GuideStep{Position: 2, ArtifactID: materialCreated.Material.ArtifactID, Instruction: "保存ボタンを押す"}
+	assertRejected := func(actor domain.Actor, steps []domain.GuideStep, expected domain.ErrorCode) {
+		t.Helper()
+		_, err := guideService.UpdateGuideDraft(ctx, UpdateGuideDraftCommand{Actor: actor, DraftID: draft.ID, ExpectedRevision: draft.Revision, Title: draft.Title, Steps: steps})
+		if errorCodeOf(err) != expected {
+			t.Fatalf("expected %s: %v", expected, err)
+		}
+		unchanged, err := guideService.GetGuideDraft(ctx, user, draft.ID)
+		if err != nil || unchanged.Revision != draft.Revision || len(unchanged.Steps) != 1 {
+			t.Fatalf("rejected edit changed draft: %+v %v", unchanged, err)
+		}
+	}
+	assertRejected(user, append(append([]domain.GuideStep{}, draft.Steps...), candidate), domain.CodeForbidden)
+	assertRejected(domain.Actor{ID: "family_outsider", Role: domain.RoleFamily}, draft.Steps, domain.CodeForbidden)
+	foreign := candidate
+	foreign.ArtifactID = guideIntegrationHelp // Same owner, but not a source for this session.
+	assertRejected(family, append(append([]domain.GuideStep{}, draft.Steps...), foreign), domain.CodeValidationError)
+	tooMany := make([]domain.GuideStep, 9)
+	for i := range tooMany {
+		tooMany[i] = domain.GuideStep{Position: i + 1, ArtifactID: guideIntegrationInitial, Instruction: "説明"}
+	}
+	assertRejected(family, tooMany, domain.CodeValidationError)
+	t.Run("reject material with a different owner", func(t *testing.T) {
+		if _, err := pool.Exec(ctx, `UPDATE artifacts SET owner_user_id=$1 WHERE id=$2`, guideIntegrationFamily, candidate.ArtifactID); err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			_, _ = pool.Exec(ctx, `UPDATE artifacts SET owner_user_id=$1 WHERE id=$2`, guideIntegrationUser, candidate.ArtifactID)
+		}()
+		assertRejected(family, append(append([]domain.GuideStep{}, draft.Steps...), candidate), domain.CodeValidationError)
+	})
+	t.Run("reject a source queued for deletion", func(t *testing.T) {
+		if _, err := pool.Exec(ctx, `INSERT INTO artifact_deletion_tasks (id,artifact_id,storage_key,status,attempt,next_attempt_at,created_at) SELECT 'deletion_guide_integration_rejected',id,storage_key,'PENDING',0,$2,$2 FROM artifacts WHERE id=$1`, candidate.ArtifactID, now); err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			_, _ = pool.Exec(ctx, `DELETE FROM artifact_deletion_tasks WHERE id='deletion_guide_integration_rejected'`)
+		}()
+		assertRejected(family, append(append([]domain.GuideStep{}, draft.Steps...), candidate), domain.CodeValidationError)
+	})
+	draft.Steps = append(draft.Steps, candidate)
 	draft.Title = "保存手順"
 	draft, err = guideService.UpdateGuideDraft(ctx, UpdateGuideDraftCommand{Actor: family, DraftID: draft.ID, ExpectedRevision: draft.Revision, Title: draft.Title, Steps: draft.Steps})
 	if err != nil {
@@ -238,6 +284,17 @@ func TestGuideFlowPostgresIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create help run: %v", err)
 	}
+	if saved.SupportSession.Status != domain.SupportSessionGuideSaved || saved.SupportSession.EndedAt != nil || saved.SupportSession.EndReason != nil {
+		t.Fatalf("save ended call: %+v", saved.SupportSession)
+	}
+	sessions := NewSupportSessionService(repository.NewPostgresSupportSessionStore(pool), nil, &fakeTokenIssuer{}, nil)
+	if _, err := sessions.CreateLiveKitToken(ctx, family, string(saved.SupportSession.ID)); err != nil {
+		t.Fatalf("saved call reconnect: %v", err)
+	}
+	ended, err := sessions.End(ctx, family, string(saved.SupportSession.ID), saved.SupportSession.Revision, "guide-integration-end", "guide-integration-end")
+	if err != nil || ended.Status != domain.SupportSessionEnded {
+		t.Fatalf("manual end: %+v %v", ended, err)
+	}
 	helpCommand := CreateSupportRequestFromGuideRunCommand{Meta: userCommandMeta("help-request"), RunID: helpRun.ID, ExpectedRevision: helpRun.Revision, InitialScreenshotArtifactID: guideIntegrationHelp, Comment: "保存ボタンが見つからない"}
 	help, err := guideService.CreateSupportRequestFromGuideRun(ctx, helpCommand)
 	if err != nil || help.GuideRun.Status != domain.GuideRunPausedForSupport || help.SupportRequest.GuideContext == nil || help.SupportRequest.GuideContext.GuideRunID != helpRun.ID {
@@ -267,7 +324,7 @@ func createGuideIntegrationFixture(ctx context.Context, pool *pgxpool.Pool, now 
 		{`INSERT INTO user_pairs (user_id, family_id) VALUES ($1, $2)`, []any{guideIntegrationUser, guideIntegrationFamily}},
 		{`INSERT INTO artifacts (id, owner_user_id, purpose, mime_type, storage_key, sha256, byte_size, width, height, captured_at, created_at, updated_at, revision) VALUES ($1,$3,'REQUEST_SCREENSHOT','image/jpeg',$3||'/'||$1||'.jpg',$4,10,2,2,$5,$5,$5,1), ($2,$3,'REQUEST_SCREENSHOT','image/jpeg',$3||'/'||$2||'.jpg',$4,10,2,2,$5,$5,$5,1)`, []any{guideIntegrationInitial, guideIntegrationHelp, guideIntegrationUser, strings.Repeat("a", 64), now.Add(-time.Minute)}},
 		{`INSERT INTO support_requests (id,user_id,family_id,initial_screenshot_artifact_id,comment,status,support_session_id,guide_context,created_at,updated_at,revision) VALUES ($1,$2,$3,$4,'設定を保存したい','RESOLVED',NULL,NULL,$5,$5,3)`, []any{guideIntegrationRequest, guideIntegrationUser, guideIntegrationFamily, guideIntegrationInitial, now.Add(-time.Minute)}},
-		{`INSERT INTO support_sessions (id,support_request_id,user_id,family_id,livekit_room_name,status,guide_decision,guide_material_batch_id,guide_generation_job_id,guide_draft_id,guide_id,consent,consented_at,started_at,ended_at,end_reason,created_at,updated_at,revision) VALUES ($1,$2,$3,$4,'mite-'||$1,'GENERATING_GUIDE','CREATE',NULL,NULL,NULL,NULL,'{"audio":true,"screenShare":true,"periodicCapture":true,"textVersion":"v1"}'::jsonb,$5,$5,NULL,NULL,$5,$5,3)`, []any{guideIntegrationSession, guideIntegrationRequest, guideIntegrationUser, guideIntegrationFamily, now.Add(-time.Minute)}},
+		{`INSERT INTO support_sessions (id,support_request_id,user_id,family_id,livekit_room_name,status,guide_decision,guide_material_batch_id,guide_generation_job_id,guide_draft_id,guide_id,consent,consented_at,started_at,ended_at,end_reason,created_at,updated_at,revision) VALUES ($1,$2,$3,$4,'mite-'||$1,'GENERATING_GUIDE','CREATE',NULL,NULL,NULL,NULL,'{"audio":true,"screenShare":true,"periodicCapture":true,"textVersion":"v2"}'::jsonb,$5,$5,NULL,NULL,$5,$5,3)`, []any{guideIntegrationSession, guideIntegrationRequest, guideIntegrationUser, guideIntegrationFamily, now.Add(-time.Minute)}},
 		{`UPDATE support_requests SET support_session_id=$1 WHERE id=$2`, []any{guideIntegrationSession, guideIntegrationRequest}},
 	} {
 		if _, err := transaction.Exec(ctx, statement.query, statement.args...); err != nil {

@@ -15,6 +15,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -47,7 +49,8 @@ func (*e2eGuideGenerator) Generate(_ context.Context, input domain.GuideGenerati
 	}, nil
 }
 
-func TestServerRuntimeE2E(t *testing.T) {
+func startE2ERuntime(t *testing.T) (*httptest.Server, *pgxpool.Pool) {
+	t.Helper()
 	databaseURL := os.Getenv("MITE_E2E_DATABASE_URL")
 	supabaseURL := os.Getenv("MITE_E2E_SUPABASE_URL")
 	supabaseSecret := os.Getenv("MITE_E2E_SUPABASE_SECRET_KEY")
@@ -59,13 +62,17 @@ func TestServerRuntimeE2E(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer pool.Close()
+	t.Cleanup(pool.Close)
 
+	storageBucket := os.Getenv("MITE_E2E_STORAGE_BUCKET")
+	if storageBucket == "" {
+		storageBucket = "mite-artifacts"
+	}
 	cfg := config.Config{
 		DatabaseURL:           databaseURL,
 		SupabaseURL:           supabaseURL,
 		SupabaseSecretKey:     supabaseSecret,
-		SupabaseStorageBucket: "mite-artifacts",
+		SupabaseStorageBucket: storageBucket,
 		DemoUserToken:         e2eUserToken,
 		DemoFamilyToken:       e2eFamilyToken,
 		LiveKitURL:            "wss://livekit.invalid",
@@ -106,7 +113,12 @@ func TestServerRuntimeE2E(t *testing.T) {
 	})
 
 	httpServer := httptest.NewServer(runtime.handler)
-	defer httpServer.Close()
+	t.Cleanup(httpServer.Close)
+	return httpServer, pool
+}
+
+func TestServerRuntimeE2E(t *testing.T) {
+	httpServer, pool := startE2ERuntime(t)
 	client := &e2eAPIClient{baseURL: httpServer.URL, client: httpServer.Client()}
 	keyPrefix := fmt.Sprintf("e2e-%d-", time.Now().UnixNano())
 
@@ -209,7 +221,7 @@ func TestServerRuntimeE2E(t *testing.T) {
 	client.json(t, http.MethodGet, "/v1/support-sessions/"+sessionID, e2eUserToken, "", nil, http.StatusOK)
 	client.json(t, http.MethodPost, "/v1/support-sessions/"+sessionID+"/accept", e2eUserToken, keyPrefix+"accept", map[string]any{
 		"expectedSessionRevision": 1,
-		"consent":                 map[string]any{"audio": true, "screenShare": true, "periodicCapture": true, "textVersion": "v1"},
+		"consent":                 map[string]any{"audio": true, "screenShare": true, "periodicCapture": true, "textVersion": "v2"},
 	}, http.StatusOK)
 	client.json(t, http.MethodPost, "/v1/support-sessions/"+sessionID+"/livekit-token", e2eFamilyToken, "", map[string]any{}, http.StatusOK)
 	conflict := client.json(t, http.MethodPost, "/v1/support-sessions/"+sessionID+"/resolve", e2eFamilyToken, keyPrefix+"conflict", map[string]any{
@@ -228,7 +240,7 @@ func TestServerRuntimeE2E(t *testing.T) {
 
 	batchCreated := client.json(t, http.MethodPost, "/v1/support-sessions/"+sessionID+"/guide-material-batches", e2eUserToken, keyPrefix+"batch", map[string]any{
 		"expectedSessionRevision": 3,
-		"captureIntervalSeconds":  5,
+		"captureIntervalSeconds":  10,
 		"capturedFrom":            now.Format(time.RFC3339),
 		"capturedTo":              now.Add(5 * time.Second).Format(time.RFC3339),
 		"expectedItemCount":       2,
@@ -285,6 +297,15 @@ func TestServerRuntimeE2E(t *testing.T) {
 		"expectedRevision": jsonNumber(t, updatedDraft.body, "data", "revision"),
 	}, http.StatusCreated)
 	assertIdempotentReplay(t, saved, replayedSave)
+	if jsonString(t, saved.body, "data", "supportSession", "status") != "GUIDE_SAVED" {
+		t.Fatal("save ended call")
+	}
+	sessionData := jsonMap(t, saved.body, "data", "supportSession")
+	if sessionData["endedAt"] != nil || sessionData["endReason"] != nil {
+		t.Fatal("save set terminal fields")
+	}
+	client.json(t, http.MethodPost, "/v1/support-sessions/"+sessionID+"/livekit-token", e2eUserToken, "", map[string]any{}, http.StatusOK)
+	client.json(t, http.MethodPost, "/v1/support-sessions/"+sessionID+"/livekit-token", e2eFamilyToken, "", map[string]any{}, http.StatusOK)
 	guideID := jsonString(t, saved.body, "data", "guide", "id")
 	client.json(t, http.MethodGet, "/v1/guides", e2eUserToken, "", nil, http.StatusOK)
 	client.json(t, http.MethodGet, "/v1/guides/"+guideID, e2eUserToken, "", nil, http.StatusOK)
@@ -319,6 +340,15 @@ func TestServerRuntimeE2E(t *testing.T) {
 		"expectedRevision": jsonNumber(t, moved.body, "data", "revision"),
 	}, http.StatusOK)
 
+	endBody := map[string]any{"expectedSessionRevision": jsonNumber(t, saved.body, "data", "supportSession", "revision")}
+	client.json(t, http.MethodPost, "/v1/support-sessions/"+sessionID+"/end", e2eUserToken, keyPrefix+"forbidden-end", endBody, http.StatusForbidden)
+	ended := client.json(t, http.MethodPost, "/v1/support-sessions/"+sessionID+"/end", e2eFamilyToken, keyPrefix+"end", endBody, http.StatusOK)
+	if jsonString(t, ended.body, "data", "status") != "ENDED" {
+		t.Fatal("call did not end")
+	}
+	endedReplay := client.json(t, http.MethodPost, "/v1/support-sessions/"+sessionID+"/end", e2eFamilyToken, keyPrefix+"end", endBody, http.StatusOK)
+	assertIdempotentReplay(t, ended, endedReplay)
+	client.json(t, http.MethodPost, "/v1/support-sessions/"+sessionID+"/livekit-token", e2eFamilyToken, "", map[string]any{}, http.StatusConflict)
 	secondRun := client.json(t, http.MethodPost, "/v1/guide-runs", e2eUserToken, keyPrefix+"run-support", map[string]any{"guideId": guideID}, http.StatusCreated)
 	secondRunID := jsonString(t, secondRun.body, "data", "id")
 	secondScreenshot := client.multipart(t, "/v1/artifacts", e2eUserToken, keyPrefix+"second-screenshot", map[string]string{
@@ -537,4 +567,32 @@ func e2eJPEG(t *testing.T, fill color.RGBA) []byte {
 		t.Fatal(err)
 	}
 	return encoded.Bytes()
+}
+
+// Opt in only with an isolated database: this executes the installed TypeScript
+// adapter against the real router, repositories, workers and local Storage.
+func TestClientAdapterE2E(t *testing.T) {
+	if os.Getenv("MITE_E2E_CLIENT_ADAPTER") != "1" {
+		t.Skip("MITE_E2E_CLIENT_ADAPTER=1 is not set")
+	}
+	httpServer, _ := startE2ERuntime(t)
+	clientDirectory, err := filepath.Abs("../../../client")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	command := exec.CommandContext(ctx, "node", filepath.Join(clientDirectory, "node_modules/vitest/vitest.mjs"), "run", "packages/client-api/src/http-client.integration.test.ts", "--maxWorkers=1")
+	command.Dir = clientDirectory
+	for _, value := range os.Environ() {
+		if !strings.HasPrefix(value, "MITE_E2E_") && !strings.HasPrefix(value, "MITE_TEST_") {
+			command.Env = append(command.Env, value)
+		}
+	}
+	command.Env = append(command.Env, "MITE_E2E_API_BASE_URL="+httpServer.URL, "MITE_E2E_USER_TOKEN="+e2eUserToken, "MITE_E2E_FAMILY_TOKEN="+e2eFamilyToken)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("client adapter integration failed: %v\n%s", err, output)
+	}
+	t.Logf("%s", output)
 }

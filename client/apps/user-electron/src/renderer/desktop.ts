@@ -1,4 +1,4 @@
-import type { DesktopMark } from '../shared/marking-overlay'
+import type { DesktopMark, DesktopGuidance } from '../shared/marking-overlay'
 import type { RuntimeConfig } from '@mite/client-core'
 import type { UserOverlayLayout, UserOverlayMode } from '../shared/overlay'
 
@@ -33,6 +33,9 @@ export interface SupportScreenshotDraft {
 }
 
 export interface UserDesktopBridge {
+  prepareSpeakerVolume(): Promise<void>
+  onOverlayCollapsed(listener: () => void): () => void
+  setGuidance(guidance: DesktopGuidance | null): Promise<void>
   setMarkings(marks: DesktopMark[]): Promise<void>
   getRuntimeConfig(): Promise<RuntimeConfig>
   setOverlayMode(mode: UserOverlayMode): Promise<UserOverlayLayout>

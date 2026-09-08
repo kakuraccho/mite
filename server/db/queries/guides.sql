@@ -449,7 +449,9 @@ SELECT a.id
 FROM artifacts a
 JOIN guide_materials material ON material.artifact_id = a.id
 JOIN guide_material_batches batch ON batch.id = material.batch_id
+JOIN support_sessions session ON session.id = batch.support_session_id
 WHERE batch.support_session_id = sqlc.arg(session_id)
+  AND a.owner_user_id = session.user_id
   AND a.purpose = 'GUIDE_MATERIAL'
   AND NOT EXISTS (
       SELECT 1 FROM artifact_deletion_tasks task WHERE task.artifact_id = a.id
@@ -544,16 +546,14 @@ SET
 WHERE id = sqlc.arg(id)
 RETURNING *;
 
--- name: FinishGuideSession :one
+-- name: SaveGuideInSession :one
 UPDATE support_sessions
 SET
-    status = 'ENDED',
+    status = 'GUIDE_SAVED',
     guide_material_batch_id = NULL,
     guide_generation_job_id = NULL,
     guide_id = sqlc.arg(guide_id),
-    ended_at = sqlc.arg(ended_at),
-    end_reason = 'GUIDE_SAVED',
-    updated_at = sqlc.arg(ended_at),
+    updated_at = sqlc.arg(updated_at),
     revision = revision + 1
 WHERE id = sqlc.arg(id)
 RETURNING *;
