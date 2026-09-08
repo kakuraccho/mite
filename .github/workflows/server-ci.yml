@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       deploy:
-        description: Deploy to the configured VPS after CI succeeds
+        description: Apply Supabase migrations and deploy to VPS after CI succeeds
         type: boolean
         default: false
 
@@ -79,6 +79,8 @@ jobs:
       - run: go build ./...
       - name: Test VPS deployment and rollback
         run: bash deploy/test-mite-deploy.sh
+      - name: Test Supabase and VPS deployment sequence
+        run: bash deploy/test-deploy-from-ci.sh
 
   integration:
     name: Supabase integration and HTTP WebSocket E2E
@@ -128,7 +130,7 @@ jobs:
         run: npx --no-install supabase stop --no-backup
 
   deploy:
-    name: Deploy to VPS
+    name: Migrate Supabase and deploy to VPS
     needs: [generated-api, server, integration]
     if: >-
       vars.VPS_DEPLOY_BRANCH != '' &&
@@ -136,7 +138,7 @@ jobs:
       ((github.event_name == 'push' && vars.VPS_AUTO_DEPLOY == 'true') ||
        (github.event_name == 'workflow_dispatch' && inputs.deploy))
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 25
     environment: vps-mirai-server
     concurrency:
       group: mite-vps-deploy
@@ -149,6 +151,12 @@ jobs:
         with:
           go-version-file: server/go.mod
           cache-dependency-path: server/go.sum
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
       - name: Build Linux amd64 binary
         working-directory: server
         env:
@@ -156,43 +164,14 @@ jobs:
           GOOS: linux
           GOARCH: amd64
         run: go build -trimpath -o "$RUNNER_TEMP/mite-api" ./cmd/api
-      - name: Transfer binary and restart the existing service
-        timeout-minutes: 10
+      - name: Apply migrations and restart the existing service
+        timeout-minutes: 20
         env:
           GH_TOKEN: ${{ github.token }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
           VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
           VPS_SSH_PORT: ${{ vars.VPS_SSH_PORT || '22' }}
-        run: |
-          : "${VPS_HOST:?Set VPS_HOST in the vps-mirai-server environment}"
-          : "${VPS_USER:?Set VPS_USER in the vps-mirai-server environment}"
-          : "${VPS_SSH_KEY:?Set VPS_SSH_KEY in the vps-mirai-server environment}"
-          : "${VPS_KNOWN_HOSTS:?Set VPS_KNOWN_HOSTS in the vps-mirai-server environment}"
-          [[ "$VPS_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.:-]*$ ]] || exit 1
-          [[ "$VPS_USER" =~ ^[a-zA-Z_][a-zA-Z0-9_-]*$ ]] || exit 1
-          [[ "$VPS_SSH_PORT" =~ ^[0-9]{1,5}$ ]] || exit 1
-          ((10#$VPS_SSH_PORT >= 1 && 10#$VPS_SSH_PORT <= 65535)) || exit 1
-
-          # An older CI run may finish after a newer deployment.
-          current_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/${GITHUB_REF#refs/}" --jq '.object.sha')"
-          if [[ "$current_sha" != "$GITHUB_SHA" ]]; then
-            printf '::notice::A newer commit exists on the deployment branch; skipping this deployment.\n'
-            exit 0
-          fi
-
-          umask 077
-          ssh_directory="$(mktemp -d "$RUNNER_TEMP/mite-ssh.XXXXXXXX")"
-          trap 'rm -rf -- "$ssh_directory"' EXIT
-          printf '%s\n' "$VPS_SSH_KEY" > "$ssh_directory/key"
-          printf '%s\n' "$VPS_KNOWN_HOSTS" > "$ssh_directory/known_hosts"
-          digest="$(sha256sum "$RUNNER_TEMP/mite-api")"
-          digest="${digest%% *}"
-          ssh -F /dev/null -i "$ssh_directory/key" \
-            -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
-            -o UserKnownHostsFile="$ssh_directory/known_hosts" \
-            -o GlobalKnownHostsFile=/dev/null -o ConnectTimeout=10 \
-            -o ServerAliveInterval=15 -o ServerAliveCountMax=3 \
-            -p "$VPS_SSH_PORT" -l "$VPS_USER" "$VPS_HOST" \
-            "sudo -n /usr/local/sbin/mite-deploy $digest" < "$RUNNER_TEMP/mite-api"
+        run: bash server/deploy/deploy-from-ci.sh "$RUNNER_TEMP/mite-api"
