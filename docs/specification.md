@@ -183,6 +183,8 @@ Electronでは `contextIsolation` を有効、`nodeIntegration` を無効にす�
 - デモでは、利用者側Electronと家族側Electronを別のWindows PCで起動する。
 - デモでは、HTTPSとWSSで公開した同一のGoサーバーへ両アプリから接続する。
 - Goサーバーは既存のVPSへ配置する。配置先はHTTPS、WebSocket、環境変数、Goプロセスの常時実行に対応するものとする。CI/CDにはGitHub Actionsを使う。
+- CDは対象ブランチのCI成功後、Supabase Cloudへの未適用マイグレーションを適用し、成功した場合だけVPSのGoサーバーを更新する。DB変更とVPS更新は同じデプロイジョブで直列化する。
+- CDで適用するマイグレーションは稼働中および復元対象のGoバイナリとの互換性を保つ。VPS更新に失敗した場合はバイナリを復元し、DBスキーマは自動で戻さない。データを削除・不可逆に変更するマイグレーションは適用前に確認する。
 - MVPのGoサーバーは1インスタンスで実行する。複数インスタンスへの負荷分散は行わない。
 - 開発時はローカルのGoサーバーへ接続できる。2台でローカル接続する場合は同一LAN上のサーバーPCのIPアドレスを使う。
 - Supabase Cloud、LiveKit Cloud、Gemini APIは開発・デモとも外部サービスを利用する。

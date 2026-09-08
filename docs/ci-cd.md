@@ -9,7 +9,7 @@ GitHub Actionsの[Server CI/CD](../.github/workflows/server-ci.yml)で、すべ�
 | チェック名 | 内容 |
 | --- | --- |
 | Generated code and shared API | OpenAPI・sqlcの再生成、コミット済み生成物との一致、新規生成ファイルの追跡漏れ、共有APIの型チェック・Lint・ビルド |
-| Go tests and build | gofmt、race検査付きテスト、go vet、ビルド、VPSデプロイ・復元スクリプトのテスト |
+| Go tests and build | gofmt、race検査付きテスト、go vet、ビルド、DB適用とVPS更新の順序・失敗時の停止、VPSデプロイ・復元スクリプトのテスト |
 | Supabase integration and HTTP WebSocket E2E | 一時的なSupabaseへのmigration適用、DB・Storage統合テスト、HTTP/WebSocket E2E |
 
 Goは`server/go.mod`のバージョン、Node.jsは24を使う。npm依存関係はルートの`package-lock.json`、Goツールは`server/go.mod`・`server/go.sum`で固定する。ActionsもコミットSHAで固定する。
@@ -33,9 +33,17 @@ GitHubでマージ前にCI成功を必須にする場合は、`dev`・`main`のb
 | 実行ファイル | `/opt/mite/mite-api` |
 | ローカルAPI | `http://127.0.0.1:3000` |
 
-対象ブランチのCIがすべて成功すると、GitHub runnerでLinux amd64向けのGoバイナリをビルドし、SSHでVPSへ送る。VPSでのGoビルドは不要である。対象ブランチはGitHubのRepository variableで指定し、未設定の場合はデプロイしない。PRからのデプロイは実行しない。
+対象ブランチのCIがすべて成功すると、`Migrate Supabase and deploy to VPS`ジョブで次を順に実行する。対象ブランチはGitHubのRepository variableで指定し、未設定の場合はデプロイしない。PRからのデプロイは実行しない。
 
-デプロイを直列化し、転送前には対象ブランチの最新コミットとCIで検証したコミットが一致することを確認する。古いCIが後から完了しても、古いコミットへ戻さない。VPSでもファイルロックを取得し、同時更新を拒否する。
+1. GitHub runnerでLinux amd64向けのGoバイナリをビルドする。
+2. SSH接続、VPSのデプロイスクリプト、稼働中サービス、デプロイ用sudo権限を確認する。
+3. Supabase Cloudへ`supabase db push --dry-run`で接続し、マイグレーション履歴の整合性と適用予定を確認する。
+4. `supabase db push --yes`で未適用のマイグレーションを適用する。接続先は`SUPABASE_DB_URL`で指定する。
+5. 成功した場合だけGoバイナリをSSHでVPSへ送り、既存サービスを更新する。
+
+[CI用デプロイスクリプト](../server/deploy/deploy-from-ci.sh)がこの順序を制御する。Supabase CLIは既存の`package-lock.json`に固定したバージョンを使い、VPSにはNode.jsやSupabase CLIを追加しない。両方の`db push`に`--skip-vault`を指定し、Vaultの同期は行わない。`--include-seed`、`--include-roles`、`--include-all`は指定しない。初期マイグレーション内の固定デモユーザーとStorageバケット作成は適用対象に含まれる。
+
+DB適用からVPS更新までを同じジョブのconcurrencyで直列化する。開始時、DB適用直前、VPS転送直前には対象ブランチの最新コミットとCIで検証したコミットが一致することを確認する。古いCIが後から完了した場合は残りの処理をスキップする。DB適用中に新しいコミットが追加された場合、DB変更は残り、古いバイナリの転送はスキップする。VPSでもファイルロックを取得し、同時更新を拒否する。
 
 VPSの[デプロイスクリプト](../server/deploy/mite-deploy.sh)は転送されたバイナリのSHA-256を検証し、直前の実行ファイルを退避してから同じファイルシステム内で置き換える。`mite-api.service`を再起動し、以下が3回連続で成立した場合に成功とする。
 
@@ -77,6 +85,11 @@ SSHユーザーがroot以外の場合は、`sudo visudo -f /etc/sudoers.d/mite-d
 | `VPS_USER` | 上記SSH鍵で接続するユーザー名 |
 | `VPS_SSH_KEY` | VPSへ公開鍵を登録済みの、パスフレーズなしのSSH秘密鍵全文 |
 | `VPS_KNOWN_HOSTS` | 別経路で確認したVPSのホスト公開鍵を含むknown_hosts形式の行 |
+| `SUPABASE_DB_URL` | VPSのGoサーバーと同じSupabase Cloudを指す、マイグレーション権限のあるPostgreSQL接続文字列 |
+
+`SUPABASE_DB_URL`はSupabase DashboardのConnectからSession poolerの接続文字列を取得し、5432番と`sslmode=require`を使う。パスワードに特殊文字がある場合はURLエンコードする。形式は`postgresql://postgres.<project-ref>:<encoded-password>@<pooler-host>:5432/postgres?sslmode=require`である。ローカルSupabaseの54322番やTransaction poolerの6543番を指定しない。DBパスワードを変更した場合は、VPSの接続設定とこのSecretを両方更新する。
+
+この方式は`--db-url`でDBへ接続するため、SupabaseのアクセストークンやStorage用Secret keyをGitHubへ追加する必要はない。接続文字列はGitHubのEnvironment secretへ保存し、リポジトリやログには出力しない。
 
 ホスト公開鍵はVPSのコンソールなどで`/etc/ssh/ssh_host_ed25519_key.pub`を確認する。known_hostsは通常`<VPS_HOST> ssh-ed25519 <公開鍵>`の形式、SSHが22番以外なら`[<VPS_HOST>]:<PORT> ssh-ed25519 <公開鍵>`の形式にする。ワークフローは登録済みの鍵との一致を必須とし、実行時に取得した未確認の鍵を自動で信用しない。
 
@@ -90,10 +103,10 @@ Settings → Secrets and variables → Actions → Variablesには、次の**Rep
 
 | Variable | 内容 |
 | --- | --- |
-| `VPS_DEPLOY_BRANCH` | デプロイ対象の`dev`または`main`。未設定ならデプロイは無効 |
-| `VPS_AUTO_DEPLOY` | `true`にすると対象ブランチへのpush後、CI成功時に自動デプロイする。未設定または`false`なら手動実行だけ |
+| `VPS_DEPLOY_BRANCH` | DB適用とVPS更新の対象にする`dev`または`main`。未設定ならデプロイは無効 |
+| `VPS_AUTO_DEPLOY` | `true`にすると対象ブランチへのpush後、CI成功時にDB適用とVPS更新を自動実行する。未設定または`false`なら手動実行だけ |
 
-既存のsystemd unit、`/etc/mite/`などに置いた環境変数ファイル、HTTPS/WSSのリバースプロキシ設定はそのまま使う。Supabase・LiveKit・Geminiの秘密情報とデモトークンをGitHubへ追加する必要はない。
+既存のsystemd unit、`/etc/mite/`などに置いた環境変数ファイル、HTTPS/WSSのリバースプロキシ設定はそのまま使う。LiveKit・Geminiの秘密情報とデモトークンをGitHubへ追加する必要はない。
 
 ### 3. 初回デプロイと通常運用
 
@@ -101,7 +114,11 @@ Settings → Secrets and variables → Actions → Variablesには、次の**Rep
 
 初回のCI・デプロイが通ったら、継続的に配置する場合は`VPS_AUTO_DEPLOY=true`にする。`deploy`を有効にしない手動実行はCIのみを行う。
 
-DB migrationはこのCDでは自動適用しない。migrationを含む変更では、既存バイナリとの互換性と実行内容を確認し、対象DBに必要なmigrationを適用してからデプロイする。バイナリの自動復元ではDBスキーマは戻らない。データを削除・不可逆に変更するmigrationは実行前に確認する。
+デフォルトブランチへワークフローをまだ反映していない場合は、pushによる実行も使える。必要なSecretsとVPS設定を整え、このCDの変更を対象ブランチへ反映した後、`VPS_AUTO_DEPLOY=true`にする。以降の対象ブランチへのpushで、CI成功後にDB適用とVPS更新が実行される。
+
+初回実行前に、適用済みマイグレーションの履歴とリポジトリのSQLが一致することを確認する。履歴不一致やSQLエラーでdry-runまたは適用に失敗した場合、VPSは更新しない。CI上で`migration repair`やDBのresetを自動実行して解消しない。
+
+マイグレーションは稼働中および復元対象の旧バイナリとも互換性を保つ。DB適用後にVPS更新が失敗しても、バイナリの自動復元ではDBスキーマは戻らない。マイグレーション途中で失敗した場合も、それ以前に適用済みの変更は残るため、適用履歴を確認してから再実行する。データを削除・不可逆に変更するマイグレーションは実行前に確認し、自動デプロイを有効にしたまま未確認の変更を対象ブランチへ入れない。
 
 デプロイ後はGoプロセスの再起動によってWebSocket接続が一度切れるため、デモの実施時間と重ならないようにする。クライアントは既存の再接続・GETによる状態復元を使う。
 
@@ -123,10 +140,13 @@ sudo cat /opt/mite/mite-api.previous | sudo -n /usr/local/sbin/mite-deploy "$MIT
 
 デプロイスクリプトのテストはリポジトリルートで`bash server/deploy/test-mite-deploy.sh`を実行する。一時ディレクトリと模擬的なサービス応答を使い、チェックサム不一致、事前の起動確認、更新後の起動失敗、再起動失敗、中断、排他制御、旧バイナリの復元を確認する。実際のVPSやsystemdは変更しない。
 
+`bash server/deploy/test-deploy-from-ci.sh`でCDの制御も確認する。GitHub・Supabase・SSHを模擬し、設定不足、古いコミット、SSH事前確認の失敗、dry-run失敗、マイグレーション失敗、VPS更新失敗を再現する。DB適用より前にVPSを更新しないこと、失敗後の処理を止めること、一時SSH鍵を削除することを検証する。
+
 ## 参考
 
 - [GitHub Actionsのワークフロー構文](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax)
 - [GitHub ActionsのEnvironment secrets](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets#creating-secrets-for-an-environment)
 - [SupabaseのGitHub Actionsによる自動テスト](https://supabase.com/docs/guides/deployment/ci/testing)
+- [Supabase CLIのdb push](https://supabase.com/docs/reference/cli/supabase-db-push)
 - [Ubuntu 24.04のsystemctl](https://manpages.ubuntu.com/manpages/noble/man1/systemctl.1.html)
 - [Ubuntu 24.04のsudoers](https://manpages.ubuntu.com/manpages/noble/man5/sudoers.5.html)
