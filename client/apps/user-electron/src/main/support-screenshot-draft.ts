@@ -1,6 +1,7 @@
-import { createHash, randomUUID } from 'node:crypto'
-import { mkdir, open, readFile, readdir, rename, rm } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { mkdir, readFile, readdir, rm } from 'node:fs/promises'
 import path from 'node:path'
+import { writeAtomic } from './write-atomic'
 
 const schemaVersion = 1 as const
 const maximumBytes = 10 * 1024 * 1024
@@ -47,18 +48,6 @@ const isManifest = (
     typeof manifest.sha256 === 'string' &&
     /^[a-f0-9]{64}$/.test(manifest.sha256)
   )
-}
-
-const writeAtomic = async (filename: string, contents: Uint8Array | string) => {
-  const temporary = `${filename}.${randomUUID()}.tmp`
-  const handle = await open(temporary, 'wx')
-  try {
-    await handle.writeFile(contents)
-    await handle.sync()
-  } finally {
-    await handle.close()
-  }
-  await rename(temporary, filename)
 }
 
 export class SupportScreenshotDraftStore {

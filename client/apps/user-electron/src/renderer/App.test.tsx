@@ -12,6 +12,7 @@ import { MemoryStorage, type RuntimeConfig } from '@mite/client-core'
 import { App, EdgeHelpEntry, UserClient } from './App'
 import type { CaptureManifest, UserDesktopBridge } from './desktop'
 import type { UserMediaCallbacks, UserMediaSession } from './livekit'
+import { captureStorageFailureMessage } from './capture-storage'
 
 const timestamp = '2026-09-03T10:00:00Z'
 const runtime: RuntimeConfig = {
@@ -100,6 +101,7 @@ const makeDesktop = (): UserDesktopBridge =>
       },
       reservedBounds: { x: 0, y: 0, width: 4, height: 800 },
     })),
+    setMarkings: vi.fn().mockResolvedValue(undefined),
     prepareScreenShare: vi.fn().mockResolvedValue(source),
     capturePreview: vi.fn().mockResolvedValue({
       bytes: new Uint8Array([1, 2, 3]),
@@ -502,6 +504,216 @@ describe('UserClient', () => {
       },
       { idempotencyKey: expect.any(String) },
     )
+  })
+
+  it('keeps sharing and desktop markings available after capture initialization fails, then recovers recording', async () => {
+    const request = supportRequest(activeSession.id)
+    let refreshFromEvent!: () => void
+    let serverSession = activeSession
+    const api = makeApi({
+      listSupportRequests: vi.fn().mockResolvedValue([request]),
+      getSupportRequest: vi.fn().mockResolvedValue(request),
+      getSupportSession: vi.fn(async () => serverSession),
+      getLiveKitToken: vi.fn().mockResolvedValue({ token: 'token' }),
+    })
+    const desktop = makeDesktop()
+    desktop.initializeCaptureSession = vi
+      .fn()
+      .mockRejectedValue(new Error('EPERM: fsync'))
+    desktop.saveCapture = vi.fn().mockResolvedValue({
+      manifest: { captures: [{ sequence: 1 }] },
+      reachedLimit: false,
+    })
+    let callbacks!: UserMediaCallbacks
+    const media: UserMediaSession = {
+      connect: vi.fn(async (_connection, nextCallbacks) => {
+        callbacks = nextCallbacks
+        callbacks.onStateChange('CONNECTED')
+        return { screenTrackSid: 'TR_screen' }
+      }),
+      startScreenShare: vi
+        .fn()
+        .mockResolvedValue({ screenTrackSid: 'TR_screen' }),
+      stopScreenShare: vi.fn().mockResolvedValue(undefined),
+      setMicrophoneEnabled: vi.fn().mockResolvedValue(undefined),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+    }
+    render(
+      <UserClient
+        api={api}
+        runtime={runtime}
+        desktop={desktop}
+        storage={new MemoryStorage()}
+        createEventStream={(options) => {
+          refreshFromEvent = () => options.onStatusChange?.('CONNECTED')
+          return eventStreamFactory()
+        }}
+        createMediaSession={() => media}
+      />,
+    )
+    const start = await screen.findByRole('button', {
+      name: '画面全体を共有する',
+    })
+    vi.useFakeTimers()
+    await act(async () => fireEvent.click(start))
+    expect(screen.getByText('画面全体を共有中')).toBeTruthy()
+    expect(screen.getByText('画面の保存をやり直しています')).toBeTruthy()
+    expect(
+      screen.getByRole('button', { name: '画面共有を止める' }),
+    ).toBeTruthy()
+    expect(media.disconnect).not.toHaveBeenCalled()
+    expect(media.stopScreenShare).not.toHaveBeenCalled()
+    const marking = {
+      type: 'mark.set' as const,
+      markId: 'mark_01',
+      trackSid: 'TR_screen',
+      x: 0.42,
+      y: 0.31,
+      shape: 'CIRCLE' as const,
+      ttlMs: 2000,
+      sentAt: timestamp,
+    }
+    await act(async () => callbacks.onMarking(marking))
+    expect(desktop.setMarkings).toHaveBeenLastCalledWith([
+      expect.objectContaining({ id: 'mark_01', x: 0.42, y: 0.31 }),
+    ])
+    await act(async () =>
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Miteを左端へしまう' }),
+      ),
+    )
+    expect(desktop.setMarkings).toHaveBeenLastCalledWith([
+      expect.objectContaining({ id: 'mark_01' }),
+    ])
+    await act(async () => vi.advanceTimersByTimeAsync(2000))
+    expect(desktop.setMarkings).toHaveBeenLastCalledWith([])
+    await act(async () => vi.advanceTimersByTimeAsync(3000))
+    expect(desktop.saveCapture).toHaveBeenCalledOnce()
+    await act(async () => callbacks.onMarking(marking))
+    serverSession = {
+      ...activeSession,
+      status: 'ENDED',
+      revision: 3,
+      guideDecision: 'SKIP',
+    }
+    await act(async () => vi.advanceTimersByTimeAsync(5000))
+    await act(async () => refreshFromEvent())
+    expect(media.disconnect).toHaveBeenCalled()
+    expect(desktop.setMarkings).toHaveBeenLastCalledWith([])
+    await act(async () => callbacks.onMarking(marking))
+    expect(desktop.setMarkings).toHaveBeenLastCalledWith([])
+  })
+
+  it('does not restart capture or markings if a pending share finishes after the screen is closed', async () => {
+    const request = supportRequest(activeSession.id)
+    const api = makeApi({
+      listSupportRequests: vi.fn().mockResolvedValue([request]),
+      getSupportRequest: vi.fn().mockResolvedValue(request),
+      getSupportSession: vi.fn().mockResolvedValue(activeSession),
+      getLiveKitToken: vi.fn().mockResolvedValue({ token: 'token' }),
+    })
+    const desktop = makeDesktop()
+    desktop.initializeCaptureSession = vi.fn()
+    let finishShare!: () => void
+    const published = new Promise<void>((resolve) => {
+      finishShare = resolve
+    })
+    let callbacks!: UserMediaCallbacks
+    const media: UserMediaSession = {
+      connect: vi.fn(async (_connection, nextCallbacks) => {
+        callbacks = nextCallbacks
+        await published
+        callbacks.onStateChange('CONNECTED')
+        return { screenTrackSid: 'TR_screen' }
+      }),
+      startScreenShare: vi.fn(),
+      stopScreenShare: vi.fn(),
+      setMicrophoneEnabled: vi.fn(),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+    }
+    const { unmount } = render(
+      <UserClient
+        api={api}
+        runtime={runtime}
+        desktop={desktop}
+        storage={new MemoryStorage()}
+        createEventStream={eventStreamFactory}
+        createMediaSession={() => media}
+      />,
+    )
+    fireEvent.click(
+      await screen.findByRole('button', { name: '画面全体を共有する' }),
+    )
+    await waitFor(() => expect(media.connect).toHaveBeenCalledOnce())
+    unmount()
+    await act(async () => finishShare())
+    expect(desktop.initializeCaptureSession).not.toHaveBeenCalled()
+    expect(media.disconnect).toHaveBeenCalled()
+    act(() =>
+      callbacks.onMarking({
+        type: 'mark.set',
+        markId: 'late',
+        trackSid: 'TR_screen',
+        x: 0.5,
+        y: 0.5,
+        shape: 'CIRCLE',
+        ttlMs: 2000,
+        sentAt: timestamp,
+      }),
+    )
+    expect(desktop.setMarkings).toHaveBeenLastCalledWith([])
+  })
+
+  it('reports local storage failure during guide preparation and lets the user retry', async () => {
+    const request = supportRequest(activeSession.id)
+    const generating: SupportSession = {
+      ...activeSession,
+      status: 'GENERATING_GUIDE',
+      revision: 3,
+      guideDecision: 'CREATE',
+    }
+    const api = makeApi({
+      listSupportRequests: vi.fn().mockResolvedValue([request]),
+      getSupportRequest: vi.fn().mockResolvedValue(request),
+      getSupportSession: vi.fn().mockResolvedValue(generating),
+      createGuideMaterialBatch: vi.fn(),
+    })
+    const desktop = makeDesktop()
+    desktop.getCaptureManifest = vi.fn().mockResolvedValue(null)
+    desktop.initializeCaptureSession = vi
+      .fn()
+      .mockRejectedValue(new Error('EPERM: fsync'))
+    render(
+      <UserClient
+        api={api}
+        runtime={runtime}
+        desktop={desktop}
+        storage={new MemoryStorage()}
+        createEventStream={eventStreamFactory}
+      />,
+    )
+    expect(await screen.findByText(captureStorageFailureMessage)).toBeTruthy()
+    expect(api.createGuideMaterialBatch).not.toHaveBeenCalled()
+    expect(
+      screen.queryByText(
+        '通信できません。少し待ってから、もう一度試してください。',
+      ),
+    ).toBeNull()
+    const manifest = {
+      captures: [],
+      guideMaterialBatchId: 'batch_01',
+    } as unknown as CaptureManifest
+    vi.mocked(desktop.getCaptureManifest).mockResolvedValue(manifest)
+    api.getGuideMaterialBatch = vi
+      .fn()
+      .mockResolvedValue({ batch: { status: 'COMPLETED' }, materials: [] })
+    fireEvent.click(screen.getByRole('button', { name: 'もう一度試す' }))
+    await waitFor(() =>
+      expect(desktop.deleteCaptureSession).toHaveBeenCalledWith(
+        activeSession.id,
+      ),
+    )
+    expect(screen.queryByText(captureStorageFailureMessage)).toBeNull()
   })
 
   it('starts, stops and resumes screen sharing and periodic captures without a source picker', async () => {

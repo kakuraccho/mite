@@ -288,48 +288,6 @@ body {
   flex: 0 0 28px;
 }
 
-.user-shared-view {
-  position: relative;
-  display: grid;
-  min-height: 450px;
-  overflow: hidden;
-  place-items: center;
-  border-radius: 20px;
-  background: #17211e;
-}
-
-.user-shared-view > img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  max-height: 620px;
-  object-fit: contain;
-}
-
-.user-sharing-label {
-  position: absolute;
-  top: 16px;
-  left: 16px;
-  padding: 8px 13px;
-  border-radius: 999px;
-  color: white;
-  background: rgb(23 55 47 / 90%);
-  font-size: 20px;
-  font-weight: 850;
-}
-
-.user-mark {
-  position: absolute;
-  z-index: 2;
-  width: 62px;
-  height: 62px;
-  border: 7px solid #ffb000;
-  border-radius: 50%;
-  box-shadow: 0 0 0 4px rgb(255 255 255 / 85%);
-  pointer-events: none;
-  transform: translate(-50%, -50%);
-}
-
 .user-support-controls {
   display: flex;
   flex-wrap: wrap;

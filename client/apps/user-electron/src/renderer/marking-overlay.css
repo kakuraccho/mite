@@ -1,0 +1,15 @@
+.desktop-marking-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+.desktop-mark {
+  position: absolute;
+  width: 62px;
+  height: 62px;
+  border: 7px solid #ffb000;
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px rgb(255 255 255 / 85%);
+  transform: translate(-50%, -50%);
+}
