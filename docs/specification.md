@@ -1,7 +1,7 @@
 # Mite MVP 実装仕様書
 
 > DevCamp2026 / 実装基準 v1.4
-> 最終更新: 2026-09-07
+> 最終更新: 2026-09-08
 > 対象: 利用者側クライアント、家族側クライアント、Miteサーバー
 
 ## 0. 本書の扱い
@@ -106,6 +106,7 @@ WebSocketから状態を変更してはならない。WebSocketはREST APIで確
 | 状態通知 | GoサーバーのWebSocket |
 | 音声・画面共有・マーキング | LiveKit Cloud |
 | ガイド生成 | GoサーバーからGemini APIを呼ぶ（APIキーはGoogle AI Studioで管理） |
+| CI/CD | GitHub Actions、Goサーバーの配置先は既存のVPS |
 
 SupabaseはPostgreSQLとStorageだけに使う。Supabase AuthとSupabase RealtimeはMVPでは使わない。両ElectronアプリはSupabaseへ直接接続せず、すべてMiteサーバーを経由する。
 
@@ -181,7 +182,7 @@ Electronでは `contextIsolation` を有効、`nodeIntegration` を無効にす�
 - Dockerfileはクラウド配置先で必要になった場合だけ追加する。
 - デモでは、利用者側Electronと家族側Electronを別のWindows PCで起動する。
 - デモでは、HTTPSとWSSで公開した同一のGoサーバーへ両アプリから接続する。
-- Goサーバーのクラウド配置先は実装開始時に選ぶ。配置先はHTTPS、WebSocket、環境変数、Goプロセスの常時実行に対応するものとする。
+- Goサーバーは既存のVPSへ配置する。配置先はHTTPS、WebSocket、環境変数、Goプロセスの常時実行に対応するものとする。CI/CDにはGitHub Actionsを使う。
 - MVPのGoサーバーは1インスタンスで実行する。複数インスタンスへの負荷分散は行わない。
 - 開発時はローカルのGoサーバーへ接続できる。2台でローカル接続する場合は同一LAN上のサーバーPCのIPアドレスを使う。
 - Supabase Cloud、LiveKit Cloud、Gemini APIは開発・デモとも外部サービスを利用する。

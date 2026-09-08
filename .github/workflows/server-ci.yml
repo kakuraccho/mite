@@ -1,0 +1,198 @@
+name: Server CI/CD
+
+on:
+  pull_request:
+  push:
+    branches: [dev, main]
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: Deploy to the configured VPS after CI succeeds
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  generated-api:
+    name: Generated code and shared API
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - run: npm run generate:api
+      - run: go tool sqlc generate
+        working-directory: server
+      - name: Check generated files
+        run: |
+          git diff --exit-code -- server/internal/generated server/db/generated packages/api-client/src/generated
+          untracked="$(git ls-files --others --exclude-standard -- server/internal/generated server/db/generated packages/api-client/src/generated)"
+          if [[ -n "$untracked" ]]; then
+            printf 'Generated files are not tracked:\n%s\n' "$untracked"
+            exit 1
+          fi
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run build
+
+  server:
+    name: Go tests and build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - name: Check Go formatting
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [[ -n "$unformatted" ]]; then
+            printf 'Run gofmt on:\n%s\n' "$unformatted"
+            exit 1
+          fi
+      - run: go test -race ./... -count=1 -timeout=5m
+      - run: go vet ./...
+      - run: go build ./...
+      - name: Test VPS deployment and rollback
+        run: bash deploy/test-mite-deploy.sh
+
+  integration:
+    name: Supabase integration and HTTP WebSocket E2E
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - name: Start an ephemeral Supabase with migrations
+        timeout-minutes: 15
+        run: |
+          # The startup summary contains local API keys; keep it out of the log.
+          if ! npx --no-install supabase start > "$RUNNER_TEMP/supabase-start.log" 2>&1; then
+            docker ps -a --format 'table {{.Names}}\t{{.Status}}'
+            printf '::error::Supabase startup failed. Reproduce with npm ci and npx --no-install supabase start.\n'
+            exit 1
+          fi
+      - name: Run database, Storage and runtime integration tests
+        run: |
+          eval "$(npx --no-install supabase status -o env 2>/dev/null)"
+          : "${DB_URL:?Local database URL is missing}"
+          : "${API_URL:?Local Supabase URL is missing}"
+          : "${SECRET_KEY:?Local Supabase secret key is missing}"
+          printf '::add-mask::%s\n' "$DB_URL" "$SECRET_KEY"
+          export MITE_TEST_DATABASE_URL="$DB_URL"
+          export MITE_TEST_SUPABASE_URL="$API_URL"
+          export MITE_TEST_SUPABASE_SECRET_KEY="$SECRET_KEY"
+          export MITE_E2E_DATABASE_URL="$DB_URL"
+          export MITE_E2E_SUPABASE_URL="$API_URL"
+          export MITE_E2E_SUPABASE_SECRET_KEY="$SECRET_KEY"
+          cd server
+          # Run packages serially so runtime workers do not consume other tests' jobs.
+          go test -race -p 1 ./... -run 'Postgres|Integration|^TestServerRuntimeE2E$' -count=1 -timeout=5m -v
+      - name: Stop ephemeral Supabase
+        if: always()
+        run: npx --no-install supabase stop --no-backup
+
+  deploy:
+    name: Deploy to VPS
+    needs: [generated-api, server, integration]
+    if: >-
+      vars.VPS_DEPLOY_BRANCH != '' &&
+      github.ref == format('refs/heads/{0}', vars.VPS_DEPLOY_BRANCH) &&
+      ((github.event_name == 'push' && vars.VPS_AUTO_DEPLOY == 'true') ||
+       (github.event_name == 'workflow_dispatch' && inputs.deploy))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: vps-mirai-server
+    concurrency:
+      group: mite-vps-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - name: Build Linux amd64 binary
+        working-directory: server
+        env:
+          CGO_ENABLED: '0'
+          GOOS: linux
+          GOARCH: amd64
+        run: go build -trimpath -o "$RUNNER_TEMP/mite-api" ./cmd/api
+      - name: Transfer binary and restart the existing service
+        timeout-minutes: 10
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+          VPS_SSH_PORT: ${{ vars.VPS_SSH_PORT || '22' }}
+        run: |
+          : "${VPS_HOST:?Set VPS_HOST in the vps-mirai-server environment}"
+          : "${VPS_USER:?Set VPS_USER in the vps-mirai-server environment}"
+          : "${VPS_SSH_KEY:?Set VPS_SSH_KEY in the vps-mirai-server environment}"
+          : "${VPS_KNOWN_HOSTS:?Set VPS_KNOWN_HOSTS in the vps-mirai-server environment}"
+          [[ "$VPS_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.:-]*$ ]] || exit 1
+          [[ "$VPS_USER" =~ ^[a-zA-Z_][a-zA-Z0-9_-]*$ ]] || exit 1
+          [[ "$VPS_SSH_PORT" =~ ^[0-9]{1,5}$ ]] || exit 1
+          ((10#$VPS_SSH_PORT >= 1 && 10#$VPS_SSH_PORT <= 65535)) || exit 1
+
+          # An older CI run may finish after a newer deployment.
+          current_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/${GITHUB_REF#refs/}" --jq '.object.sha')"
+          if [[ "$current_sha" != "$GITHUB_SHA" ]]; then
+            printf '::notice::A newer commit exists on the deployment branch; skipping this deployment.\n'
+            exit 0
+          fi
+
+          umask 077
+          ssh_directory="$(mktemp -d "$RUNNER_TEMP/mite-ssh.XXXXXXXX")"
+          trap 'rm -rf -- "$ssh_directory"' EXIT
+          printf '%s\n' "$VPS_SSH_KEY" > "$ssh_directory/key"
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > "$ssh_directory/known_hosts"
+          digest="$(sha256sum "$RUNNER_TEMP/mite-api")"
+          digest="${digest%% *}"
+          ssh -F /dev/null -i "$ssh_directory/key" \
+            -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$ssh_directory/known_hosts" \
+            -o GlobalKnownHostsFile=/dev/null -o ConnectTimeout=10 \
+            -o ServerAliveInterval=15 -o ServerAliveCountMax=3 \
+            -p "$VPS_SSH_PORT" -l "$VPS_USER" "$VPS_HOST" \
+            "sudo -n /usr/local/sbin/mite-deploy $digest" < "$RUNNER_TEMP/mite-api"

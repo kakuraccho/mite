@@ -17,6 +17,8 @@ cd ..
 
 ## 検証
 
+Pull Requestと`dev`・`main`へのpushでは、GitHub Actionsがサーバーと共有APIを検証します。チェックの内容とVPSへのデプロイ設定は[サーバーのCI/CD](ci-cd.md)を参照してください。
+
 ### API生成と共有APIクライアント
 
 リポジトリルートで実行します。
