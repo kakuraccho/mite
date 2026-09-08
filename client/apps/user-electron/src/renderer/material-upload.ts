@@ -4,6 +4,7 @@ import {
   type SupportSession,
 } from '@mite/client-api'
 import type { CaptureManifest, UserDesktopBridge } from './desktop'
+import { accessCaptureStorage } from './capture-storage'
 
 export interface MaterialUploadProgress {
   completed: number
@@ -64,7 +65,9 @@ const endForNoMaterials = async (
   desktop: UserDesktopBridge,
   session: SupportSession,
 ) => {
-  const manifest = await desktop.ensureNoMaterialsKey(session.id)
+  const manifest = await accessCaptureStorage(() =>
+    desktop.ensureNoMaterialsKey(session.id),
+  )
   if (!manifest.noMaterialsEndIdempotencyKey) {
     throw new Error('終了処理の記録を用意できません')
   }
@@ -76,7 +79,7 @@ const endForNoMaterials = async (
     },
     { idempotencyKey: manifest.noMaterialsEndIdempotencyKey },
   )
-  await desktop.deleteCaptureSession(session.id)
+  await accessCaptureStorage(() => desktop.deleteCaptureSession(session.id))
   return ended
 }
 
@@ -100,7 +103,6 @@ const createBatch = async (
       },
       { idempotencyKey: manifest.batchCreateIdempotencyKey },
     )
-    await desktop.setCaptureBatchId(session.id, result.batch.id)
     return result
   } catch (error) {
     if (
@@ -122,8 +124,12 @@ export const uploadCapturedMaterials = async ({
 }: UploadCapturedMaterialsOptions): Promise<SupportSession> => {
   let session = initialSession
   let manifest =
-    (await desktop.getCaptureManifest(session.id)) ??
-    (await desktop.initializeCaptureSession(session.id))
+    (await accessCaptureStorage(() =>
+      desktop.getCaptureManifest(session.id),
+    )) ??
+    (await accessCaptureStorage(() =>
+      desktop.initializeCaptureSession(session.id),
+    ))
 
   let batchId = session.guideMaterialBatchId ?? manifest.guideMaterialBatchId
   if (
@@ -139,14 +145,18 @@ export const uploadCapturedMaterials = async ({
     if ('endedSession' in created) return created.endedSession
     session = created.supportSession
     batchId = created.batch.id
-    manifest = await desktop.setCaptureBatchId(session.id, batchId)
+    manifest = await accessCaptureStorage(
+      desktop.setCaptureBatchId.bind(desktop, session.id, batchId),
+    )
   } else if (!manifest.guideMaterialBatchId) {
-    manifest = await desktop.setCaptureBatchId(session.id, batchId)
+    manifest = await accessCaptureStorage(
+      desktop.setCaptureBatchId.bind(desktop, session.id, batchId),
+    )
   }
 
   const current = await api.getGuideMaterialBatch(batchId)
   if (current.batch.status === 'COMPLETED') {
-    await desktop.deleteCaptureSession(session.id)
+    await accessCaptureStorage(() => desktop.deleteCaptureSession(session.id))
     return api.getSupportSession(session.id)
   }
   if (current.batch.expectedItemCount !== manifest.captures.length) {
@@ -162,7 +172,9 @@ export const uploadCapturedMaterials = async ({
     (capture) => !received.has(capture.clientCaptureId),
   )
   const tasks = missing.map((capture) => async () => {
-    const bytes = await desktop.readCaptureFile(session.id, capture.filename)
+    const bytes = await accessCaptureStorage(() =>
+      desktop.readCaptureFile(session.id, capture.filename),
+    )
     const copy = Uint8Array.from(bytes)
     await uploadWithRetry(async () => {
       await api.uploadGuideMaterial(
@@ -197,6 +209,6 @@ export const uploadCapturedMaterials = async ({
     },
     { idempotencyKey: manifest.batchCompleteIdempotencyKey },
   )
-  await desktop.deleteCaptureSession(session.id)
+  await accessCaptureStorage(() => desktop.deleteCaptureSession(session.id))
   return completedBatch.supportSession
 }

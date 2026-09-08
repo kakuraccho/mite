@@ -1,7 +1,7 @@
 # Mite MVP 実装仕様書
 
-> DevCamp2026 / 実装基準 v1.3
-> 最終更新: 2026-09-04
+> DevCamp2026 / 実装基準 v1.4
+> 最終更新: 2026-09-07
 > 対象: 利用者側クライアント、家族側クライアント、Miteサーバー
 
 ## 0. 本書の扱い
@@ -17,7 +17,7 @@
 
 1人の利用者と1人の家族が、それぞれ別のWindows PCでElectronアプリを使い、次の流れを最後まで実行できることを完成条件とする。
 
-1. 利用者がスクリーンショットと任意コメントを付けて支援を依頼する。
+1. 利用者がプライマリ画面全体のスクリーンショットと任意コメントを付けて支援を依頼する。
 2. 家族が依頼を確認して発信する。
 3. 利用者が応答し、音声通話、画面共有、マーキングを使って支援を受ける。
 4. 支援中の画面を利用者側で5秒ごとに取得する。
@@ -36,6 +36,7 @@
 - 認証は固定のデモ用Bearerトークンとする。
 - 利用者側と家族側は、それぞれ独立したWindows向けElectronアプリとする。
 - 利用者側と家族側は別のWindows PCで利用する。
+- 相談時の撮影、画面共有および定期取得はプライマリ画面1枚の全体を対象とし、ウィンドウやモニターの選択操作は設けない。
 - 音声と画面共有にはLiveKit Cloudを使う。
 - 操作は利用者本人が行い、家族による遠隔操作は行わない。
 
@@ -184,7 +185,7 @@ Electronでは `contextIsolation` を有効、`nodeIntegration` を無効にす�
 - MVPのGoサーバーは1インスタンスで実行する。複数インスタンスへの負荷分散は行わない。
 - 開発時はローカルのGoサーバーへ接続できる。2台でローカル接続する場合は同一LAN上のサーバーPCのIPアドレスを使う。
 - Supabase Cloud、LiveKit Cloud、Gemini APIは開発・デモとも外部サービスを利用する。
-- 画面全体ではなく、操作対象のウィンドウだけを共有・定期取得する。Mite自身の画面をガイド材料へ含めない。
+- プライマリ画面全体を選択操作なしで撮影・共有・定期取得する。Mite自身のパネル、ガイド表示およびマーキングを画像と共有映像へ含めない。
 - 2台のPCでそれぞれマイクとスピーカーを使い、音声、画面共有、マーキングを確認する。
 
 ## 3. 共通規約
@@ -712,7 +713,7 @@ SupportRequestの現在revisionを送る。
 textVersion=v1で利用者へ表示する同意文は次を正本とする。
 
 ~~~text
-支援中は、家族との音声通話と、あなたが選んだ画面の共有を行います。共有中の画面は、あとで手順を作るため5秒ごとにこの端末へ一時保存します。家族が手順を作ることを選んだ場合だけ、保存した画像をMiteサーバーへ送り、GoogleのGemini AIで下書きを作ります。画面に個人情報が映る可能性があります。3つすべてに同意して支援を始めますか。
+支援中は、家族との音声通話と、メインの画面全体の共有を行います。共有中の画面は、あとで手順を作るため5秒ごとにこの端末へ一時保存します。家族が手順を作ることを選んだ場合だけ、保存した画像をMiteサーバーへ送り、GoogleのGemini AIで下書きを作ります。画面に個人情報が映る可能性があります。3つすべてに同意して支援を始めますか。
 ~~~
 
 #### LiveKitトークン取得
@@ -971,7 +972,7 @@ dataには差分ではなく更新後のエンティティ全体を入れる。
 ### 8.2 利用者側
 
 - マイク音声をpublishする。
-- 支援対象の画面またはウィンドウをscreen share trackとしてpublishする。
+- プライマリ画面全体をscreen share trackとしてpublishする。利用者は「画面全体を共有する」で開始し、共有対象の選択は行わない。
 - 家族の音声をsubscribeして再生する。
 - topicが mite.marking.v1 のData Packetを受け取り、画面上へ表示する。
 - カメラはpublishしない。
@@ -1008,7 +1009,7 @@ dataには差分ではなく更新後のエンティティ全体を入れる。
 - マーキングはDB、ログ、ガイド材料へ保存しない。
 - screen share trackがunpublishされた場合は、そのtrackSidのマークをすべて消す。
 
-LiveKit Roomだけが切断した場合、SupportSessionはACTIVEのままにする。利用者側は定期取得を停止し、両クライアントは接続再試行を表示する。再接続後、利用者が同じ対象を再選択してscreen share trackのpublishに成功した時点で、次のsequenceから定期取得を再開する。SupportSessionがACTIVE以外になっていた場合は再接続せず、第4.6節の終了処理を行う。
+LiveKit Roomだけが切断した場合、SupportSessionはACTIVEのままにする。利用者側は定期取得を停止し、両クライアントは接続再試行を表示する。再接続後、利用者が共有再開ボタンを押してプライマリ画面全体のscreen share trackのpublishに成功した時点で、次のsequenceから定期取得を再開する。SupportSessionがACTIVE以外になっていた場合は再接続せず、第4.6節の終了処理を行う。
 
 全消去は次を送る。
 
@@ -1034,11 +1035,12 @@ LiveKit Roomだけが切断した場合、SupportSessionはACTIVEのままにす
 
 ### 9.2 画像形式
 
-- 画面共有と同じ対象を取得する。
+- 画面共有と同じプライマリ画面全体を取得する。
 - JPEG、品質80とする。
 - 最大1920×1080へ縦横比を保って縮小する。
 - ファイルごとにclientCaptureId、sequence、capturedAtを記録する。
-- Mite自身のガイド表示やマーキングをガイド画像へ含めない。デモでは対象ウィンドウだけを共有・取得する。
+- Mite自身のパネル、ガイド表示およびマーキングをガイド画像へ含めない。WindowsではMiteのオーバーレイにElectronの `setContentProtection(true)` を設定し、画面共有と静止画の両方から除外する。
+- プライマリ画面を特定できない場合は取得失敗とし、別のモニターへ自動で切り替えない。共有開始時と画面の識別情報が変わった場合も、共有を再開するまで定期取得画像を保存しない。
 
 ### 9.3 端末保存
 
@@ -1090,7 +1092,7 @@ manifestは画像ファイルを完全に書き終えた後に一時ファイル
 
 Electron起動・再読込時は、各captureディレクトリとサーバー状態を照合する。
 
-1. SupportSessionがACTIVEなら、利用者へ共有対象の再選択を求める。publish成功後、manifestの最大sequenceの次から取得を再開する。
+1. SupportSessionがACTIVEなら、利用者へ画面全体の共有開始を求める。対象選択なしでpublishに成功した後、manifestの最大sequenceの次から取得を再開する。
 2. GENERATING_GUIDEかつguideMaterialBatchId=nullで画像が1件以上なら、保存済みbatchCreateIdempotencyKeyでバッチを作成する。画像が0件なら第6.3節のNO_MATERIALS終了を行う。
 3. guideMaterialBatchIdがありバッチがUPLOADINGなら、GETで返るclientCaptureIdとmanifestを比較し、不足分だけ保存済みuploadIdempotencyKeyで送る。expectedItemCountとローカル件数が異なる場合は自動でcompleteせず、破損として表示する。
 4. 全件登録後は、応答中の最大batch.revisionをGETで再確認し、保存済みbatchCompleteIdempotencyKeyでcompleteを呼ぶ。
@@ -1214,21 +1216,23 @@ MVPではGemini API以外のproviderを実装しない。ただしGuideGenerator
 | ID | 画面 | 主な表示と操作 | 使用API・通信 |
 |---|---|---|---|
 | U-01 | 左端入口 | プライマリ画面の左端4pxを予約した反応領域。300msのhoverで幅320pxのパネルを開く | Windows AppBar |
-| U-02 | 支援依頼 | 取得画像プレビュー、任意コメント、送信 | POST /v1/artifacts、POST /v1/support-requests |
+| U-02 | 支援依頼 | プライマリ画面全体の自動撮影とプレビュー、撮り直し、任意コメント、送信 | POST /v1/artifacts、POST /v1/support-requests |
 | U-03 | 支援待ち | 「家族に知らせた」、依頼内容 | WebSocket、GET /v1/support-requests/{id} |
 | U-04 | 着信 | 家族名、第6.3節の同意文と3項目、「応答する」 | POST /v1/support-sessions/{id}/accept |
 | U-05 | 支援中 | 支援中表示、マイク切替、受信音声レベル、共有停止、終了状態、マーキング | LiveKit、WebSocket、GET /v1/support-sessions/{id} |
 | U-06 | ガイド一覧 | タイトル、代表画像、選択 | GET /v1/guides |
-| U-07 | ガイド実行 | 1ステップの画像と説明、戻る、次へ、完了、家族に聞く。家族に聞く時は現在画面を取得して登録する | /v1/guide-runs API、POST /v1/artifacts |
+| U-07 | ガイド実行 | 1ステップの画像と説明、戻る、次へ、完了、家族に聞く。家族に聞く時はプライマリ画面全体を自動撮影し、撮り直してから登録できる | /v1/guide-runs API、POST /v1/artifacts |
 | U-08 | 下書き閲覧 | 家族が編集中のタイトルと手順を読み取り専用表示 | GET /v1/guide-drafts/{id}、WebSocket |
 
 利用者側の本文文字は20px以上、主要ボタンの高さは48px以上とする。専門用語を画面へ表示しない。
+
+U-02とU-07からの相談入力を開くと、保存済みの相談画像がある場合は復元し、ない場合はプライマリ画面全体を自動で撮影してプレビューを表示する。「画面を撮り直す」で画像と撮影日時を更新し、入力済みコメントを保持する。撮影中と送信中は撮り直しと送信の同時実行を防ぐ。撮り直しに失敗した場合は直前の画像を保持し、初回撮影に失敗した場合は撮影ボタンで再試行できる。送信結果が未確定の場合は、同じIdempotency-Keyと同じ画像・確定済みの依頼本文による再送を優先し、結果が確定するまで撮り直しで画像を置き換えない。
 
 利用者側アプリは通常のメインウィンドウを表示せず、U-01からU-08までをプライマリ画面の左端に常駐するフレームなしオーバーレイで完結させる。WindowsではShellのAppBarとして左端4pxだけを予約し、他アプリを最大化した場合もこの入口を隠さない。hover後の幅320pxの入口パネルと、それより広い幅を必要とする支援依頼、着信、支援中およびガイド画面は他アプリの上へ重ねて表示し、予約幅を4pxから増やさない。詳細画面の幅はプライマリ画面の利用可能範囲内で内容に応じて広げてよい。
 
 入口パネルはマウスが離れた後に4pxへ戻す。U-02からU-08は「しまう」操作で4pxへ戻せるようにし、入力内容と進行中の状態を保持して左端入口から同じ画面へ戻れるようにする。新しい着信を受け取った場合は着信画面を自動で展開する。表示設定、DPIまたは作業領域が変わった場合は位置と高さを再計算する。アプリ終了時はAppBar登録を解除する。MVPではプライマリ画面だけを対象とする。
 
-Windows AppBar APIの呼び出しとDIP・スクリーン座標の変換は、Electron mainプロセスのプラットフォームアダプターへ隔離する。rendererにはCOLLAPSED、ENTRY、DETAILの表示モードを切り替えるIPCだけを公開し、ネイティブAPIとウィンドウハンドルを公開しない。Linuxでのクライアント開発では、OSの作業領域を予約しない疑似オーバーレイとして同じ画面遷移とサイズ変更を確認する。Windows AppBarの登録、最大化した他アプリとの共存、DPI、タスクバーとの競合および終了時の予約解除はWindows 11で別途確認する。現在のWindows 11とWSL2（Ubuntu）の開発環境では、Windows固有の実動作確認は未実施とする。
+Windows AppBar APIの呼び出しとDIP・スクリーン座標の変換は、Electron mainプロセスのプラットフォームアダプターへ隔離する。rendererにはCOLLAPSED、ENTRY、DETAILの表示モードを切り替えるIPCだけを公開し、ネイティブAPIとウィンドウハンドルを公開しない。Linuxでのクライアント開発では、OSの作業領域を予約しない疑似オーバーレイとして同じ画面遷移とサイズ変更を確認する。WSLから起動したLinux版はWindowsのデスクトップ全体を取得できないため、撮影・画面共有と保存済み相談画像の復元を開始せず、Windows用アプリの起動を案内する。Windows画面の取得はWindows版Electronで確認する。Windows AppBarの登録、最大化した他アプリとの共存、DPI、タスクバーとの競合および終了時の予約解除はWindows 11で別途確認する。現在のWindows 11とWSL2（Ubuntu）の開発環境では、Windows固有の実動作確認は未実施とする。
 
 U-07ではGuideRun IDを端末へ保存し、状態変更のたびに更新する。「家族に聞く」の成功後は返されたsupportRequestIdを保存してU-03へ移る。CREATE後に画像が0件だった場合は、422を受けてNO_MATERIALS終了を実行し、「画像を保存できなかったため手順を作れなかった」と表示する。
 
@@ -1251,7 +1255,7 @@ F-01のガイド文脈はSupportRequest.guideContextのguideTitle、stepNumber�
 - 利用者が「画面共有を止める」を押したら1秒以内にscreen share trackをunpublishする。
 - 定期取得も同時に停止する。
 - マイクは別の操作として継続してよい。
-- 再開ボタンで同じ対象を再選択し、publish成功後に定期取得を再開する。
+- 再開ボタンでプライマリ画面全体を選択操作なしで共有し、publish成功後に定期取得を再開する。
 
 ## 12. 保存とトランザクション
 
@@ -1485,7 +1489,7 @@ Supabase、LiveKit、Google AI StudioのGemini APIキーをクライアントの
 
 ### 17.1 支援からガイド保存
 
-1. 利用者が画像とコメント付きの依頼を送る。
+1. 利用者が相談を開くとプライマリ画面全体のプレビューが表示される。コメント入力後に画面を撮り直してもコメントが保持され、最後に撮影した画像とコメント付きの依頼を送れる。
 2. 家族側に同じ依頼が表示される。
 3. 家族が発信し、利用者が応答すると両画面がACTIVEになる。
 4. 利用者側マイクだけを有効にすると家族側の受信レベルが動き、家族側マイクだけを有効にすると利用者側の受信レベルが動く。家族側には利用者の共有画面が表示される。
@@ -1511,7 +1515,7 @@ Supabase、LiveKit、Google AI StudioのGemini APIキーをクライアントの
 2. GuideRunがIN_PROGRESS、step=1で作られる。
 3. 次へ、戻るでサーバーと画面のstepが一致する。
 4. 最終ステップで完了するとCOMPLETEDになる。
-5. 家族に聞くを選ぶと、新しいSupportRequestにガイドID、版、現在ステップが入る。
+5. 家族に聞くを選ぶとプライマリ画面全体を自動撮影し、撮り直した最新画像で依頼できる。新しいSupportRequestにガイドID、版、現在ステップが入る。
 6. 新しいSupportRequestのguideContextだけで、家族側にガイド名、該当手順の説明と画像が表示される。
 7. 同時にGuideRunがPAUSED_FOR_SUPPORTになり、相互の関連IDが設定される。
 8. そのSupportRequestから発信、応答、解決まで通常支援フローを実行できる。元のGuideRunはPAUSED_FOR_SUPPORTのまま残る。
@@ -1523,6 +1527,7 @@ Supabase、LiveKit、Google AI StudioのGemini APIキーをクライアントの
 - 古いexpectedRevisionで更新すると409になる。
 - 家族は別ペアの画像を取得できない。
 - クライアントからLiveKit API SecretとAI API Keyを確認できない。
+- 複数モニターの環境でもプライマリ画面1枚の全体だけを撮影・共有・定期取得し、選択画面を表示しない。Windows 11でMite自身のパネル、ガイド表示およびマーキングが画像と共有映像へ含まれない。
 - 共有停止操作から1秒以内に映像publishと定期取得が止まる。
 - Windows 11で利用者側を起動するとプライマリ画面の左端4pxだけが予約され、他アプリの最大化領域がその4pxを避ける。入口の300ms hover後も予約幅は変えず、幅320px以上の操作画面が他アプリの上へ展開する。表示設定変更後に位置を再計算し、正常終了後に予約領域が残らない。
 - 2台のWindows PCで利用者側Electronと家族側Electronを起動し、公開Goサーバーへ接続して全正常系を実演できる。
@@ -1542,7 +1547,7 @@ Supabase、LiveKit、Google AI StudioのGemini APIキーをクライアントの
 1. REST成功後に応答を受け取る前に切断し、同じIdempotency-Keyで再送して初回結果を回収できる。
 2. WebSocket切断中の状態更新、重複イベント、古いrevisionのイベントを発生させ、再接続とGET後にサーバー状態へ一致する。
 3. LiveKitだけを切断してもSupportSessionはACTIVEを保ち、定期取得は止まり、再接続・再publish後に連続するsequenceで再開する。
-4. ACTIVE中にElectronを再起動し、共有対象の再選択後に支援と画面取得を再開できる。
+4. ACTIVE中にElectronを再起動し、共有開始ボタンからプライマリ画面全体の共有と画面取得を選択操作なしで再開できる。
 5. CREATE直後、アップロード途中、batch complete成功直後の各時点で利用者側Electronを終了し、再起動後に不足分だけを送り、重複なしでCOMPLETEDへ到達して端末画像を削除できる。
 6. 保存直前に切断した場合はGET後に保存を実行でき、保存成功直後に切断した場合は同じIdempotency-KeyまたはGETでGuideとENDED状態を回収できる。
 7. RUNNING中にGoサーバーを再起動し、attempt<3ならQUEUEDから再実行し、attempt=3ならFAILEDになる。attempt<3のFAILEDからはretryしてQUEUED、RUNNING、SUCCEEDEDへ遷移でき、attempt=3のFAILEDに対するretryは409になる。

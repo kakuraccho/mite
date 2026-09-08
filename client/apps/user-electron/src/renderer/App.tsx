@@ -42,7 +42,7 @@ import {
 import { ArtifactImage } from './ArtifactImage'
 import {
   getUserDesktopBridge,
-  type ScreenSourceSummary,
+  type ScreenSharePreview,
   type UserDesktopBridge,
 } from './desktop'
 import {
@@ -54,7 +54,9 @@ import {
   uploadCapturedMaterials,
   type MaterialUploadProgress,
 } from './material-upload'
-import { ScreenSourcePicker } from './ScreenSourcePicker'
+import { CaptureStorageError } from './capture-storage'
+import type { DesktopMark } from '../shared/marking-overlay'
+import { screenCaptureFailureMessage } from '../shared/screen-capture-error'
 import './user.css'
 
 const lastRequestKey = 'mite.user.lastSupportRequestId'
@@ -62,7 +64,7 @@ const guideRunKey = 'mite.user.guideRunId'
 const supportDraftKey = 'mite.user.supportDraftId'
 const supportDraftPayloadKey = 'mite.user.supportDraftPayload'
 const consentText =
-  '支援中は、家族との音声通話と、あなたが選んだ画面の共有を行います。共有中の画面は、あとで手順を作るため5秒ごとにこの端末へ一時保存します。家族が手順を作ることを選んだ場合だけ、保存した画像をMiteサーバーへ送り、GoogleのGemini AIで下書きを作ります。画面に個人情報が映る可能性があります。3つすべてに同意して支援を始めますか。'
+  '支援中は、家族との音声通話と、メインの画面全体の共有を行います。共有中の画面は、あとで手順を作るため5秒ごとにこの端末へ一時保存します。家族が手順を作ることを選んだ場合だけ、保存した画像をMiteサーバーへ送り、GoogleのGemini AIで下書きを作ります。画面に個人情報が映る可能性があります。3つすべてに同意して支援を始めますか。'
 
 interface EventStreamController {
   start(): void
@@ -120,6 +122,7 @@ const runIdempotent = async <TResult,>(
 }
 
 const messageForError = (error: unknown) => {
+  if (error instanceof CaptureStorageError) return error.message
   if (!(error instanceof MiteApiError)) {
     return '通信できません。少し待ってから、もう一度試してください。'
   }
@@ -205,7 +208,6 @@ function SupportRequestComposer({
     }
     return null
   }, [storage])
-  const [source, setSource] = useState<ScreenSourceSummary | null>(null)
   const [preview, setPreview] = useState<{
     bytes: Uint8Array
     capturedAt: string
@@ -213,7 +215,7 @@ function SupportRequestComposer({
   } | null>(null)
   const [comment, setComment] = useState(recoveredPayload?.comment ?? '')
   const [pendingPayload, setPendingPayload] = useState(recoveredPayload)
-  const [capturing, setCapturing] = useState(false)
+  const [capturing, setCapturing] = useState(!recoveredPayload)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const draftId = useMemo(() => {
@@ -234,8 +236,21 @@ function SupportRequestComposer({
     let cancelled = false
     void desktop
       .loadSupportScreenshotDraft(draftId)
-      .then((saved) => {
-        if (cancelled || !saved) return
+      .then(async (existing) => {
+        if (cancelled) return
+        if (!existing && keys.peek(artifactOperationId)) {
+          throw new Error('pending screenshot is unavailable')
+        }
+        const result = existing ?? (await desktop.capturePreview())
+        if (cancelled) return
+        const saved =
+          existing ??
+          (await desktop.saveSupportScreenshotDraft(
+            draftId,
+            result.capturedAt,
+            result.bytes,
+          ))
+        if (cancelled) return
         const copy = Uint8Array.from(saved.bytes)
         const blob = new Blob([copy], { type: 'image/jpeg' })
         setPreview((current) => {
@@ -247,17 +262,23 @@ function SupportRequestComposer({
           }
         })
       })
-      .catch(() => {
+      .catch((caught) => {
         if (!cancelled) {
           setError(
-            '前回保存した画面を確認できませんでした。もう一度撮影してください。',
+            screenCaptureFailureMessage(
+              caught,
+              '画面を確認できませんでした。もう一度撮影してください。',
+            ),
           )
         }
+      })
+      .finally(() => {
+        if (!cancelled) setCapturing(false)
       })
     return () => {
       cancelled = true
     }
-  }, [desktop, draftId, pendingPayload])
+  }, [desktop, draftId, pendingPayload, keys, artifactOperationId])
 
   useEffect(
     () => () => {
@@ -267,7 +288,7 @@ function SupportRequestComposer({
   )
 
   const capture = async () => {
-    if (!source) return
+    if (capturing || sending || pendingPayload) return
     if (keys.peek(artifactOperationId)) {
       setError(
         '前回の送信結果を確認するため、保存済みの画面をそのまま再送します。',
@@ -277,7 +298,7 @@ function SupportRequestComposer({
     setCapturing(true)
     setError(null)
     try {
-      const result = await desktop.capturePreview(source.id)
+      const result = await desktop.capturePreview()
       const saved = await desktop.saveSupportScreenshotDraft(
         draftId,
         result.capturedAt,
@@ -293,8 +314,13 @@ function SupportRequestComposer({
         capturedAt: saved.capturedAt,
         url: URL.createObjectURL(blob),
       })
-    } catch {
-      setError('画面を撮影できませんでした。もう一度試してください。')
+    } catch (caught) {
+      setError(
+        screenCaptureFailureMessage(
+          caught,
+          '画面を撮影できませんでした。もう一度試してください。',
+        ),
+      )
     } finally {
       setCapturing(false)
     }
@@ -304,6 +330,7 @@ function SupportRequestComposer({
     if (
       (!preview && !pendingPayload) ||
       sending ||
+      capturing ||
       codePointLength(comment) > 500
     ) {
       return
@@ -375,7 +402,7 @@ function SupportRequestComposer({
       <ScreenHeading
         eyebrow="家族に相談"
         title="困っている画面を家族に見せましょう"
-        description="相談したいアプリの画面を選んで撮影できます。Mite自身の画面は写しません。"
+        description="メインの画面全体を撮影します。Mite自身の画面は写しません。撮り直してから送ることもできます。"
       />
       {error ? <ErrorNotice message={error} /> : null}
       <div className="user-stack">
@@ -384,25 +411,19 @@ function SupportRequestComposer({
             同じ内容で家族への連絡を続けます。
           </Notice>
         ) : (
-          <ScreenSourcePicker
-            desktop={desktop}
-            selectedId={source?.id ?? null}
-            onSelect={(next) => {
-              setSource(next)
-              setPreview(null)
-            }}
-          />
-        )}
-        {source && !pendingPayload ? (
           <Button
             variant="secondary"
             size="large"
-            disabled={capturing}
+            disabled={capturing || sending}
             onClick={() => void capture()}
           >
-            {capturing ? '撮影しています…' : 'この画面を撮影する'}
+            {capturing
+              ? '撮影しています…'
+              : preview
+                ? '画面を撮り直す'
+                : '画面を撮影する'}
           </Button>
-        ) : null}
+        )}
         {preview ? (
           <figure className="user-preview">
             <img src={preview.url} alt="家族に送る画面" />
@@ -413,7 +434,7 @@ function SupportRequestComposer({
           <span>困っていること（書かなくても大丈夫です）</span>
           <textarea
             value={comment}
-            disabled={Boolean(pendingPayload)}
+            disabled={sending || Boolean(pendingPayload)}
             maxLength={500}
             rows={4}
             onChange={(event) => setComment(event.target.value)}
@@ -422,7 +443,12 @@ function SupportRequestComposer({
           <small>{codePointLength(comment)} / 500文字</small>
         </label>
         <div className="user-actions">
-          <Button variant="secondary" size="large" onClick={onCancel}>
+          <Button
+            variant="secondary"
+            size="large"
+            disabled={sending || capturing}
+            onClick={onCancel}
+          >
             戻る
           </Button>
           <Button
@@ -430,6 +456,7 @@ function SupportRequestComposer({
             disabled={
               (!preview && !pendingPayload) ||
               sending ||
+              capturing ||
               codePointLength(comment) > 500
             }
             onClick={() => void send()}
@@ -615,7 +642,7 @@ function IncomingCallScreen({
   const [checks, setChecks] = useState([false, false, false])
   const labels = [
     '家族と音声で話します',
-    '自分で選んだ画面を家族に見せます',
+    'メインの画面全体を家族に見せます',
     'あとで手順を作るため、画面を5秒ごとに一時保存します',
   ]
   const agreed = checks.every(Boolean)
@@ -660,14 +687,7 @@ function IncomingCallScreen({
   )
 }
 
-interface VisibleMark {
-  id: string
-  x: number
-  y: number
-}
-
 function ActiveSupportScreen({
-  desktop,
   source,
   screenSharing,
   mediaState,
@@ -675,25 +695,24 @@ function ActiveSupportScreen({
   audioLevel,
   captureCount,
   captureLimitReached,
-  marks,
+  captureError,
   busy,
   error,
-  onSelectSource,
+  onStartSharing,
   onStopSharing,
   onToggleMicrophone,
 }: {
-  desktop: UserDesktopBridge
-  source: ScreenSourceSummary | null
+  source: ScreenSharePreview | null
   screenSharing: boolean
   mediaState: MediaConnectionState
   microphoneEnabled: boolean
   audioLevel: number
   captureCount: number
   captureLimitReached: boolean
-  marks: VisibleMark[]
+  captureError: string | null
   busy: boolean
   error: string | null
-  onSelectSource(source: ScreenSourceSummary): void
+  onStartSharing(): void
   onStopSharing(): void
   onToggleMicrophone(): void
 }) {
@@ -702,7 +721,7 @@ function ActiveSupportScreen({
       <ScreenHeading
         eyebrow="家族が支援中"
         title="家族とつながっています"
-        description="操作はあなた自身が行います。家族が示した場所は、下の画面に丸で表示されます。"
+        description="操作はあなた自身が行います。家族が示した場所は、いま操作している画面に丸で表示されます。"
         aside={
           <StatusBadge tone={mediaState === 'CONNECTED' ? 'active' : 'warning'}>
             {mediaState === 'CONNECTED'
@@ -714,6 +733,11 @@ function ActiveSupportScreen({
         }
       />
       {error ? <ErrorNotice message={error} /> : null}
+      {captureError && screenSharing ? (
+        <Notice tone="warning" title="画面の保存をやり直しています">
+          {captureError}
+        </Notice>
+      ) : null}
       {captureLimitReached ? (
         <Notice tone="warning" title="保存できる画面が上限に達しました">
           通話と画面共有はそのまま続けられます。
@@ -721,54 +745,26 @@ function ActiveSupportScreen({
       ) : null}
       {!screenSharing ? (
         <div className="user-stack">
-          <Notice tone="info" title="家族に見せる画面を選んでください">
-            相談したいアプリの画面だけを選びます。
+          <Notice tone="info" title="家族に画面全体を見せます">
+            メインの画面全体を共有します。Mite自身の画面は写しません。
           </Notice>
-          {source ? (
-            <div className="user-reselect-source">
-              <img src={source.thumbnailDataUrl} alt="前回共有していた画面" />
-              <strong>{source.name}</strong>
-              <Button
-                size="large"
-                disabled={
-                  busy ||
-                  mediaState === 'CONNECTING' ||
-                  mediaState === 'RECONNECTING'
-                }
-                onClick={() => onSelectSource(source)}
-              >
-                同じ画面をもう一度共有する
-              </Button>
-            </div>
-          ) : (
-            <ScreenSourcePicker
-              desktop={desktop}
-              selectedId={null}
-              disabled={
-                busy ||
-                mediaState === 'CONNECTING' ||
-                mediaState === 'RECONNECTING'
-              }
-              onSelect={onSelectSource}
-            />
-          )}
+          <Button
+            size="large"
+            disabled={
+              busy ||
+              mediaState === 'CONNECTING' ||
+              mediaState === 'RECONNECTING'
+            }
+            onClick={onStartSharing}
+          >
+            {source ? '画面全体の共有を再開する' : '画面全体を共有する'}
+          </Button>
           {busy ? <p role="status">画面を共有しています…</p> : null}
         </div>
       ) : (
-        <div className="user-shared-view">
-          {source ? (
-            <img src={source.thumbnailDataUrl} alt="家族に共有中の画面" />
-          ) : null}
-          {marks.map((mark) => (
-            <span
-              aria-label="家族が示している場所"
-              className="user-mark"
-              key={mark.id}
-              style={{ left: `${mark.x * 100}%`, top: `${mark.y * 100}%` }}
-            />
-          ))}
-          <span className="user-sharing-label">この画面を共有中</span>
-        </div>
+        <Notice tone="info" title="画面全体を共有中">
+          「しまう」でこのパネルを閉じて操作できます。家族が示す丸は、そのまま画面に表示されます。
+        </Notice>
       )}
       <div className="user-support-controls">
         <div className="user-audio-level">
@@ -884,6 +880,186 @@ function EndedScreen({
   )
 }
 
+function GuideSupportComposer({
+  desktop,
+  run,
+  keys,
+  storage,
+  busy,
+  onAsk,
+}: {
+  desktop: UserDesktopBridge
+  run: GuideRun
+  keys: IdempotencyKeyStore
+  storage: KeyValueStorage
+  busy: boolean
+  onAsk(
+    preview: { bytes: Uint8Array; capturedAt: string },
+    comment: string,
+  ): void
+}) {
+  const draftId = `guide_${run.id}_${run.revision}`
+  const artifactOperationId = `guide-support-artifact:${run.id}:${run.revision}`
+  const payloadKey = `mite.user.guideSupportPayload:${run.id}:${run.revision}`
+  const pendingPayload = storage.getItem(payloadKey)
+  const [comment, setComment] = useState(() => {
+    try {
+      const saved: unknown = JSON.parse(pendingPayload ?? 'null')
+      return saved &&
+        typeof saved === 'object' &&
+        'comment' in saved &&
+        typeof saved.comment === 'string'
+        ? saved.comment
+        : ''
+    } catch {
+      return ''
+    }
+  })
+  const [preview, setPreview] = useState<{
+    bytes: Uint8Array
+    capturedAt: string
+    url: string
+  } | null>(null)
+  const [capturing, setCapturing] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    void desktop
+      .loadSupportScreenshotDraft(draftId)
+      .then(async (existing) => {
+        if (cancelled) return
+        if (
+          !existing &&
+          (keys.peek(artifactOperationId) || storage.getItem(payloadKey))
+        ) {
+          throw new Error('pending screenshot is unavailable')
+        }
+        const result = existing ?? (await desktop.capturePreview())
+        if (cancelled) return
+        const saved =
+          existing ??
+          (await desktop.saveSupportScreenshotDraft(
+            draftId,
+            result.capturedAt,
+            result.bytes,
+          ))
+        if (cancelled) return
+        const bytes = Uint8Array.from(saved.bytes)
+        setPreview({
+          bytes,
+          capturedAt: saved.capturedAt,
+          url: URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' })),
+        })
+      })
+      .catch((caught) => {
+        if (!cancelled)
+          setError(
+            screenCaptureFailureMessage(
+              caught,
+              '画面を確認できませんでした。もう一度試してください。',
+            ),
+          )
+      })
+      .finally(() => {
+        if (!cancelled) setCapturing(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [desktop, draftId, keys, artifactOperationId, storage, payloadKey])
+
+  useEffect(
+    () => () => {
+      if (preview) URL.revokeObjectURL(preview.url)
+    },
+    [preview],
+  )
+
+  const capture = async () => {
+    if (busy || capturing) return
+    if (keys.peek(artifactOperationId) || storage.getItem(payloadKey)) {
+      setError(
+        '前回の送信結果を確認するため、保存済みの画面をそのまま再送します。',
+      )
+      return
+    }
+    setCapturing(true)
+    setError(null)
+    try {
+      const result = await desktop.capturePreview()
+      const saved = await desktop.saveSupportScreenshotDraft(
+        draftId,
+        result.capturedAt,
+        result.bytes,
+      )
+      const bytes = Uint8Array.from(saved.bytes)
+      setPreview({
+        bytes,
+        capturedAt: saved.capturedAt,
+        url: URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' })),
+      })
+    } catch (caught) {
+      setError(
+        screenCaptureFailureMessage(
+          caught,
+          '画面を撮影できませんでした。もう一度試してください。',
+        ),
+      )
+    } finally {
+      setCapturing(false)
+    }
+  }
+
+  return (
+    <div className="user-ask-panel">
+      <h3>いま困っている画面を家族に見せる</h3>
+      <p>メインの画面全体を撮影します。Mite自身の画面は写しません。</p>
+      {error ? <ErrorNotice message={error} /> : null}
+      <Button
+        variant="secondary"
+        size="large"
+        disabled={busy || capturing}
+        onClick={() => void capture()}
+      >
+        {capturing
+          ? '撮影しています…'
+          : preview
+            ? '画面を撮り直す'
+            : '画面を撮影する'}
+      </Button>
+      {preview ? (
+        <img
+          className="user-ask-preview"
+          src={preview.url}
+          alt="家族に送る現在の画面"
+        />
+      ) : null}
+      <label className="user-field">
+        <span>家族に伝えたいこと</span>
+        <textarea
+          rows={3}
+          maxLength={500}
+          value={comment}
+          disabled={busy || Boolean(pendingPayload)}
+          onChange={(event) => setComment(event.target.value)}
+        />
+      </label>
+      <Button
+        size="large"
+        disabled={
+          !preview || busy || capturing || codePointLength(comment) > 500
+        }
+        onClick={() => {
+          if (preview) onAsk(preview, comment)
+        }}
+      >
+        この場所から家族に相談する
+      </Button>
+    </div>
+  )
+}
+
 function GuideRunner({
   api,
   desktop,
@@ -894,7 +1070,11 @@ function GuideRunner({
   onMove,
   onComplete,
   onAsk,
+  keys,
+  storage,
 }: {
+  keys: IdempotencyKeyStore
+  storage: KeyValueStorage
   api: MiteApi
   desktop: UserDesktopBridge
   run: GuideRun
@@ -904,29 +1084,14 @@ function GuideRunner({
   onMove(action: 'NEXT' | 'PREVIOUS'): void
   onComplete(): void
   onAsk(
-    source: ScreenSourceSummary,
     preview: { bytes: Uint8Array; capturedAt: string },
     comment: string,
   ): void
 }) {
   const [asking, setAsking] = useState(false)
-  const [source, setSource] = useState<ScreenSourceSummary | null>(null)
-  const [preview, setPreview] = useState<{
-    bytes: Uint8Array
-    capturedAt: string
-    url: string
-  } | null>(null)
-  const [comment, setComment] = useState('')
-  const [captureError, setCaptureError] = useState<string | null>(null)
+  const [hasAsked, setHasAsked] = useState(false)
   const step = guide.currentVersion.steps[run.currentStepNumber - 1]
   const isLast = run.currentStepNumber === guide.currentVersion.steps.length
-
-  useEffect(
-    () => () => {
-      if (preview) URL.revokeObjectURL(preview.url)
-    },
-    [preview],
-  )
 
   if (!step) {
     return (
@@ -965,7 +1130,10 @@ function GuideRunner({
           variant="quiet"
           size="large"
           disabled={busy}
-          onClick={() => setAsking((current) => !current)}
+          onClick={() => {
+            setHasAsked(true)
+            setAsking((current) => !current)
+          }}
         >
           家族に聞く
         </Button>
@@ -979,70 +1147,17 @@ function GuideRunner({
           </Button>
         )}
       </div>
-      {asking ? (
-        <div className="user-ask-panel">
-          <h3>いま困っている画面を家族に見せる</h3>
-          {captureError ? <ErrorNotice message={captureError} /> : null}
-          <ScreenSourcePicker
+      {hasAsked ? (
+        <div hidden={!asking}>
+          <GuideSupportComposer
+            key={`${run.id}:${run.revision}`}
             desktop={desktop}
-            selectedId={source?.id ?? null}
-            onSelect={(next) => {
-              setSource(next)
-              setPreview(null)
-            }}
+            run={run}
+            keys={keys}
+            storage={storage}
+            busy={busy}
+            onAsk={onAsk}
           />
-          {source ? (
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setCaptureError(null)
-                void desktop
-                  .capturePreview(source.id)
-                  .then((result) => {
-                    if (preview) URL.revokeObjectURL(preview.url)
-                    const blob = new Blob([Uint8Array.from(result.bytes)], {
-                      type: 'image/jpeg',
-                    })
-                    setPreview({
-                      ...result,
-                      url: URL.createObjectURL(blob),
-                    })
-                  })
-                  .catch(() => {
-                    setCaptureError(
-                      '画面を撮影できませんでした。もう一度試してください。',
-                    )
-                  })
-              }}
-            >
-              この画面を撮影する
-            </Button>
-          ) : null}
-          {preview ? (
-            <img
-              className="user-ask-preview"
-              src={preview.url}
-              alt="家族に送る現在の画面"
-            />
-          ) : null}
-          <label className="user-field">
-            <span>家族に伝えたいこと</span>
-            <textarea
-              rows={3}
-              maxLength={500}
-              value={comment}
-              onChange={(event) => setComment(event.target.value)}
-            />
-          </label>
-          <Button
-            size="large"
-            disabled={!source || !preview || busy}
-            onClick={() => {
-              if (source && preview) onAsk(source, preview, comment)
-            }}
-          >
-            この場所から家族に相談する
-          </Button>
         </div>
       ) : null}
     </Surface>
@@ -1074,13 +1189,14 @@ export function UserClient({
   const [error, setError] = useState<string | null>(null)
   const [mediaState, setMediaState] =
     useState<MediaConnectionState>('DISCONNECTED')
-  const [screenSource, setScreenSource] = useState<ScreenSourceSummary | null>(
+  const [screenSource, setScreenSource] = useState<ScreenSharePreview | null>(
     null,
   )
   const [screenSharing, setScreenSharing] = useState(false)
   const [microphoneEnabled, setMicrophoneEnabled] = useState(true)
   const [audioLevel, setAudioLevel] = useState(0)
-  const [marks, setMarks] = useState<VisibleMark[]>([])
+  const [marks, setMarks] = useState<DesktopMark[]>([])
+  const [captureError, setCaptureError] = useState<string | null>(null)
   const [captureCount, setCaptureCount] = useState(0)
   const [captureLimitReached, setCaptureLimitReached] = useState(false)
   const [uploadProgress, setUploadProgress] =
@@ -1090,9 +1206,12 @@ export function UserClient({
   const requestRef = useRef<SupportRequest | null>(null)
   const sessionRef = useRef<SupportSession | null>(null)
   const refreshRef = useRef<() => Promise<void>>(async () => {})
+  const screenSharingRef = useRef(false)
+  const mediaGenerationRef = useRef(0)
   const mediaRef = useRef<UserMediaSession | null>(null)
   const captureTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const captureInFlightRef = useRef(false)
+  const captureGenerationRef = useRef(0)
   const markTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
   const lastUploadRef = useRef<string | null>(null)
   const uploadInFlightRef = useRef<string | null>(null)
@@ -1135,20 +1254,36 @@ export function UserClient({
   }, [])
 
   const stopCapturing = useCallback(() => {
+    captureGenerationRef.current += 1
     if (captureTimerRef.current) clearInterval(captureTimerRef.current)
     captureTimerRef.current = null
   }, [])
 
+  const clearMarks = useCallback(() => {
+    setMarks([])
+    for (const timer of markTimers.current.values()) clearTimeout(timer)
+    markTimers.current.clear()
+    void desktop.setMarkings([]).catch(() => {})
+  }, [desktop])
+
+  useEffect(() => {
+    void desktop.setMarkings(marks).catch(() => {
+      if (marks.length) setError('家族が示した丸を表示できませんでした。')
+    })
+  }, [desktop, marks])
+
   const disconnectMedia = useCallback(async () => {
+    mediaGenerationRef.current += 1
+    screenSharingRef.current = false
     stopCapturing()
     const media = mediaRef.current
     mediaRef.current = null
     setScreenSharing(false)
-    setMarks([])
+    clearMarks()
     setAudioLevel(0)
     if (media) await media.disconnect()
     setMediaState('DISCONNECTED')
-  }, [stopCapturing])
+  }, [clearMarks, stopCapturing])
 
   const loadGuides = useCallback(async () => {
     setGuidesLoading(true)
@@ -1379,6 +1514,7 @@ export function UserClient({
     ) {
       return
     }
+    setUploadError(null)
     lastUploadRef.current = uploadKey
     uploadInFlightRef.current = session.id
     void uploadCapturedMaterials({
@@ -1406,11 +1542,15 @@ export function UserClient({
 
   useEffect(
     () => () => {
+      mediaGenerationRef.current += 1
+      screenSharingRef.current = false
       stopCapturing()
-      void mediaRef.current?.disconnect()
-      for (const timer of markTimers.current.values()) clearTimeout(timer)
+      const media = mediaRef.current
+      mediaRef.current = null
+      void media?.disconnect()
+      clearMarks()
     },
-    [stopCapturing],
+    [clearMarks, stopCapturing],
   )
 
   const acceptCall = async () => {
@@ -1448,29 +1588,36 @@ export function UserClient({
     }
   }
 
-  const recordMarking = useCallback((message: MarkingMessage) => {
-    if (message.type === 'mark.clear') {
-      setMarks([])
-      for (const timer of markTimers.current.values()) clearTimeout(timer)
-      markTimers.current.clear()
-      return
-    }
-    setMarks((current) => [
-      ...current.filter((mark) => mark.id !== message.markId),
-      { id: message.markId, x: message.x, y: message.y },
-    ])
-    const existing = markTimers.current.get(message.markId)
-    if (existing) clearTimeout(existing)
-    markTimers.current.set(
-      message.markId,
-      setTimeout(() => {
-        setMarks((current) =>
-          current.filter((mark) => mark.id !== message.markId),
-        )
-        markTimers.current.delete(message.markId)
-      }, message.ttlMs),
-    )
-  }, [])
+  const recordMarking = useCallback(
+    (message: MarkingMessage) => {
+      if (!screenSharingRef.current) return
+      if (message.type === 'mark.clear') {
+        clearMarks()
+        return
+      }
+      setMarks((current) => [
+        ...current.filter((mark) => mark.id !== message.markId),
+        {
+          id: message.markId,
+          x: message.x,
+          y: message.y,
+          expiresAt: Date.now() + message.ttlMs,
+        },
+      ])
+      const existing = markTimers.current.get(message.markId)
+      if (existing) clearTimeout(existing)
+      markTimers.current.set(
+        message.markId,
+        setTimeout(() => {
+          setMarks((current) =>
+            current.filter((mark) => mark.id !== message.markId),
+          )
+          markTimers.current.delete(message.markId)
+        }, message.ttlMs),
+      )
+    },
+    [clearMarks],
+  )
 
   const takeCapture = useCallback(
     async (supportSessionId: string): Promise<boolean> => {
@@ -1478,6 +1625,7 @@ export function UserClient({
       captureInFlightRef.current = true
       try {
         const result = await desktop.saveCapture(supportSessionId)
+        setCaptureError(null)
         setCaptureCount(result.manifest.captures.length)
         if (result.reachedLimit) {
           setCaptureLimitReached(true)
@@ -1485,8 +1633,8 @@ export function UserClient({
         }
         return result.reachedLimit
       } catch {
-        setError(
-          '画面を保存できませんでした。相談は続けられますが、手順の材料が不足する場合があります。',
+        setCaptureError(
+          '画面を保存できませんでした。通話と画面共有は続いています。自動で保存をやり直します。',
         )
         return false
       } finally {
@@ -1499,13 +1647,24 @@ export function UserClient({
   const startCapturing = useCallback(
     async (supportSessionId: string) => {
       stopCapturing()
-      const manifest = await desktop.initializeCaptureSession(supportSessionId)
-      setCaptureCount(manifest.captures.length)
-      const alreadyAtLimit = manifest.captures.length >= runtime.captureMaxCount
-      setCaptureLimitReached(alreadyAtLimit)
-      if (alreadyAtLimit) return
-      const reachedLimit = await takeCapture(supportSessionId)
-      if (reachedLimit) return
+      const generation = captureGenerationRef.current
+      try {
+        const manifest =
+          await desktop.initializeCaptureSession(supportSessionId)
+        if (generation !== captureGenerationRef.current) return
+        setCaptureCount(manifest.captures.length)
+        const alreadyAtLimit =
+          manifest.captures.length >= runtime.captureMaxCount
+        setCaptureLimitReached(alreadyAtLimit)
+        if (alreadyAtLimit) return
+        const reachedLimit = await takeCapture(supportSessionId)
+        if (reachedLimit) return
+      } catch {
+        setCaptureError(
+          '画面を保存する準備ができませんでした。通話と画面共有は続いています。自動で保存をやり直します。',
+        )
+      }
+      if (generation !== captureGenerationRef.current) return
       captureTimerRef.current = setInterval(() => {
         void takeCapture(supportSessionId)
       }, runtime.captureIntervalMs)
@@ -1519,14 +1678,19 @@ export function UserClient({
     ],
   )
 
-  const shareSelectedSource = async (source: ScreenSourceSummary) => {
-    if (!session || session.status !== 'ACTIVE') return
+  const sharePrimaryScreen = async () => {
+    if (!session || session.status !== 'ACTIVE' || actionBusy) return
     if (mediaState === 'CONNECTING' || mediaState === 'RECONNECTING') {
       setError('家族との通話をつなぎ直しています。少し待ってください。')
       return
     }
     setActionBusy(true)
     setError(null)
+    const generation = ++mediaGenerationRef.current
+    const isCurrentShare = () =>
+      generation === mediaGenerationRef.current &&
+      sessionRef.current?.id === session.id &&
+      sessionRef.current.status === 'ACTIVE'
     try {
       const current = await api.getSupportSession(session.id)
       mergeSession(current)
@@ -1535,47 +1699,71 @@ export function UserClient({
         if (activeRequest) await applySupportState(activeRequest, current)
         return
       }
-      await desktop.selectScreenSource(source.id)
+      if (!isCurrentShare()) return
+      const source = await desktop.prepareScreenShare()
+      if (!isCurrentShare()) return
       let media = mediaRef.current
       if (!media || mediaState === 'DISCONNECTED') {
-        if (media) await media.disconnect()
+        if (media) {
+          mediaRef.current = null
+          await media.disconnect()
+        }
         media = createMediaSession()
         mediaRef.current = media
         const token = await api.getLiveKitToken(current.id)
+        if (!isCurrentShare()) return
         await media.connect(token, {
           onStateChange: (state) => {
+            if (mediaRef.current !== media) return
             setMediaState(state)
             if (state === 'RECONNECTING' || state === 'DISCONNECTED') {
+              mediaGenerationRef.current += 1
+              screenSharingRef.current = false
+              clearMarks()
               stopCapturing()
               setScreenSharing(false)
               setError(
-                '家族との通話が途切れました。状態を確認して、画面を選び直してください。',
+                '家族との通話が途切れました。状態を確認して、画面共有を再開してください。',
               )
             }
           },
           onMarking: recordMarking,
           onAudioLevel: setAudioLevel,
           onScreenShareStopped: () => {
+            if (mediaRef.current !== media) return
+            mediaGenerationRef.current += 1
+            screenSharingRef.current = false
             stopCapturing()
             setScreenSharing(false)
-            setMarks([])
+            clearMarks()
           },
         })
       } else {
         await media.startScreenShare()
       }
+      if (!isCurrentShare()) {
+        await media.disconnect()
+        return
+      }
+      clearMarks()
+      screenSharingRef.current = true
       setScreenSource(source)
       setScreenSharing(true)
       setMicrophoneEnabled(true)
       await startCapturing(current.id)
     } catch (caught) {
+      screenSharingRef.current = false
+      clearMarks()
       stopCapturing()
       setScreenSharing(false)
       if (caught instanceof MiteApiError) {
         reportError(caught)
       } else {
         setError(
-          '家族との通話を始められませんでした。画面を選び直してください。',
+          screenCaptureFailureMessage(
+            caught,
+            '家族との通話を始められませんでした。もう一度共有を始めてください。',
+          ),
         )
       }
     } finally {
@@ -1584,9 +1772,11 @@ export function UserClient({
   }
 
   const stopSharing = async () => {
+    mediaGenerationRef.current += 1
+    screenSharingRef.current = false
     stopCapturing()
     setScreenSharing(false)
-    setMarks([])
+    clearMarks()
     try {
       await mediaRef.current?.stopScreenShare()
     } catch {
@@ -1680,7 +1870,6 @@ export function UserClient({
   }
 
   const askFromGuide = async (
-    _source: ScreenSourceSummary,
     preview: { bytes: Uint8Array; capturedAt: string },
     comment: string,
   ) => {
@@ -1824,6 +2013,7 @@ export function UserClient({
     )
   }
 
+  let edge: ReactNode = null
   if (overlayCollapsed) {
     const hasResume =
       supportScreen !== 'HOME' ||
@@ -1848,7 +2038,7 @@ export function UserClient({
                       ? '支援結果を見る'
                       : undefined
 
-    return (
+    edge = (
       <div className="user-overlay-edge">
         <EdgeHelpEntry
           busy={hasResume}
@@ -1884,7 +2074,6 @@ export function UserClient({
   } else if (supportScreen === 'ACTIVE_SUPPORT' && session) {
     content = (
       <ActiveSupportScreen
-        desktop={desktop}
         source={screenSource}
         screenSharing={screenSharing}
         mediaState={mediaState}
@@ -1892,10 +2081,10 @@ export function UserClient({
         audioLevel={audioLevel}
         captureCount={captureCount}
         captureLimitReached={captureLimitReached}
-        marks={marks}
+        captureError={captureError}
         busy={actionBusy}
         error={error}
-        onSelectSource={(source) => void shareSelectedSource(source)}
+        onStartSharing={() => void sharePrimaryScreen()}
         onStopSharing={() => void stopSharing()}
         onToggleMicrophone={() => void toggleMicrophone()}
       />
@@ -1935,6 +2124,7 @@ export function UserClient({
   } else if (guideRun && guide) {
     content = (
       <GuideRunner
+        key={`${guideRun.id}:${guideRun.revision}`}
         api={api}
         desktop={desktop}
         run={guideRun}
@@ -1943,9 +2133,9 @@ export function UserClient({
         error={error}
         onMove={(action) => void moveGuide(action)}
         onComplete={() => void completeGuide()}
-        onAsk={(source, preview, comment) =>
-          void askFromGuide(source, preview, comment)
-        }
+        onAsk={(preview, comment) => void askFromGuide(preview, comment)}
+        keys={keys}
+        storage={storage}
       />
     )
   } else if (view === 'REQUEST') {
@@ -1986,34 +2176,37 @@ export function UserClient({
   }
 
   return (
-    <div className="user-overlay-detail">
-      <AppShell
-        className="user-overlay-shell"
-        roleLabel="利用者用"
-        title="困ったときは、いつでも家族に相談できます"
-        subtitle={`Mite ${runtime.appVersion}`}
-        status={
-          <StatusBadge
-            tone={connectionStatus === 'CONNECTED' ? 'active' : 'warning'}
-          >
-            {connectionStatus === 'CONNECTED'
-              ? 'お知らせを受け取れます'
-              : 'お知らせをつなぎ直しています'}
-          </StatusBadge>
-        }
-        actions={
-          <Button
-            variant="quiet"
-            aria-label="Miteを左端へしまう"
-            onClick={() => setOverlayCollapsed(true)}
-          >
-            しまう
-          </Button>
-        }
-      >
-        {content}
-      </AppShell>
-    </div>
+    <>
+      {edge}
+      <div className="user-overlay-detail" hidden={overlayCollapsed}>
+        <AppShell
+          className="user-overlay-shell"
+          roleLabel="利用者用"
+          title="困ったときは、いつでも家族に相談できます"
+          subtitle={`Mite ${runtime.appVersion}`}
+          status={
+            <StatusBadge
+              tone={connectionStatus === 'CONNECTED' ? 'active' : 'warning'}
+            >
+              {connectionStatus === 'CONNECTED'
+                ? 'お知らせを受け取れます'
+                : 'お知らせをつなぎ直しています'}
+            </StatusBadge>
+          }
+          actions={
+            <Button
+              variant="quiet"
+              aria-label="Miteを左端へしまう"
+              onClick={() => setOverlayCollapsed(true)}
+            >
+              しまう
+            </Button>
+          }
+        >
+          {content}
+        </AppShell>
+      </div>
+    </>
   )
 }
 

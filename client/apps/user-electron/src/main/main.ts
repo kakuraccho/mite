@@ -1,7 +1,6 @@
 import {
   app,
   BrowserWindow,
-  desktopCapturer,
   ipcMain,
   net,
   protocol,
@@ -10,16 +9,7 @@ import {
   type IpcMainInvokeEvent,
 } from 'electron'
 import { createHash, randomUUID } from 'node:crypto'
-import {
-  mkdir,
-  open,
-  readFile,
-  readdir,
-  rename,
-  rm,
-  stat,
-  writeFile,
-} from 'node:fs/promises'
+import { mkdir, readFile, readdir, rm, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { RuntimeConfig } from '@mite/client-core'
@@ -30,16 +20,24 @@ import {
 } from './security'
 import { createAppBarAdapter } from './appbar'
 import { UserOverlayController } from './overlay-controller'
+import { writeAtomic } from './write-atomic'
+import { MarkingOverlay } from './marking-overlay'
+import { createCaptureSessionQueue } from './capture-session-queue'
 import { SupportScreenshotDraftStore } from './support-screenshot-draft'
+import { PrimaryScreenCapture } from './primary-screen-capture'
+import {
+  assertScreenCaptureAvailable,
+  isWslCaptureEnvironment,
+} from './capture-environment'
 import { isUserOverlayMode } from '../shared/overlay'
 
 const scheme = userScheme
 const productionOrigin = userProductionOrigin
 const captureSchemaVersion = 1 as const
-const maxCaptureWidth = 1920
-const maxCaptureHeight = 1080
-const jpegQuality = 80
+const primaryScreenCapture = new PrimaryScreenCapture()
 let overlayController: UserOverlayController | null = null
+let userWindow: BrowserWindow | null = null
+let markingOverlay: MarkingOverlay | null = null
 
 interface CaptureEntry {
   clientCaptureId: string
@@ -60,12 +58,6 @@ interface CaptureManifest {
   captures: CaptureEntry[]
 }
 
-interface ScreenSourceSummary {
-  id: string
-  name: string
-  thumbnailDataUrl: string
-}
-
 protocol.registerSchemesAsPrivileged([
   {
     scheme,
@@ -81,7 +73,12 @@ protocol.registerSchemesAsPrivileged([
 const isTrustedUrl = isTrustedRendererUrl
 
 const assertTrustedSender = (event: IpcMainInvokeEvent) => {
-  if (!isTrustedUrl(event.senderFrame?.url ?? '')) {
+  if (
+    !userWindow ||
+    event.sender !== userWindow.webContents ||
+    event.senderFrame !== userWindow.webContents.mainFrame ||
+    !isTrustedUrl(event.senderFrame?.url ?? '')
+  ) {
     throw new Error('Untrusted IPC sender')
   }
 }
@@ -182,15 +179,6 @@ const removeTemporaryFiles = async (directory: string) => {
   )
 }
 
-const writeAtomic = async (filename: string, contents: Uint8Array | string) => {
-  const temporary = `${filename}.${randomUUID()}.tmp`
-  await writeFile(temporary, contents, { flag: 'wx' })
-  const handle = await open(temporary, 'r')
-  await handle.sync()
-  await handle.close()
-  await rename(temporary, filename)
-}
-
 const createEmptyManifest = (supportSessionId: string): CaptureManifest => ({
   schemaVersion: captureSchemaVersion,
   supportSessionId,
@@ -207,7 +195,16 @@ const readManifest = async (
   const directory = captureDirectory(supportSessionId)
   await removeTemporaryFiles(directory)
   const raw = await readFile(manifestPath(supportSessionId), 'utf8').catch(
-    () => null,
+    (error: unknown) => {
+      if (
+        error &&
+        typeof error === 'object' &&
+        'code' in error &&
+        error.code === 'ENOENT'
+      )
+        return null
+      throw error
+    },
   )
   if (raw === null) return null
   const parsed: unknown = JSON.parse(raw)
@@ -246,75 +243,10 @@ const ensureManifest = async (supportSessionId: string) => {
   return manifest
 }
 
-const fitSize = (width: number, height: number) => {
-  const ratio = Math.min(
-    1,
-    maxCaptureWidth / Math.max(width, 1),
-    maxCaptureHeight / Math.max(height, 1),
-  )
-  return {
-    width: Math.max(1, Math.round(width * ratio)),
-    height: Math.max(1, Math.round(height * ratio)),
-  }
-}
+const withCaptureLock = createCaptureSessionQueue()
 
-const sourceThumbnail = async (sourceId: string) => {
-  const sources = await desktopCapturer.getSources({
-    types: ['window'],
-    thumbnailSize: { width: maxCaptureWidth, height: maxCaptureHeight },
-    fetchWindowIcons: true,
-  })
-  const source = sources.find((candidate) => candidate.id === sourceId)
-  if (!source) throw new Error('選んだ画面が見つかりません')
-  if (source.name === 'Mite' || source.name.startsWith('Mite ')) {
-    throw new Error('Miteの画面は選べません')
-  }
-  if (source.thumbnail.isEmpty()) throw new Error('画面を取得できません')
-  return source.thumbnail
-}
-
-const toJpeg = async (sourceId: string) => {
-  const thumbnail = await sourceThumbnail(sourceId)
-  const size = thumbnail.getSize()
-  const fitted = fitSize(size.width, size.height)
-  const resized =
-    fitted.width === size.width && fitted.height === size.height
-      ? thumbnail
-      : thumbnail.resize({ ...fitted, quality: 'best' })
-  return resized.toJPEG(jpegQuality)
-}
-
-let selectedSourceId: string | null = null
-const captureLocks = new Map<string, Promise<unknown>>()
-
-const listSources = async (): Promise<ScreenSourceSummary[]> => {
-  const sources = await desktopCapturer.getSources({
-    types: ['window'],
-    thumbnailSize: { width: 480, height: 270 },
-    fetchWindowIcons: true,
-  })
-  return sources
-    .filter(
-      (source) => source.name !== 'Mite' && !source.name.startsWith('Mite '),
-    )
-    .map((source) => ({
-      id: source.id,
-      name: source.name,
-      thumbnailDataUrl: source.thumbnail.toDataURL(),
-    }))
-}
-
-const selectSource = async (sourceId: string) => {
-  const sources = await listSources()
-  if (!sources.some((source) => source.id === sourceId)) {
-    throw new Error('選んだ画面が見つかりません')
-  }
-  selectedSourceId = sourceId
-}
-
-const capturePreview = async (sourceId: string) => {
-  await selectSource(sourceId)
-  const jpeg = await toJpeg(sourceId)
+const capturePreview = async () => {
+  const jpeg = await primaryScreenCapture.jpeg()
   return {
     capturedAt: new Date().toISOString(),
     bytes: new Uint8Array(jpeg),
@@ -322,14 +254,13 @@ const capturePreview = async (sourceId: string) => {
 }
 
 const saveCaptureUnlocked = async (supportSessionId: string) => {
-  if (!selectedSourceId) throw new Error('共有する画面を選んでください')
   const manifest = await ensureManifest(supportSessionId)
   const maximum = runtimeConfig().captureMaxCount
   if (manifest.captures.length >= maximum) {
     return { manifest, reachedLimit: true }
   }
 
-  const jpeg = await toJpeg(selectedSourceId)
+  const jpeg = await primaryScreenCapture.jpeg(true)
   const sequence = manifest.captures.length + 1
   const filename = fileName(sequence)
   const destination = path.join(captureDirectory(supportSessionId), filename)
@@ -346,21 +277,6 @@ const saveCaptureUnlocked = async (supportSessionId: string) => {
   const updated = { ...manifest, captures: [...manifest.captures, entry] }
   await saveManifest(updated)
   return { manifest: updated, reachedLimit: updated.captures.length >= maximum }
-}
-
-const saveCapture = async (supportSessionId: string) => {
-  const previous = captureLocks.get(supportSessionId) ?? Promise.resolve()
-  const current = previous
-    .catch(() => {})
-    .then(() => saveCaptureUnlocked(supportSessionId))
-  captureLocks.set(supportSessionId, current)
-  try {
-    return await current
-  } finally {
-    if (captureLocks.get(supportSessionId) === current) {
-      captureLocks.delete(supportSessionId)
-    }
-  }
 }
 
 const readCapture = async (supportSessionId: string, filename: string) => {
@@ -419,7 +335,9 @@ const listCaptureSessions = async () => {
       continue
     }
     try {
-      const manifest = await readManifest(entry.name)
+      const manifest = await withCaptureLock(entry.name, () =>
+        readManifest(entry.name),
+      )
       if (!manifest) continue
       const details = await stat(captureDirectory(entry.name))
       sessions.push({
@@ -483,7 +401,7 @@ const registerDisplayMediaHandler = () => {
   session.defaultSession.setDisplayMediaRequestHandler(
     async (request, callback) => {
       if (
-        !selectedSourceId ||
+        request.frame !== userWindow?.webContents.mainFrame ||
         !isTrustedUrl(request.securityOrigin) ||
         !isTrustedUrl(request.frame?.url ?? '') ||
         !request.videoRequested ||
@@ -493,14 +411,8 @@ const registerDisplayMediaHandler = () => {
         return
       }
       try {
-        const sources = await desktopCapturer.getSources({
-          types: ['window'],
-          thumbnailSize: { width: 0, height: 0 },
-        })
-        const source = sources.find(
-          (candidate) => candidate.id === selectedSourceId,
-        )
-        callback(source ? { video: source } : {})
+        const source = await primaryScreenCapture.sharingSource()
+        callback({ video: source })
       } catch {
         callback({})
       }
@@ -510,6 +422,12 @@ const registerDisplayMediaHandler = () => {
 }
 
 const registerIpc = () => {
+  ipcMain.handle('marking:set', (event, marks: unknown) => {
+    assertTrustedSender(event)
+    if (!markingOverlay) throw new Error('Marking overlay is unavailable')
+    markingOverlay.setMarks(marks)
+  })
+  ipcMain.on('marking:ready', (event) => markingOverlay?.rendererReady(event))
   ipcMain.handle('runtime:get-config', (event) => {
     assertTrustedSender(event)
     return runtimeConfig()
@@ -520,19 +438,13 @@ const registerIpc = () => {
     if (!overlayController) throw new Error('overlay is unavailable')
     return overlayController.setMode(mode)
   })
-  ipcMain.handle('screen:list-sources', async (event) => {
+  ipcMain.handle('screen:prepare-share', async (event) => {
     assertTrustedSender(event)
-    return listSources()
+    return primaryScreenCapture.prepareScreenShare()
   })
-  ipcMain.handle('screen:select-source', async (event, sourceId: unknown) => {
+  ipcMain.handle('screen:capture-preview', async (event) => {
     assertTrustedSender(event)
-    if (typeof sourceId !== 'string') throw new Error('sourceId is invalid')
-    await selectSource(sourceId)
-  })
-  ipcMain.handle('screen:capture-preview', async (event, sourceId: unknown) => {
-    assertTrustedSender(event)
-    if (typeof sourceId !== 'string') throw new Error('sourceId is invalid')
-    return capturePreview(sourceId)
+    return capturePreview()
   })
   ipcMain.handle(
     'support-draft:save-screenshot',
@@ -553,6 +465,7 @@ const registerIpc = () => {
     async (event, draftId: unknown) => {
       assertTrustedSender(event)
       if (typeof draftId !== 'string') throw new Error('draftId is invalid')
+      assertScreenCaptureAvailable()
       return supportScreenshotDraftStore().load(draftId)
     },
   )
@@ -567,17 +480,17 @@ const registerIpc = () => {
   ipcMain.handle('capture:initialize', async (event, sessionId: unknown) => {
     assertTrustedSender(event)
     if (typeof sessionId !== 'string') throw new Error('sessionId is invalid')
-    return ensureManifest(sessionId)
+    return withCaptureLock(sessionId, () => ensureManifest(sessionId))
   })
   ipcMain.handle('capture:save', async (event, sessionId: unknown) => {
     assertTrustedSender(event)
     if (typeof sessionId !== 'string') throw new Error('sessionId is invalid')
-    return saveCapture(sessionId)
+    return withCaptureLock(sessionId, () => saveCaptureUnlocked(sessionId))
   })
   ipcMain.handle('capture:get-manifest', async (event, sessionId: unknown) => {
     assertTrustedSender(event)
     if (typeof sessionId !== 'string') throw new Error('sessionId is invalid')
-    return readManifest(sessionId)
+    return withCaptureLock(sessionId, () => readManifest(sessionId))
   })
   ipcMain.handle(
     'capture:read-file',
@@ -586,7 +499,7 @@ const registerIpc = () => {
       if (typeof sessionId !== 'string' || typeof filename !== 'string') {
         throw new Error('capture path is invalid')
       }
-      return readCapture(sessionId, filename)
+      return withCaptureLock(sessionId, () => readCapture(sessionId, filename))
     },
   )
   ipcMain.handle(
@@ -596,7 +509,7 @@ const registerIpc = () => {
       if (typeof sessionId !== 'string' || typeof batchId !== 'string') {
         throw new Error('capture identifiers are invalid')
       }
-      return setBatchId(sessionId, batchId)
+      return withCaptureLock(sessionId, () => setBatchId(sessionId, batchId))
     },
   )
   ipcMain.handle(
@@ -604,7 +517,7 @@ const registerIpc = () => {
     async (event, sessionId: unknown) => {
       assertTrustedSender(event)
       if (typeof sessionId !== 'string') throw new Error('sessionId is invalid')
-      return ensureNoMaterialsKey(sessionId)
+      return withCaptureLock(sessionId, () => ensureNoMaterialsKey(sessionId))
     },
   )
   ipcMain.handle('capture:list-sessions', async (event) => {
@@ -616,7 +529,9 @@ const registerIpc = () => {
     async (event, sessionId: unknown) => {
       assertTrustedSender(event)
       if (typeof sessionId !== 'string') throw new Error('sessionId is invalid')
-      await rm(captureDirectory(sessionId), { recursive: true, force: true })
+      await withCaptureLock(sessionId, () =>
+        rm(captureDirectory(sessionId), { recursive: true, force: true }),
+      )
     },
   )
 }
@@ -650,6 +565,8 @@ const createWindow = () => {
       sandbox: true,
     },
   })
+  userWindow = window
+  if (process.platform === 'win32') window.setContentProtection(true)
   overlayController = new UserOverlayController(
     window,
     () => screen.getPrimaryDisplay(),
@@ -667,30 +584,53 @@ const createWindow = () => {
   window.once('close', () => {
     overlayController?.dispose()
   })
+  window.webContents.on('did-start-loading', () => markingOverlay?.setMarks([]))
+  window.webContents.on('render-process-gone', () =>
+    markingOverlay?.setMarks([]),
+  )
   window.once('closed', () => {
     overlayController = null
+    userWindow = null
+    markingOverlay?.dispose()
+    markingOverlay = null
   })
 
   const developmentUrl = process.env.MITE_RENDERER_DEV_URL
-  if (!app.isPackaged && developmentUrl && isTrustedUrl(developmentUrl)) {
-    void window.loadURL(developmentUrl)
-  } else {
-    void window.loadURL(`${productionOrigin}/index.html`)
-  }
+  const rendererUrl =
+    !app.isPackaged && developmentUrl && isTrustedUrl(developmentUrl)
+      ? developmentUrl
+      : `${productionOrigin}/index.html`
+  const markingUrl = new URL(rendererUrl)
+  markingUrl.searchParams.set('view', 'marking')
+  markingOverlay = new MarkingOverlay(
+    markingUrl.toString(),
+    path.join(__dirname, '../preload/marking-preload.js'),
+  )
+  void window.loadURL(rendererUrl)
 }
 
 app.whenReady().then(() => {
+  if (isWslCaptureEnvironment()) {
+    console.warn(
+      'WSLではWindowsの画面全体を撮影・共有できません。Windows側のNode.jsで npm run dev:user を実行してください。手順: docs/setup.md',
+    )
+  }
   registerAppProtocol()
   session.defaultSession.setPermissionRequestHandler(
     (webContents, permission, callback) => {
-      const trusted = isTrustedUrl(webContents.getURL())
+      const trusted =
+        webContents === userWindow?.webContents &&
+        isTrustedUrl(webContents.getURL())
       callback(trusted && permission === 'media')
     },
   )
   registerDisplayMediaHandler()
   registerIpc()
   createWindow()
-  const refreshOverlay = () => overlayController?.refresh()
+  const refreshOverlay = () => {
+    overlayController?.refresh()
+    markingOverlay?.refresh()
+  }
   screen.on('display-metrics-changed', refreshOverlay)
   screen.on('display-added', refreshOverlay)
   screen.on('display-removed', refreshOverlay)
@@ -700,6 +640,7 @@ app.whenReady().then(() => {
 })
 
 app.on('before-quit', () => {
+  markingOverlay?.dispose()
   overlayController?.dispose()
 })
 

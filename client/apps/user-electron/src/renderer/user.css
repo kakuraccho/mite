@@ -104,64 +104,6 @@ body {
   font-weight: 700;
 }
 
-.user-source-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-  gap: 16px;
-}
-
-.user-source-card {
-  display: grid;
-  min-height: 220px;
-  overflow: hidden;
-  padding: 0 0 16px;
-  border: 3px solid transparent;
-  border-radius: 16px;
-  color: var(--mite-ink);
-  background: var(--mite-green-50);
-  text-align: left;
-}
-
-.user-source-card[data-selected='true'] {
-  border-color: var(--mite-gold);
-  background: var(--mite-gold-soft);
-}
-
-.user-source-card img {
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  object-fit: contain;
-  background: #17211e;
-}
-
-.user-source-card span,
-.user-source-card strong {
-  padding: 10px 16px 0;
-  overflow-wrap: anywhere;
-}
-
-.user-source-card strong {
-  color: var(--mite-green-800);
-}
-
-.user-reselect-source {
-  display: grid;
-  max-width: 640px;
-  gap: 14px;
-  padding: 18px;
-  border: 2px solid var(--mite-green-200);
-  border-radius: 18px;
-  background: var(--mite-green-50);
-}
-
-.user-reselect-source img {
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  object-fit: contain;
-  border-radius: 12px;
-  background: #17211e;
-}
-
 .user-preview {
   margin: 0;
   overflow: hidden;
@@ -344,48 +286,6 @@ body {
   width: 28px;
   height: 28px;
   flex: 0 0 28px;
-}
-
-.user-shared-view {
-  position: relative;
-  display: grid;
-  min-height: 450px;
-  overflow: hidden;
-  place-items: center;
-  border-radius: 20px;
-  background: #17211e;
-}
-
-.user-shared-view > img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  max-height: 620px;
-  object-fit: contain;
-}
-
-.user-sharing-label {
-  position: absolute;
-  top: 16px;
-  left: 16px;
-  padding: 8px 13px;
-  border-radius: 999px;
-  color: white;
-  background: rgb(23 55 47 / 90%);
-  font-size: 20px;
-  font-weight: 850;
-}
-
-.user-mark {
-  position: absolute;
-  z-index: 2;
-  width: 62px;
-  height: 62px;
-  border: 7px solid #ffb000;
-  border-radius: 50%;
-  box-shadow: 0 0 0 4px rgb(255 255 255 / 85%);
-  pointer-events: none;
-  transform: translate(-50%, -50%);
 }
 
 .user-support-controls {
