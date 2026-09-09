@@ -87,3 +87,11 @@
 ## 判断待ち・承認待ち
 
 現時点でなし。
+
+## 起動エラーの追加修正（2026-09-09）
+
+- 実利用で `npm run dev:user` が `ERR_MODULE_NOT_FOUND`（`client-core/src/idempotency`）で停止した。前回追加したmainの定数・案内検証が、TypeScriptソースを公開する共有packageを実行時に読み込んだことが原因。従来のtsc出力は外部importを残し、Vite経由の既存テストではこの問題を検出できなかった。
+- `client/scripts/build-electron.mjs` を追加し、既存Viteでmain・各preloadを個別のCommonJSファイルへまとめる。両アプリの開発起動・配布buildで共通化し、共有コードを含め、Electron・Node組み込み・Koffiは外部参照を維持する。追加依存・API変更はない。
+- 両アプリの生成したmainとsandbox付きpreloadを、ViteのTypeScript変換を介さず読み込む回帰テスト2件が成功。client全体は139成功・2skip。skipはHTTP統合環境変数の未指定とLinux限定テストで、今回サーバー契約は変更していない。
+- Lint・型チェック・両アプリのElectron/rendererビルド成功。通常の整形チェックは未変更のCRLFファイル74件で失敗し、`npm run format:check -- --end-of-line auto` は成功。保護対象のlockfileは変更していない。
+- 実Electronを起動する追加検証コマンドは、自動承認レビューで `blocked by policy` として拒否された。詳細理由は返されていない。実ウィンドウ起動の確認は未実施であり、生成物読み込みの自動テストと区別する。開発ターミナルの既存プロセスをCtrl+Cで終了し、`client/` で `npm run dev:user` を再実行して確認する。

@@ -42,6 +42,12 @@ npm run test
 npm run build
 ```
 
+Electronの `main` と各 `preload` は `client/scripts/build-electron.mjs` で型チェック後、既存のViteを使ってCommonJSへバンドルします。`npm run dev:user`、`npm run dev:family` と配布用の `build:electron` は同じ処理を使います。`dist-electron/main/main.js` と `dist-electron/preload/*.js` が実行用の生成物です。
+
+`@mite/client-core` などのworkspaceはTypeScriptソースを公開しているため、Electronから直接読み込まず、必要なコードを実行用JavaScriptへ含めます。Electron・Node組み込みmodule・Koffiはバンドルの外に残し、既存のKoffi配布hookを維持します。sandbox付きpreloadはアプリ内moduleを `require` できないため、それぞれ単独のファイルにまとめます。根拠: [Vite library mode](https://vite.dev/guide/build.html#library-mode)、[Electron sandbox](https://www.electronjs.org/docs/latest/tutorial/sandbox)。
+
+`client/scripts/build-electron.test.ts` は両アプリを実際にビルドし、生成したmainとpreloadをViteのTypeScript変換を介さず読み込みます。ElectronのAPIを疑似化したmodule読み込みの回帰テストであり、実ウィンドウや通話の確認は別途必要です。
+
 ### Goサーバー
 
 `server/`で実行します。
