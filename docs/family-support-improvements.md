@@ -95,3 +95,48 @@
 - 両アプリの生成したmainとsandbox付きpreloadを、ViteのTypeScript変換を介さず読み込む回帰テスト2件が成功。client全体は139成功・2skip。skipはHTTP統合環境変数の未指定とLinux限定テストで、今回サーバー契約は変更していない。
 - Lint・型チェック・両アプリのElectron/rendererビルド成功。通常の整形チェックは未変更のCRLFファイル74件で失敗し、`npm run format:check -- --end-of-line auto` は成功。保護対象のlockfileは変更していない。
 - 実Electronを起動する追加検証コマンドは、自動承認レビューで `blocked by policy` として拒否された。詳細理由は返されていない。実ウィンドウ起動の確認は未実施であり、生成物読み込みの自動テストと区別する。開発ターミナルの既存プロセスをCtrl+Cで終了し、`client/` で `npm run dev:user` を再実行して確認する。
+
+
+## 表示とガイド作成中の共有停止の追加調整（2026-09-09）
+
+この節は上記のv1.5時点の「生成・編集中も共有する」動作を更新する。現行仕様は [specification.md](specification.md) v1.6を参照する。
+
+- 支援依頼画面は画像とコメントを横に配置し、通常の詳細表示サイズでは送信ボタンまで一画面に収める。画像はポップアップで拡大でき、入力・撮り直し・再送状態を保持する。小さい画面や長いエラーでは文字を小さくせずスクロールを許す。
+- 点滅は、案内受信ごとの `setGuidance(null)` とネイティブ窓の `showInactive()` の繰り返しが原因だった。丸の消去と案内全消去を分け、表示中は窓を開き直さず内容を更新する。TTL・共有停止・接続切断時の消去は維持する。
+- マウス図はボタン押下中だけカーソル横に表示し、画面端では範囲内へ収める。キーボードは [参考の全体図](https://dynabook.com/assistpc/tab/faq/pcdata/720212.htm) のようなコードで描く図を画面幅の約80%で表示し、押しているキーと同時押しを示す。全キー解放で消える。
+- CREATE後のアップロード・AI生成・編集は音声だけを継続する。画面配信と撮影・案内は停止する。接続開始と状態変更の競合でも映像の開始を抑止し、publish中の停止は処理順を保ってunpublishする。家族側も作成中は映像枠を外す。
+- 保存後は作成前に共有していた場合だけ映像を自動再開する。手動停止やアプリ再起動後は再開ボタンを使う。定期撮影は保存後に再開しない。
+- 同意文をv3へ更新し、API生成物とサーバーの新規応答検証を合わせた。追加migration `20260909000200_update_support_consent_v3.sql` は履歴v1・v2を保持する。反映時はDB migration、サーバー、両クライアントの版を揃える。共有環境へは未適用。
+
+検証結果:
+
+| 対象 | 結果 |
+|---|---|
+| API・共有package | ルートの `npm run generate:api`、`npm run typecheck`、`npm run lint`、`npm run build` 成功。 |
+| client | 型チェック・Lint・両Electronアプリのbuild成功。最後の停止完了通知の競合修正後も利用者側の型チェック・Lint・renderer buildを再実行。既存の500kB超chunk警告は残る。 |
+| clientテスト | `npm run test -- --maxWorkers=1` は145成功・2skip。連続案内の無消去更新、ネイティブ窓の表示維持、マウス解放、キーボード図の押下表示、画像拡大時の入力保持、共有の停止と条件付き再開、作成中の音声だけの再接続、接続中に作成開始する競合を確認。最終確認で共有停止通知が保存後まで遅れる場合を追加し、利用者Appの22件を再実行して成功。 |
+| Go | `CGO_ENABLED=0`、`GOMAXPROCS=2`、`GOFLAGS=-p=1` で `go tool sqlc generate`、`go test ./...`、`go vet ./...`、`go build ./...` 成功。v1・v2・不正な同意の新規受付拒否を確認。 |
+| 整形 | 通常の `npm run format:check` は未変更のCRLFファイル74件で失敗。変更ファイルはすべて成功。`npm run format:check -- --end-of-line auto` は全体成功。 |
+| 差分・文書 | `git diff --check` 成功。更新した開発・接続・仕様書のローカルリンクの参照先を確認。 |
+
+今回実施できなかった確認:
+
+- clientの2skipはLinux限定の撮影テストとHTTP統合環境変数が必要なテスト。GoのDB・Storage・runtime統合テストも環境変数未設定でskip。この時点ではローカルDocker Engineが停止していたため実DB検証を保留した。後続のDocker追加検証で、新migrationを含むDB・Storage・runtime・クライアント接続テストは成功した（次節参照）。
+- 実LiveKitでの音声と映像、Windowsの点滅・DPI・画面内への収まりは未確認。ブラウザ操作ツールはカーネル資産パスのエラーで初期化できず、その後のChromeによる表示確認用起動は自動承認レビューに `blocked by policy` として拒否された。詳細理由は返されていない。模擬DOMとネイティブAPIの自動テストは実画面検証として扱わない。
+- Windows配布物の `npm run make:user`・`npm run make:family`、実LiveKit Cloud・Gemini接続は未実施。依存関係・配布設定は今回変更していない。実機で [開発ガイドの確認手順](development.md) を実行する。
+
+
+## Dockerでの追加検証（2026-09-09）
+
+起動済みのローカルSupabaseを使い、専用DBと非公開の専用Storage bucketで検証した。API生成・sqlc生成も再実行し、生成物に追加変更がないことを確認した。Docker関連のテストで追加修正を要する不具合は検出されなかった。
+
+| 検証 | 結果 |
+|---|---|
+| DB・Storageを有効にした `go test ./internal/... -count=1 -v` | 114件成功、skipなし。repository/serviceのPostgreSQL統合と実Storageの保存・取得・削除を含む。 |
+| `TestServerRuntimeE2E` | 成功。実HTTP・WebSocket・DB・Storage・workerを使い、同意v3での応答、ガイド保存、保存後の試行と手動終了まで確認。生成器とLiveKit認証情報はテスト用。 |
+| `TestClientAdapterE2E` | 成功。実 `HttpMiteApi` とGoサーバーを接続し、内側のTypeScript統合テスト1件も成功。 |
+| 既存同意のmigration | v1・v2の同意を入れた旧スキーマに `20260909000200_update_support_consent_v3.sql` を適用して成功。両方の同意とrevisionが変更されないことを確認。 |
+
+GoはWindows上で `CGO_ENABLED=0`、`GOMAXPROCS=2`、`GOFLAGS=-p=1` とし、DBとStorageはDocker上のSupabaseを利用した。手順と環境変数は [接続確認](server-client-integration.md#8-接続確認) に従う。端末上のGo race検査は未実施で、PRのLinux CIで実行する。Chromeによる表示確認はユーザーの指示により今回の対象外とする。
+
+検証に作成した `mite_overlay_pr_internal`、`mite_overlay_pr_runtime`、`mite_overlay_pr_client`、`mite_overlay_pr_migration` の4DBと非公開bucket `mite-overlay-pr-tests` は削除した。既存のDB、bucket、Supabaseコンテナと他プロジェクトのコンテナは保持した。

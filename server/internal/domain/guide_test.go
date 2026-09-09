@@ -96,15 +96,17 @@ func TestValidateGuideDraftContentRejectsInvalidStep(t *testing.T) {
 
 func TestConsentAccepted(t *testing.T) {
 	t.Parallel()
-	accepted := Consent{Audio: true, ScreenShare: true, PeriodicCapture: true, TextVersion: "v2"}
+	accepted := Consent{Audio: true, ScreenShare: true, PeriodicCapture: true, TextVersion: "v3"}
 	if !accepted.Accepted() {
-		t.Fatal("complete v2 consent was rejected")
+		t.Fatal("complete v3 consent was rejected")
 	}
-	accepted.TextVersion = "v1"
-	if accepted.Accepted() {
-		t.Fatal("historical consent must not authorize a new call")
+	for _, version := range []string{"v1", "v2", "v4", ""} {
+		accepted.TextVersion = version
+		if accepted.Accepted() {
+			t.Fatalf("consent %q must not authorize a new call", version)
+		}
 	}
-	accepted.TextVersion = "v2"
+	accepted.TextVersion = "v3"
 	accepted.Audio = false
 	if accepted.Accepted() {
 		t.Fatal("partial consent was accepted")

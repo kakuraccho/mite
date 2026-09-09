@@ -12,6 +12,7 @@ export class MarkingOverlay {
   #marks: DesktopMark[] = []
   #guidance: DesktopGuidance | null = null
   #ready = false
+  #visible = false
   #timer: ReturnType<typeof setTimeout> | null = null
 
   constructor(url: string, preload: string) {
@@ -49,7 +50,7 @@ export class MarkingOverlay {
     )
     this.window.webContents.on('did-start-loading', () => {
       this.#ready = false
-      this.window.hide()
+      this.#setVisible(false)
     })
     this.window.webContents.on('render-process-gone', () => this.clear())
     this.window.once('closed', () => {
@@ -114,6 +115,13 @@ export class MarkingOverlay {
     if (!this.window.isDestroyed()) this.window.destroy()
   }
 
+  #setVisible(visible: boolean) {
+    if (visible === this.#visible) return
+    this.#visible = visible
+    if (visible) this.window.showInactive()
+    else this.window.hide()
+  }
+
   #render() {
     if (this.#timer) clearTimeout(this.#timer)
     this.#timer = null
@@ -125,11 +133,7 @@ export class MarkingOverlay {
       this.window.webContents.send('guidance:changed', this.#guidance)
     if (this.#ready)
       this.window.webContents.send('marking:changed', this.#marks)
-    if (!this.#ready || (!this.#marks.length && !this.#guidance)) {
-      this.window.hide()
-    } else {
-      this.window.showInactive()
-    }
+    this.#setVisible(this.#ready && (!!this.#marks.length || !!this.#guidance))
     if (this.#marks.length || this.#guidance) {
       const delay = Math.min(
         ...this.#marks.map((mark) => mark.expiresAt - now),

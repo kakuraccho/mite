@@ -361,7 +361,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** ガイド下書きを保存し、GUIDE_SAVEDで通話と共有を継続する */
+        /** ガイド下書きを保存し、GUIDE_SAVEDで通話を継続し共有を再開できる状態にする */
         post: operations["saveGuideDraft"];
         delete?: never;
         options?: never;
@@ -574,10 +574,10 @@ export interface components {
             screenShare: boolean;
             periodicCapture: boolean;
             /**
-             * @description v1は過去の同意。新しい応答は10秒撮影と保存後の通話継続を説明するv2を使う。
+             * @description v1・v2は過去の同意。新しい応答は10秒撮影、手順作成中の共有停止と保存後の再開を説明するv3を使う。
              * @enum {string}
              */
-            textVersion: "v1" | "v2";
+            textVersion: "v1" | "v2" | "v3";
         };
         SupportSession: {
             id: string;
@@ -748,7 +748,7 @@ export interface components {
             expectedSessionRevision: number;
             consent: components["schemas"]["Consent"] & {
                 /** @enum {string} */
-                textVersion?: "v2";
+                textVersion?: "v3";
             };
         };
         EndSupportSessionRequest: {

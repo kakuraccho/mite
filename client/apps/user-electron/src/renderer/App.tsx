@@ -23,6 +23,7 @@ import {
 import {
   deriveUserSupportScreen,
   canContinueCall,
+  canShareScreen,
   canCaptureGuideMaterial,
   CAPTURE_INTERVAL_MS,
   IdempotencyKeyStore,
@@ -69,7 +70,7 @@ const guideRunKey = 'mite.user.guideRunId'
 const supportDraftKey = 'mite.user.supportDraftId'
 const supportDraftPayloadKey = 'mite.user.supportDraftPayload'
 const consentText =
-  '応答すると、家族との音声通話とメインの画面全体の共有が始まります。共有の開始直後に1枚、その後10秒ごとに、この端末へ画像を一時保存します。家族が手順を作ることを選ぶと撮影を止め、画像をMiteサーバーへ送り、GoogleのGemini AIで下書きを作ります。手順の作成中と保存後も、通話と画面共有は続きます。画面共有はいつでも止められます。画面に個人情報が映る可能性があります。音声通話・画面共有・画像の保存と送信に同意して応答しますか。'
+  '応答すると、家族との音声通話とメインの画面全体の共有が始まります。共有の開始直後に1枚、その後10秒ごとに、この端末へ画像を一時保存します。家族が手順を作ることを選ぶと撮影を止め、画像をMiteサーバーへ送り、GoogleのGemini AIで下書きを作ります。手順の作成中は画面共有を止め、音声通話だけを続けます。保存すると、作成前に共有していた場合だけ画面共有を再開します。画面共有はいつでも止められます。画面に個人情報が映る可能性があります。音声通話・画面共有・画像の保存と送信に同意して応答しますか。'
 
 interface EventStreamController {
   start(): void
@@ -219,6 +220,7 @@ function SupportRequestComposer({
     url: string
   } | null>(null)
   const [comment, setComment] = useState(recoveredPayload?.comment ?? '')
+  const [previewOpen, setPreviewOpen] = useState(false)
   const [pendingPayload, setPendingPayload] = useState(recoveredPayload)
   const [capturing, setCapturing] = useState(!recoveredPayload)
   const [sending, setSending] = useState(false)
@@ -403,77 +405,99 @@ function SupportRequestComposer({
   }
 
   return (
-    <Surface elevated>
+    <Surface elevated className="user-request-composer">
       <ScreenHeading
-        eyebrow="家族に相談"
-        title="困っている画面を家族に見せましょう"
-        description="メインの画面全体を撮影します。Mite自身の画面は写しません。撮り直してから送ることもできます。"
+        title="家族に相談する"
+        description="送る画面を確認して、下のボタンで知らせましょう。"
       />
       {error ? <ErrorNotice message={error} /> : null}
-      <div className="user-stack">
-        {pendingPayload ? (
-          <Notice tone="warning" title="前回の送信を確認しています">
-            同じ内容で家族への連絡を続けます。
-          </Notice>
-        ) : (
-          <Button
-            variant="secondary"
-            size="large"
-            disabled={capturing || sending}
-            onClick={() => void capture()}
-          >
-            {capturing
-              ? '撮影しています…'
-              : preview
-                ? '画面を撮り直す'
-                : '画面を撮影する'}
-          </Button>
-        )}
-        {preview ? (
-          <figure className="user-preview">
-            <img src={preview.url} alt="家族に送る画面" />
-            <figcaption>この画面を家族に送ります</figcaption>
-          </figure>
-        ) : null}
+      {pendingPayload ? (
+        <Notice tone="warning" title="前回の送信を確認しています">
+          同じ内容で家族への連絡を続けます。
+        </Notice>
+      ) : null}
+      <div className="user-request-fields">
+        <div className="user-request-screenshot">
+          {preview ? (
+            <button
+              className="user-request-preview"
+              aria-label="家族に送る画面を大きく見る"
+              onClick={() => setPreviewOpen(true)}
+            >
+              <img src={preview.url} alt="家族に送る画面" />
+              <span>押すと大きく見られます</span>
+            </button>
+          ) : (
+            <p>家族に送る画面を準備します</p>
+          )}
+          {!pendingPayload ? (
+            <Button
+              variant="secondary"
+              size="large"
+              disabled={capturing || sending}
+              onClick={() => void capture()}
+            >
+              {capturing
+                ? '撮影しています…'
+                : preview
+                  ? '画面を撮り直す'
+                  : '画面を撮影する'}
+            </Button>
+          ) : null}
+        </div>
         <label className="user-field">
           <span>困っていること（書かなくても大丈夫です）</span>
           <textarea
             value={comment}
             disabled={sending || Boolean(pendingPayload)}
             maxLength={500}
-            rows={4}
+            rows={3}
             onChange={(event) => setComment(event.target.value)}
             placeholder="例：元の購入画面に戻れない"
           />
           <small>{codePointLength(comment)} / 500文字</small>
         </label>
-        <div className="user-actions">
-          <Button
-            variant="secondary"
-            size="large"
-            disabled={sending || capturing}
-            onClick={onCancel}
-          >
-            戻る
-          </Button>
-          <Button
-            size="large"
-            disabled={
-              (!preview && !pendingPayload) ||
-              sending ||
-              capturing ||
-              codePointLength(comment) > 500
-            }
-            onClick={() => void send()}
-          >
-            {sending
-              ? '家族に知らせています…'
-              : pendingPayload
-                ? '前回の送信を続ける'
-                : '家族に相談する'}
-          </Button>
-        </div>
       </div>
+      <div className="user-actions">
+        <Button
+          variant="secondary"
+          size="large"
+          disabled={sending || capturing}
+          onClick={onCancel}
+        >
+          戻る
+        </Button>
+        <Button
+          size="large"
+          disabled={
+            (!preview && !pendingPayload) ||
+            sending ||
+            capturing ||
+            codePointLength(comment) > 500
+          }
+          onClick={() => void send()}
+        >
+          {sending
+            ? '家族に知らせています…'
+            : pendingPayload
+              ? '前回の送信を続ける'
+              : '家族に相談する'}
+        </Button>
+      </div>
+      <Modal
+        title="家族に送る画面"
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+      >
+        {preview ? (
+          <img
+            className="user-request-expanded-preview"
+            src={preview.url}
+            alt="家族に送る画面の拡大表示"
+          />
+        ) : null}
+        <p>メインの画面全体を送ります。Mite自身の画面は写しません。</p>
+      </Modal>
     </Surface>
   )
 }
@@ -1230,6 +1254,11 @@ export function UserClient({
   const sessionRef = useRef<SupportSession | null>(null)
   const refreshRef = useRef<() => Promise<void>>(async () => {})
   const screenSharingRef = useRef(false)
+  const sharingAttemptSession = useRef<string | null>(null)
+  const resumeAfterGuideSession = useRef<string | null>(null)
+  const guidePauseRef = useRef<Promise<void>>(Promise.resolve())
+  const guidePauseMediaRef = useRef<UserMediaSession | null>(null)
+  const resumeSharingRef = useRef<() => Promise<void>>(async () => {})
   const mediaGenerationRef = useRef(0)
   const mediaRef = useRef<UserMediaSession | null>(null)
   const volumePreparedSessions = useRef(new Set<string>())
@@ -1294,13 +1323,17 @@ export function UserClient({
     captureTimerRef.current = null
   }, [])
 
-  const clearMarks = useCallback(() => {
+  const clearCircleMarks = useCallback(() => {
     setMarks([])
-    void desktop.setGuidance(null).catch(() => {})
     for (const timer of markTimers.current.values()) clearTimeout(timer)
     markTimers.current.clear()
     void desktop.setMarkings([]).catch(() => {})
   }, [desktop])
+
+  const clearMarks = useCallback(() => {
+    clearCircleMarks()
+    void desktop.setGuidance(null).catch(() => {})
+  }, [clearCircleMarks, desktop])
 
   useEffect(() => {
     void desktop.setMarkings(marks).catch(() => {
@@ -1310,6 +1343,7 @@ export function UserClient({
 
   const disconnectMedia = useCallback(async () => {
     mediaGenerationRef.current += 1
+    resumeAfterGuideSession.current = null
     screenSharingRef.current = false
     stopCapturing()
     const media = mediaRef.current
@@ -1358,6 +1392,38 @@ export function UserClient({
       mergeSession(effectiveSession)
       if (effectiveSession.status !== 'ACTIVE') stopCapturing()
       if (
+        canContinueCall(effectiveSession) &&
+        !canShareScreen(effectiveSession)
+      ) {
+        if (
+          screenSharingRef.current ||
+          sharingAttemptSession.current === effectiveSession.id
+        )
+          resumeAfterGuideSession.current = effectiveSession.id
+        screenSharingRef.current = false
+        setScreenSharing(false)
+        clearMarks()
+        if (canShareScreen(previousSession)) {
+          const media = mediaRef.current
+          guidePauseMediaRef.current = media
+          guidePauseRef.current = (async () => {
+            try {
+              await media?.stopScreenShare()
+            } catch {
+              // If unpublishing fails, stop the room to prevent continued sharing.
+              await disconnectMedia()
+              setError(
+                '画面共有を止めるため通話を切りました。音声通話をつなぎ直してください。',
+              )
+            } finally {
+              if (guidePauseMediaRef.current === media)
+                guidePauseMediaRef.current = null
+            }
+          })()
+          await guidePauseRef.current
+        }
+      }
+      if (
         effectiveSession.status === 'RINGING' &&
         previousSession?.status !== 'RINGING'
       )
@@ -1390,6 +1456,7 @@ export function UserClient({
       api,
       desktop,
       disconnectMedia,
+      clearMarks,
       mergeRequest,
       mergeSession,
       stopCapturing,
@@ -1637,7 +1704,7 @@ export function UserClient({
                 audio: true,
                 screenShare: true,
                 periodicCapture: true,
-                textVersion: 'v2',
+                textVersion: 'v3',
               },
             },
             { idempotencyKey },
@@ -1767,20 +1834,19 @@ export function UserClient({
     setActionBusy(true)
     setError(null)
     const generation = ++mediaGenerationRef.current
+    sharingAttemptSession.current = canShareScreen(sharingSession)
+      ? sharingSession.id
+      : null
     const isCurrentShare = () =>
       generation === mediaGenerationRef.current &&
       sessionRef.current?.id === sharingSession.id &&
       canContinueCall(sessionRef.current)
     try {
       const current = await api.getSupportSession(sharingSession.id)
-      mergeSession(current)
-      if (!canContinueCall(current)) {
-        const activeRequest = requestRef.current
-        if (activeRequest) await applySupportState(activeRequest, current)
-        return
-      }
-      if (!isCurrentShare()) return
-      const source = await desktop.prepareScreenShare()
+      const activeRequest = requestRef.current
+      if (activeRequest) await applySupportState(activeRequest, current)
+      else mergeSession(current)
+      if (!canContinueCall(sessionRef.current)) return
       if (!isCurrentShare()) return
       let media = mediaRef.current
       const startingCall = !media || mediaState === 'DISCONNECTED'
@@ -1804,59 +1870,77 @@ export function UserClient({
         if (!isCurrentShare()) return
         const token = await api.getLiveKitToken(current.id)
         if (!isCurrentShare()) return
-        await media.connect(token, {
-          onStateChange: (state) => {
-            if (mediaRef.current !== media) return
-            setMediaState(state)
-            if (state === 'RECONNECTING' || state === 'DISCONNECTED') {
-              mediaGenerationRef.current += 1
+        await media.connect(
+          token,
+          {
+            onStateChange: (state) => {
+              if (mediaRef.current !== media) return
+              setMediaState(state)
+              if (state === 'RECONNECTING' || state === 'DISCONNECTED') {
+                mediaGenerationRef.current += 1
+                screenSharingRef.current = false
+                clearMarks()
+                stopCapturing()
+                setScreenSharing(false)
+                setError(
+                  canShareScreen(sessionRef.current)
+                    ? '家族との通話が途切れました。状態を確認して、画面共有を再開してください。'
+                    : '家族との通話が途切れました。音声通話をつなぎ直してください。',
+                )
+              }
+            },
+            onMarking: recordMarking,
+            onGuidance: (message) => {
+              if (mediaRef.current !== media || !screenSharingRef.current)
+                return
+              if (message === null || message.type === 'guidance.clear') {
+                void desktop.setGuidance(null).catch(() => {})
+                return
+              }
+              clearCircleMarks()
+              void desktop
+                .setGuidance({
+                  ...message,
+                  expiresAt: Date.now() + message.ttlMs,
+                })
+                .catch(() => setError('家族の操作案内を表示できませんでした。'))
+            },
+            onAudioLevel: setAudioLevel,
+            onLocalAudioLevel: setLocalAudioLevel,
+            onScreenShareStopped: () => {
+              if (mediaRef.current !== media) return
+              // A delayed guide pause must not cancel the queued resume after save.
+              if (guidePauseMediaRef.current !== media)
+                mediaGenerationRef.current += 1
               screenSharingRef.current = false
-              clearMarks()
               stopCapturing()
               setScreenSharing(false)
-              setError(
-                '家族との通話が途切れました。状態を確認して、画面共有を再開してください。',
-              )
-            }
+              clearMarks()
+            },
           },
-          onMarking: recordMarking,
-          onGuidance: (message) => {
-            if (mediaRef.current !== media || !screenSharingRef.current) return
-            if (message === null || message.type === 'guidance.clear') {
-              void desktop.setGuidance(null).catch(() => {})
-              return
-            }
-            clearMarks()
-            void desktop
-              .setGuidance({
-                ...message,
-                expiresAt: Date.now() + message.ttlMs,
-              })
-              .catch(() => setError('家族の操作案内を表示できませんでした。'))
-          },
-          onAudioLevel: setAudioLevel,
-          onLocalAudioLevel: setLocalAudioLevel,
-          onScreenShareStopped: () => {
-            if (mediaRef.current !== media) return
-            mediaGenerationRef.current += 1
-            screenSharingRef.current = false
-            stopCapturing()
-            setScreenSharing(false)
-            clearMarks()
-          },
-        })
-      } else {
-        await media.startScreenShare()
+          { shareScreen: false },
+        )
+        if (startingCall) setMicrophoneEnabled(true)
       }
       if (!isCurrentShare()) {
-        await media.disconnect()
+        if (!canContinueCall(sessionRef.current) || mediaRef.current !== media)
+          await media.disconnect()
+        return
+      }
+      if (!canShareScreen(sessionRef.current)) return
+      await guidePauseRef.current
+      if (!isCurrentShare() || !canShareScreen(sessionRef.current)) return
+      const source = await desktop.prepareScreenShare()
+      if (!isCurrentShare() || !canShareScreen(sessionRef.current)) return
+      await media.startScreenShare()
+      if (!isCurrentShare() || !canShareScreen(sessionRef.current)) {
+        await media.stopScreenShare()
         return
       }
       clearMarks()
       screenSharingRef.current = true
       setScreenSource(source)
       setScreenSharing(true)
-      if (startingCall) setMicrophoneEnabled(true)
       await startCapturing(current.id)
     } catch (caught) {
       screenSharingRef.current = false
@@ -1874,11 +1958,13 @@ export function UserClient({
         )
       }
     } finally {
+      sharingAttemptSession.current = null
       setActionBusy(false)
     }
   }
 
   const stopSharing = async () => {
+    resumeAfterGuideSession.current = null
     mediaGenerationRef.current += 1
     screenSharingRef.current = false
     stopCapturing()
@@ -1890,6 +1976,22 @@ export function UserClient({
       setError('画面共有を止めたことを確認できませんでした。')
     }
   }
+
+  useEffect(() => {
+    resumeSharingRef.current = sharePrimaryScreen
+  })
+
+  useEffect(() => {
+    if (
+      session?.status !== 'GUIDE_SAVED' ||
+      resumeAfterGuideSession.current !== session.id ||
+      actionBusy ||
+      mediaState !== 'CONNECTED'
+    )
+      return
+    resumeAfterGuideSession.current = null
+    void resumeSharingRef.current()
+  }, [session?.status, session?.id, actionBusy, mediaState])
 
   const toggleMicrophone = async () => {
     const next = !microphoneEnabled
@@ -2222,7 +2324,7 @@ export function UserClient({
         onClose={() => setClosedSavedSession(session.id)}
       >
         <p>
-          家族との通話と画面共有は続いています。閉じてから、保存した手順を試してみましょう。
+          家族との通話を続けられます。閉じてから、保存した手順を試してみましょう。
         </p>
       </Modal>
     )
@@ -2304,7 +2406,10 @@ export function UserClient({
   return (
     <>
       {edge}
-      <div className="user-overlay-detail" hidden={overlayCollapsed}>
+      <div
+        className={`user-overlay-detail${view === 'REQUEST' && supportScreen === 'HOME' && !guideRun ? ' user-overlay-detail--request' : ''}`}
+        hidden={overlayCollapsed}
+      >
         <AppShell
           className="user-overlay-shell"
           roleLabel="利用者用"
@@ -2352,19 +2457,33 @@ export function UserClient({
                       ? '自分の声を止める'
                       : '自分の声を届ける'}
                   </Button>
-                  <Button
-                    variant="secondary"
-                    disabled={actionBusy}
-                    onClick={() =>
-                      void (screenSharing
-                        ? stopSharing()
-                        : sharePrimaryScreen())
-                    }
-                  >
-                    {screenSharing
-                      ? '画面共有を止める'
-                      : '画面全体の共有を再開する'}
-                  </Button>
+                  {canShareScreen(session) ? (
+                    <Button
+                      variant="secondary"
+                      disabled={actionBusy}
+                      onClick={() =>
+                        void (screenSharing
+                          ? stopSharing()
+                          : sharePrimaryScreen())
+                      }
+                    >
+                      {screenSharing
+                        ? '画面共有を止める'
+                        : '画面全体の共有を再開する'}
+                    </Button>
+                  ) : (
+                    <>
+                      <span>手順の作成中は画面共有を停止しています</span>
+                      {mediaState === 'DISCONNECTED' ? (
+                        <Button
+                          disabled={actionBusy}
+                          onClick={() => void sharePrimaryScreen()}
+                        >
+                          音声通話をつなぎ直す
+                        </Button>
+                      ) : null}
+                    </>
+                  )}
                   {error ? <ErrorNotice message={error} /> : null}
                 </>
               ) : null}
