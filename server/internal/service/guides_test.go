@@ -282,7 +282,7 @@ func (tx *fakeGuideTx) PromoteArtifact(_ context.Context, id domain.ID, _ pgtype
 func (tx *fakeGuideTx) ListUnusedArtifacts(_ context.Context, _ domain.ID, _ []domain.ID) ([]repository.ArtifactReference, error) {
 	return append([]repository.ArtifactReference(nil), tx.unused...), nil
 }
-func (tx *fakeGuideTx) SaveDraft(_ context.Context, _ domain.ID, now pgtype.Timestamptz) (domain.GuideDraft, error) {
+func (tx *fakeGuideTx) SaveDraft(_ context.Context, _ domain.ID, _ domain.ID, now pgtype.Timestamptz) (domain.GuideDraft, error) {
 	tx.draft.Status = domain.GuideDraftSaved
 	tx.draft.Revision++
 	tx.draft.UpdatedAt = now.Time
@@ -826,4 +826,8 @@ func TestDraftRejectsUnknownArtifactAndFamilyOnlyReads(t *testing.T) {
 	if _, err = service.GetGuideDraft(context.Background(), userMeta("x").Actor, draftID); err != nil {
 		t.Fatalf("user read failed: %v", err)
 	}
+}
+
+func (tx *fakeGuideTx) ListDrafts(_ context.Context, _ domain.ID, _ bool) ([]domain.GuideDraft, error) {
+	return []domain.GuideDraft{tx.draft}, nil
 }

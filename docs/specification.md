@@ -1,7 +1,7 @@
 # Mite MVP 実装仕様書
 
-> DevCamp2026 / 実装基準 v1.4
-> 最終更新: 2026-09-07
+> DevCamp2026 / 実装基準 v1.6
+> 最終更新: 2026-09-09
 > 対象: 利用者側クライアント、家族側クライアント、Miteサーバー
 
 ## 0. 本書の扱い
@@ -24,7 +24,7 @@
 5. 家族がガイド作成の有無を選ぶ。
 6. 作成する場合は、取得画像からAIが下書きを生成する。
 7. 家族が下書きを編集し、利用者が同じ内容を閲覧する。
-8. 家族がガイドを保存する。
+8. 家族が「レビュー完了」1回で、その支援から生成された全ガイドをまとめて確定する。
 9. 利用者が保存済みガイドを選び、1ステップずつ操作する。
 10. ガイドの途中で分からない場合は、ガイド版と現在ステップを引き継いで支援を依頼する。
 
@@ -49,6 +49,7 @@
 - 外部プッシュ通知
 - 本格的なアカウント登録、復旧、家族招待
 - 高度な切断復旧
+- ガイドの手動分割、ガイド同士の統合、ガイドごとの個別承認
 - AIによるガイド検索
 - バックアップと長期保存管理
 
@@ -441,8 +442,8 @@ PENDINGではsupportSessionIdはnullまたはRINGINGのSupportSessionを指す�
 | guideDecision | CREATE、SKIP、null | 解決時に設定 |
 | guideMaterialBatchId | string または null | バッチ作成時に設定 |
 | guideGenerationJobId | string または null | バッチ完了時に設定 |
-| guideDraftId | string または null | AI成功時に設定 |
-| guideId | string または null | 下書き保存時に設定 |
+| guideDraftId | string または null | AI成功時に先頭の下書きIDを設定（互換用の代表参照） |
+| guideId | string または null | レビュー完了時に先頭のガイドIDを設定（互換用の代表参照） |
 | consent | object または null | audio、screenShare、periodicCapture、textVersionを保持 |
 | consentedAt | datetime または null | ACTIVE遷移時に設定 |
 | startedAt | datetime または null | ACTIVE遷移時に設定 |
@@ -487,7 +488,7 @@ GuideMaterialは id、batchId、clientCaptureId、artifactId、sequence、captur
 | batchId | string | 一意 |
 | status | QUEUED、RUNNING、SUCCEEDED、FAILED | 必須 |
 | attempt | integer | 0〜3 |
-| guideDraftId | string または null | 成功時に設定 |
+| guideDraftId | string または null | 成功時に先頭の下書きIDを設定（互換用の代表参照） |
 | errorCode | string または null | 失敗時に設定 |
 | createdAt | datetime | 必須 |
 | startedAt | datetime または null | 任意 |
@@ -502,7 +503,7 @@ QUEUEDではstartedAt、finishedAt、errorCode、guideDraftIdをnull、RUNNING�
 | 項目 | 型 | 制約 |
 |---|---|---|
 | id | string | 主キー |
-| supportSessionId | string | 一意 |
+| supportSessionId | string | 支援セッションID。同じ支援に複数件を持てる |
 | title | string | 1〜40文字 |
 | steps | GuideStep[] | 1〜8件 |
 | status | EDITING、SAVED | 必須 |
@@ -513,6 +514,10 @@ QUEUEDではstartedAt、finishedAt、errorCode、guideDraftIdをnull、RUNNING�
 GuideStepは position、artifactId、instruction を持つ。positionは1から連番、instructionは1〜120文字とする。GuideDraft.stepsはこの値をJSONB配列として保持し、保存済みガイドだけを第5.8節のGuideVersionStepへ正規化する。
 
 EDITINGはREVIEWING_GUIDEのSupportSessionから参照され、SAVEDはendReason=GUIDE_SAVEDのSupportSessionから参照される。SAVEDへ遷移した後は変更しない。
+
+1支援につき1件以上の下書きを生成する。DBのpositionは1からの生成順で、supportSessionIdとの組を一意とし、編集で変更しない。APIの一覧はこの順に全件を返す。DBのguide_idはEDITINGではnull、SAVEDでは対応するGuideへの一意な外部キーとする。既存の下書きはposition=1へ移行する。
+
+SupportSessionとGuideGenerationJobのguideDraftIdは先頭を示す互換用の代表参照であり、全件の取得にはGET /v1/support-sessions/{id}/guide-draftsを使う。SupportSession.guideIdも先頭の保存済みGuideを示す。全ガイドと支援の関連はGuideDraft.supportSessionIdおよびDBのguide_idで保持する。
 
 ### 5.8 Guide、GuideVersion、GuideVersionStep
 
@@ -572,7 +577,7 @@ ArtifactDeletionTaskは id、artifactId、storageKey、status、attempt、nextAt
 | 16 | POST | /v1/guide-generation-jobs/{id}/retry | 家族 | 202 | 失敗した生成を再試行する |
 | 17 | GET | /v1/guide-drafts/{id} | 両者 | 200 | 同じ下書きを取得する |
 | 18 | PATCH | /v1/guide-drafts/{id} | 家族 | 200 | 下書き全体を更新する |
-| 19 | POST | /v1/guide-drafts/{id}/save | 家族 | 201 | ガイドとして保存する |
+| 19 | POST | /v1/guide-drafts/{id}/save | 家族 | 201 | 旧クライアント互換。下書きが1件の場合だけ保存する |
 | 20 | GET | /v1/guides | 利用者 | 200 | 利用可能なガイド一覧を返す |
 | 21 | GET | /v1/guides/{id} | 利用者 | 200 | 現在版のガイドを返す |
 | 22 | POST | /v1/guide-runs | 利用者 | 201 | ガイド利用を開始する |
@@ -581,6 +586,8 @@ ArtifactDeletionTaskは id、artifactId、storageKey、status、attempt、nextAt
 | 25 | POST | /v1/guide-runs/{id}/complete | 利用者 | 200 | ガイド利用を完了する |
 | 26 | POST | /v1/guide-runs/{id}/support-request | 利用者 | 201 | 現在ステップを引き継いで依頼する |
 | 27 | POST | /v1/support-sessions/{id}/end-without-guide | 家族、画像0件時は利用者 | 200 | 生成またはレビューを中止して終了する |
+| 28 | GET | /v1/support-sessions/{id}/guide-drafts | 利用者・家族 | 200 | 支援に紐づく全下書きを生成順に取得する |
+| 29 | POST | /v1/support-sessions/{id}/complete-guide-review | 家族 | 201 | 全下書きをまとめて確定し、レビューを完了する |
 
 状態を変更するAPIは次の条件を満たす場合だけ実行する。満たさない場合は409 INVALID_STATEを返す。
 
@@ -822,7 +829,31 @@ PATCHは差分ではなく、タイトルと全ステップを送る。
 
 artifactIdは、その支援依頼の初期スクリーンショット、または同じ支援セッションのGuideMaterialに含まれ、削除予約されていないものだけ指定できる。サーバーはstepsが1〜8件、positionが1からの連番、文字数が第5.7節どおりであることを全体置換ごとに検証する。
 
-#### 下書き保存
+#### 支援の下書き一覧とレビュー完了
+
+GET /v1/support-sessions/{id}/guide-draftsは、認可された利用者・家族へdata.itemsとして全下書きを生成順に返す。生成前や作成中止後は空配列とする。再接続後と5秒ごとのGETで各下書きのrevisionを確認する。
+
+POST /v1/support-sessions/{id}/complete-guide-reviewは家族だけが呼び出せる。Idempotency-Keyを付け、次の本文を送る。
+
+~~~json
+{
+  "expectedSessionRevision": 6,
+  "drafts": [
+    { "id": "draft_1", "expectedRevision": 4 },
+    { "id": "draft_2", "expectedRevision": 2 }
+  ]
+}
+~~~
+
+サーバーは支援、バッチ、ジョブ、全下書きをロックし、支援がREVIEWING_GUIDEで全下書きがEDITINGであること、支援と全下書きのrevision、指定されたID集合が全下書きと一致することを確認する。IDの重複・空配列は400、過不足・別支援のIDは409 INVALID_STATE、古いrevisionは409 REVISION_CONFLICTとする。
+
+全下書きの内容を検証してから、各Guide、GuideVersion、GuideVersionStepを生成し、全下書きをSAVED、支援をENDEDへ同一トランザクションで変更する。1件でも失敗した場合は全変更を取り消す。全ガイドで使われる画像の集合を保持し、それ以外の定期取得画像だけを削除予約する。201のdata.guidesは保存した全GuideDetailを生成順で、data.supportSessionは完了後の支援を返す。同じキー・本文の再送は初回の全件応答を返す。
+
+クライアントは全下書きの自動保存が完了してから実行する。結果が不明な間は編集を止め、キーと支援ID・全下書きID・revisionを端末へ保持して、再起動後も同じ本文とキーで再送する。成功またはGETで支援の終了を確認するまで完了表示へ進まない。
+
+#### 下書き保存（旧クライアント互換）
+
+下書きが1件の支援だけを受け付ける。複数件の場合は409 INVALID_STATEで全件を未確定のまま保持する。新しいクライアントは件数によらずレビュー完了APIを使う。
 
 ~~~json
 {
@@ -1105,14 +1136,14 @@ Electron起動・再読込時は、各captureディレクトリとサーバー�
 - MVPの既定実装はGemini Interactions APIの `POST /v1beta/interactions` とする。
 - モデルは `gemini-3.8-flash` とし、画像入力とStructured Outputsを使う。
 - Google AI Studioで発行したGemini API用のAuth APIキーを `x-goog-api-key` ヘッダーで送る。キーをURL、リクエスト本文、ログへ含めてはならない。
-- リクエストでは `store=false`、`background=false`、`stream=false`、`generation_config.thinking_level=low`、`generation_config.max_output_tokens=2048` とし、HTTPタイムアウトは50秒とする。
+- リクエストでは `store=false`、`background=false`、`stream=false`、`generation_config.thinking_level=low`、`generation_config.max_output_tokens=8192` とし、HTTPタイムアウトは50秒とする。
 - AI生成はサーバーの非同期ジョブとして実行する。
 - ジョブ実行には外部キューを使わず、サーバープロセス内のワーカー1個がQUEUEDを順番に処理する。
 - 各attemptは入力準備を含め55秒以内に必ずSUCCEEDEDまたはFAILEDへ確定し、Gemini APIへのHTTP要求はその内側で最大50秒とする。
 - ワーカーは1秒以内の間隔でQUEUEDを検索し、`FOR UPDATE SKIP LOCKED`で1件だけ取得して、RUNNINGへの変更、attemptの加算、startedAtの設定、errorCodeとfinishedAtの消去を同一トランザクションで行う。このとき確定したrevisionを実行権の識別に使う。
 - サーバー起動時に残っているRUNNINGは、attemptが3未満ならQUEUEDへ戻してstartedAtをnullにし、attemptが3ならFAILEDへ変更してerrorCode=WORKER_RESTARTED、finishedAtを設定する。どちらもrevisionを1増やしてからワーカーを開始する。
 - バッチ完了時にQUEUEDで作成し、ワーカーがRUNNINGへ変更する。外部API応答後の成功・失敗更新は、jobがまだRUNNINGでrevisionが実行開始時の値と一致する場合だけ確定する。古い実行の遅延応答は破棄する。
-- 成功時は下書きを作り、ジョブをSUCCEEDED、SupportSessionをREVIEWING_GUIDEへ変更し、SupportSession.guideDraftIdへ設定する。
+- 成功時はすべての下書きを生成順で作り、ジョブをSUCCEEDED、SupportSessionをREVIEWING_GUIDEへ同一トランザクションで変更する。SupportSessionとGuideGenerationJobのguideDraftIdには先頭の下書きIDを設定する。
 - 失敗時はジョブをFAILEDへ変更し、errorCodeとfinishedAtを設定する。初回を含め最大3回実行し、家族がretryできるのは最大2回とする。
 - AIの直接出力を保存済みGuideにしてはならない。必ずGuideDraftとして家族の確認を通す。
 
@@ -1139,11 +1170,15 @@ AIにはJSONだけを返させる。
 
 ~~~json
 {
-  "title": "認証コードを確認して元の画面に戻る",
-  "steps": [
+  "guides": [
     {
-      "sourceArtifactId": "art_11",
-      "instruction": "メール画面を開き、認証コードを確認する"
+      "title": "認証コードを確認して元の画面に戻る",
+      "steps": [
+        {
+          "sourceArtifactId": "art_11",
+          "instruction": "メール画面を開き、認証コードを確認する"
+        }
+      ]
     }
   ]
 }
@@ -1151,13 +1186,14 @@ AIにはJSONだけを返させる。
 
 サーバーは次を検証する。
 
+- guidesは1件以上である。以下は各ガイドへ適用する。
 - titleは1〜40文字である。
 - stepsは1〜8件である。
 - instructionは1〜120文字である。
 - sourceArtifactIdは入力画像のいずれかである。
 - すべての項目が揃い、余分な項目がない。
 
-検証に失敗した場合はジョブをFAILEDとする。
+1件でも検証に失敗した場合はジョブをFAILEDとし、下書きを部分的に生成しない。
 
 Structured Outputsへ渡すJSON Schemaは次を正本とする。
 
@@ -1165,22 +1201,45 @@ Structured Outputsへ渡すJSON Schemaは次を正本とする。
 {
   "type": "object",
   "additionalProperties": false,
-  "required": ["title", "steps"],
+  "required": [
+    "guides"
+  ],
   "properties": {
-    "title": {
-      "type": "string"
-    },
-    "steps": {
+    "guides": {
       "type": "array",
       "minItems": 1,
-      "maxItems": 8,
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["sourceArtifactId", "instruction"],
+        "required": [
+          "title",
+          "steps"
+        ],
         "properties": {
-          "sourceArtifactId": { "type": "string" },
-          "instruction": { "type": "string" }
+          "title": {
+            "type": "string"
+          },
+          "steps": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 8,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "sourceArtifactId",
+                "instruction"
+              ],
+              "properties": {
+                "sourceArtifactId": {
+                  "type": "string"
+                },
+                "instruction": {
+                  "type": "string"
+                }
+              }
+            }
+          }
         }
       }
     }
@@ -1196,6 +1255,8 @@ Gemini Structured Outputsの対応JSON Schemaサブセットに合わせ、文�
 
 ~~~text
 PC操作支援の連続画像から、高齢の利用者が後日一人で実行できる短いガイドを作る。
+異なる目的の操作が含まれる場合は、目的ごとに独立したガイドを生成順にguidesへ並べる。
+各ガイドは1〜8ステップにする。操作が1つの目的にまとまる場合はガイドを1件だけ作る。
 画像から確認できない操作を推測しない。
 1ステップには1操作だけを書く。
 「ここ」「これ」ではなく、画面上で見つけられる名称・色・位置を書く。
@@ -1207,7 +1268,16 @@ PC操作支援の連続画像から、高齢の利用者が後日一人で実行
 
 `response_format` には `type=text`、`mime_type=application/json` と第10.3節のschemaを指定する。レスポンスはstatus=completedで、steps内の `type=model_output` に空でない `type=text` のcontentが1件だけある場合に限り、そのtextをJSONとして再検証する。SDKのoutput_textヘルパーを使う場合も同じ条件を満たさなければならない。安全性判定などによる明示的な拒否はAI_REFUSAL、statusがcompleted以外または出力が空・複数の場合はAI_INCOMPLETE_RESPONSE、JSONまたは業務検証の失敗はAI_INVALID_OUTPUTとしてGuideGenerationJobをFAILEDにする。
 
-MVPではGemini API以外のproviderを実装しない。ただしGuideGeneratorを差し替え可能にし、単体テストではFakeGuideGeneratorを注入する。
+本番のAI providerはGemini APIだけとする。GuideGeneratorを差し替え可能にし、単体テストではFakeGuideGeneratorを注入する。
+
+### 10.5 開発用の固定ガイド生成
+
+- `MITE_ENV=development` かつ `AI_PROVIDER=mock` の場合だけ、開発用の固定生成を有効にする。`MITE_ENV` の既定値は `production` とし、development以外でmockを指定した場合は起動エラーとする。
+- Geminiへ接続せず、入力画像を使った2ステップと3ステップのガイドを1件ずつ返す。タイトルには `【動作確認用】` を付け、説明文は固定の確認用文言とする。画像を解析して操作を推測しない。
+- 画像は入力順に各ステップへ割り当て、不足する場合は先頭から繰り返して使う。入力画像がない場合は `AI_INPUT_UNAVAILABLE` とする。
+- 切り替えるのはGuideGeneratorだけとする。材料登録、Storageからの画像取得、出力検証、下書き保存、編集、一括確定、利用者の一覧取得は通常の処理を使う。材料0件で終了するルールも維持する。
+- mockでは `AI_BASE_URL`、`GEMINI_API_KEY`、`AI_MODEL`、`AI_PROMPT_VERSION` を参照せず、未設定を許可する。認証、DB、Storage、LiveKitの設定は通常どおり必要とする。
+- サーバー起動ログにmockの使用を記録する。このモードは開発時の操作確認用とし、生成内容の品質確認や本番運用には使わない。
 
 ## 11. 画面と処理
 
@@ -1244,9 +1314,11 @@ U-07ではGuideRun IDを端末へ保存し、状態変更のたびに更新す�
 | F-02 | 呼び出し中 | 応答待ち | WebSocket、GET /v1/support-sessions/{id} |
 | F-03 | 支援中 | 共有画面、マイク切替、受信音声レベル、クリックでマーキング、解決 | LiveKit、POST /v1/support-sessions/{id}/resolve |
 | F-04 | ガイド生成中 | アップロード件数、生成状態、失敗時の再試行、作成せず終了 | Batch/Job API、POST /v1/support-sessions/{id}/end-without-guide、WebSocket |
-| F-05 | 下書き編集 | タイトル、画像、説明、順番、削除、保存、作成せず終了 | Draft API、POST /v1/support-sessions/{id}/end-without-guide、WebSocket |
+| F-05 | ガイドのレビュー | 支援単位の複数ガイド表示、各ガイドのタイトル・ステップ数・画像・説明・順番・削除、レビュー完了、作成せず終了 | Draft API、支援の下書き一覧・レビュー完了API、POST /v1/support-sessions/{id}/end-without-guide、WebSocket |
 
 下書き編集は最後の入力から500ms後にPATCHする。PATCHは同時に1件だけ実行し、送信中に追加編集があれば、成功応答のrevisionを使って最新の全体を続けて送る。保存ボタンは未完了のPATCH成功後にだけ有効にする。409時は最新下書きを再取得し、「内容が更新されたため読み直した」と表示する。
+
+F-05は「今回の支援からN件のガイドを作成しました」と表示し、各ガイドを縦のアコーディオンとして並べる。先頭を開き、タイトル・ステップ数を常に表示する。内容は開閉でき、各ガイドで既存の編集UIと自動保存を使う。折りたたんでも編集内容と自動保存を維持する。全件で1つの「レビュー完了」だけを置き、開いた履歴は条件にしない。ガイド数が増えても確認・確定の必須操作数を増やさない。入力不備・保存待ち・保存失敗が1件でもあれば確定を止める。利用者側も同じ支援の全下書きを閲覧できる。
 
 F-01のガイド文脈はSupportRequest.guideContextのguideTitle、stepNumber、stepInstruction、stepArtifactIdから表示する。F-04は5秒ごとのGETでも件数とジョブ状態を更新する。FAILEDかつattempt<3の場合だけ再試行ボタンを有効にし、attempt=3では実行上限に達したことを表示する。endReason=NO_MATERIALSでENDEDになった場合は「画面を保存できなかったため手順を作れなかった」と表示する。
 
@@ -1295,7 +1367,8 @@ DBスキーマはSupabase CLIのマイグレーションだけで変更する。
 - GuideMaterial(batchId, sequence)
 - GuideMaterial.artifactId
 - GuideGenerationJob.batchId
-- GuideDraft.supportSessionId
+- GuideDraft(supportSessionId, position)
+- GuideDraft.guide_id。ただしnullは除く
 - GuideVersion(guideId, versionNumber)
 - GuideVersionStep(guideId, versionNumber, position)
 - GuideRun.supportRequestId。ただしnullは除く
@@ -1313,13 +1386,13 @@ DBスキーマはSupabase CLIのマイグレーションだけで変更する。
 5. GuideMaterialとArtifactのDB登録、receivedItemCountとバッチrevision更新、IdempotencyRecord完了
 6. バッチ完了、生成ジョブ作成、SupportSession.guideGenerationJobId更新
 7. ジョブのRUNNING取得、またはFAILEDからQUEUEDへのretry
-8. AI成功、GuideDraft作成、ジョブのSUCCEEDED化、SupportSessionのREVIEWING_GUIDE化
+8. AI成功、全GuideDraft作成、ジョブのSUCCEEDED化、SupportSessionのREVIEWING_GUIDE化
 9. AI失敗とジョブのFAILED化
 10. 下書き更新
-11. 下書き保存、Guide、GuideVersion、GuideVersionStep作成、下書きとセッションの完了、中間データ削除、不要画像の削除予約
+11. レビュー完了、全下書き分のGuide、GuideVersion、GuideVersionStep作成、全下書きとセッションの完了、中間データ削除、全ガイドで使われない画像の削除予約
 12. ガイド利用のステップ移動または完了
 13. ガイド途中の支援依頼作成、GuideRunのPAUSED_FOR_SUPPORT化と関連ID設定
-14. ガイド作成中止、子データの参照解除、セッション完了、画像の削除予約
+14. ガイド作成中止、全下書きを含む子データの参照解除・削除、セッション完了、画像の削除予約
 
 状態変更処理は、User、SupportRequest、SupportSession、GuideMaterialBatch、GuideGenerationJob、GuideDraft、GuideRunの順で必要な行をロックする。同じ処理内では順序を逆転させない。WebSocketイベントはDB commit後にだけ送信し、rollback時は送らない。送信失敗でDBをrollbackせず、第7.1節のGETによる収束を正本とする。
 
@@ -1406,6 +1479,7 @@ DBスキーマはSupabase CLIのマイグレーションだけで変更する。
 
 ~~~dotenv
 PORT=3000
+MITE_ENV=production
 DATABASE_URL=postgresql://postgres:password@example.supabase.co:5432/postgres
 SUPABASE_URL=https://example.supabase.co
 SUPABASE_SECRET_KEY=change-me
@@ -1419,9 +1493,11 @@ AI_PROVIDER=gemini
 AI_BASE_URL=https://generativelanguage.googleapis.com/v1beta
 GEMINI_API_KEY=change-me
 AI_MODEL=gemini-3.8-flash
-AI_PROMPT_VERSION=v1
+AI_PROMPT_VERSION=v2
 CLIENT_ORIGINS=http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174,mite-user://app,mite-family://app
 ~~~
+
+`MITE_ENV` は `production` または `development` とし、未設定・空欄では `production` を使う。Geminiのキーなしで開発用ガイドを生成するときは `MITE_ENV=development` と `AI_PROVIDER=mock` に変更する。通常のGemini生成では4項目のAI設定をすべて必須とする。
 
 ### 14.2 利用者側
 
@@ -1499,7 +1575,7 @@ Supabase、LiveKit、Google AI StudioのGemini APIキーをクライアントの
 8. 成功した下書きが1〜8ステップで、JSON Schema検証を通り、入力に存在するartifactIdだけを参照している。
 9. 両画面に同じ下書きが表示される。
 10. 家族の編集がPATCH成功から2秒以内に利用者側へ反映される。
-11. 家族が保存するとセッションがENDEDになり、ガイド一覧へ表示される。
+11. 1回の支援から複数ガイドを生成でき、家族は支援単位の一覧で各ガイドを編集できる。未展開のガイドがあっても「レビュー完了」1回で全件が確定し、セッションがENDEDになり、利用者のガイド一覧へ全件表示される。1件でも保存に失敗した場合は全件が未確定のままとなる。
 12. 再読み込みとサーバー再起動後も保存済みガイドが残る。
 
 ### 17.2 ガイドを作らない場合

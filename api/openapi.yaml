@@ -469,6 +469,55 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
         '500': { $ref: '#/components/responses/InternalError' }
 
+  /v1/support-sessions/{id}/guide-drafts:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    get:
+      tags: [GuideDrafts]
+      operationId: listSessionGuideDrafts
+      summary: 支援に紐づくすべての下書きを生成順で返す
+      responses:
+        '200':
+          description: 取得成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuideDraftListResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/support-sessions/{id}/complete-guide-review:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      tags: [GuideDrafts, Guides]
+      operationId: completeGuideReview
+      summary: 支援の全下書きを1回で確定してレビューを完了する
+      description: 家族だけが実行できる。全下書きのIDとrevision、および支援のrevisionを検証し、全件保存と支援終了を同一トランザクションで行う。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteGuideReviewRequest'
+      responses:
+        '201':
+          description: 全件保存成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuideReviewCompletedResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
   /v1/guide-drafts/{id}:
     parameters:
       - $ref: '#/components/parameters/ResourceId'
@@ -517,7 +566,9 @@ paths:
     post:
       tags: [GuideDrafts, Guides]
       operationId: saveGuideDraft
-      summary: ガイド下書きをガイドとして保存する
+      summary: 下書きが1件の支援を保存する（旧クライアント互換）
+      deprecated: true
+      description: 複数の下書きがある場合は409 INVALID_STATE。新しいクライアントはcompleteGuideReviewを使う。
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -1023,8 +1074,8 @@ components:
           nullable: true
         guideMaterialBatchId: { type: string, nullable: true }
         guideGenerationJobId: { type: string, nullable: true }
-        guideDraftId: { type: string, nullable: true }
-        guideId: { type: string, nullable: true }
+        guideDraftId: { type: string, nullable: true, description: 生成順で先頭の下書きID。全件は支援の下書き一覧APIで取得する }
+        guideId: { type: string, nullable: true, description: 生成順で先頭の保存済みガイドID }
         consent:
           allOf:
             - $ref: '#/components/schemas/Consent'
@@ -1103,7 +1154,7 @@ components:
         batchId: { type: string }
         status: { $ref: '#/components/schemas/GuideGenerationJobStatus' }
         attempt: { type: integer, minimum: 0, maximum: 3 }
-        guideDraftId: { type: string, nullable: true }
+        guideDraftId: { type: string, nullable: true, description: 生成順で先頭の下書きID。全件は支援の下書き一覧APIで取得する }
         errorCode:
           allOf:
             - $ref: '#/components/schemas/GuideGenerationErrorCode'
@@ -1316,6 +1367,23 @@ components:
           minItems: 1
           maxItems: 8
           items: { $ref: '#/components/schemas/GuideStep' }
+    GuideDraftRevision:
+      type: object
+      additionalProperties: false
+      required: [id, expectedRevision]
+      properties:
+        id: { type: string, minLength: 1 }
+        expectedRevision: { type: integer, format: int64, minimum: 1 }
+    CompleteGuideReviewRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedSessionRevision, drafts]
+      properties:
+        expectedSessionRevision: { type: integer, format: int64, minimum: 1 }
+        drafts:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/GuideDraftRevision' }
     SaveGuideDraftRequest:
       type: object
       additionalProperties: false
@@ -1493,6 +1561,34 @@ components:
       required: [data]
       properties:
         data: { $ref: '#/components/schemas/GuideDraft' }
+    GuideDraftListResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/GuideDraft' }
+    GuideReviewCompletedResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [guides, supportSession]
+          properties:
+            guides:
+              type: array
+              minItems: 1
+              items: { $ref: '#/components/schemas/GuideDetail' }
+            supportSession: { $ref: '#/components/schemas/SupportSession' }
     GuideSavedResponse:
       type: object
       additionalProperties: false

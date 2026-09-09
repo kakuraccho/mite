@@ -56,15 +56,12 @@ func newServerRuntime(
 		return serverRuntime{}, fmt.Errorf("configure LiveKit token issuer: %w", err)
 	}
 	if guideGenerator == nil {
-		guideGenerator, err = service.NewGeminiGuideGenerator(
-			cfg.AIBaseURL,
-			cfg.GeminiAPIKey,
-			cfg.AIModel,
-			cfg.AIPromptVersion,
-			nil,
-		)
+		guideGenerator, err = newGuideGenerator(cfg)
 		if err != nil {
-			return serverRuntime{}, fmt.Errorf("configure Gemini guide generator: %w", err)
+			return serverRuntime{}, fmt.Errorf("configure guide generator: %w", err)
+		}
+		if cfg.AIProvider == "mock" {
+			logger.Info("using mock guide generator for development", "guideCount", 2)
 		}
 	}
 
@@ -98,6 +95,20 @@ func newServerRuntime(
 			service.NewGuideWorker(guideRepository, storage, guideGenerator, eventHub, logger).Run,
 		},
 	}, nil
+}
+
+func newGuideGenerator(cfg config.Config) (service.GuideGenerator, error) {
+	switch cfg.AIProvider {
+	case "gemini":
+		return service.NewGeminiGuideGenerator(cfg.AIBaseURL, cfg.GeminiAPIKey, cfg.AIModel, cfg.AIPromptVersion, nil)
+	case "mock":
+		if cfg.Environment != "development" {
+			return nil, errors.New("AI_PROVIDER=mock requires MITE_ENV=development")
+		}
+		return service.NewMockGuideGenerator(), nil
+	default:
+		return nil, errors.New("AI_PROVIDER must be gemini or mock")
+	}
 }
 
 func run(logger *slog.Logger) error {

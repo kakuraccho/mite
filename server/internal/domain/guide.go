@@ -88,6 +88,7 @@ type GuideStep struct {
 }
 
 type GuideDraft struct {
+	Position         int              `json:"-"`
 	ID               ID               `json:"id"`
 	SupportSessionID ID               `json:"supportSessionId"`
 	Title            string           `json:"title"`
@@ -223,13 +224,13 @@ type GuideGenerationInput struct {
 }
 
 type GeneratedGuideStep struct {
-	SourceArtifactID ID
-	Instruction      string
+	SourceArtifactID ID     `json:"sourceArtifactId"`
+	Instruction      string `json:"instruction"`
 }
 
 type GeneratedGuide struct {
-	Title string
-	Steps []GeneratedGuideStep
+	Title string               `json:"title"`
+	Steps []GeneratedGuideStep `json:"steps"`
 }
 
 func ValidateGuideDraftContent(title string, steps []GuideStep, allowedArtifacts map[ID]struct{}) error {
@@ -248,6 +249,18 @@ func ValidateGuideDraftContent(title string, steps []GuideStep, allowedArtifacts
 		}
 		if _, ok := allowedArtifacts[step.ArtifactID]; !ok {
 			return NewError(CodeValidationError, "ガイドで利用できない画像が指定されている")
+		}
+	}
+	return nil
+}
+
+func ValidateGeneratedGuides(outputs []GeneratedGuide, allowedArtifacts map[ID]struct{}) error {
+	if len(outputs) == 0 {
+		return NewError(CodeValidationError, "ガイドが必要")
+	}
+	for _, output := range outputs {
+		if err := ValidateGeneratedGuide(output, allowedArtifacts); err != nil {
+			return err
 		}
 	}
 	return nil

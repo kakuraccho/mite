@@ -34,17 +34,17 @@ const (
 
 type e2eGuideGenerator struct{}
 
-func (*e2eGuideGenerator) Generate(_ context.Context, input domain.GuideGenerationInput) (domain.GeneratedGuide, error) {
+func (*e2eGuideGenerator) Generate(_ context.Context, input domain.GuideGenerationInput) ([]domain.GeneratedGuide, error) {
 	if len(input.Images) < 3 {
-		return domain.GeneratedGuide{}, errors.New("E2E generator requires the initial image and two materials")
+		return nil, errors.New("E2E generator requires the initial image and two materials")
 	}
-	return domain.GeneratedGuide{
+	return []domain.GeneratedGuide{{
 		Title: "接続確認ガイド",
 		Steps: []domain.GeneratedGuideStep{
 			{SourceArtifactID: input.Images[0].ArtifactID, Instruction: "最初の画面を確認する"},
 			{SourceArtifactID: input.Images[1].ArtifactID, Instruction: "青いボタンを押す"},
 		},
-	}, nil
+	}}, nil
 }
 
 func TestServerRuntimeE2E(t *testing.T) {
@@ -75,7 +75,7 @@ func TestServerRuntimeE2E(t *testing.T) {
 		AIBaseURL:             "https://generativelanguage.googleapis.com/v1beta",
 		GeminiAPIKey:          "unused-e2e-key",
 		AIModel:               "gemini-3.8-flash",
-		AIPromptVersion:       "v1",
+		AIPromptVersion:       "v2",
 		ClientOrigins:         map[string]struct{}{e2eOrigin: {}},
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))

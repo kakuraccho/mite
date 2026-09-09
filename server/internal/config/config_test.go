@@ -18,11 +18,90 @@ func TestLoad(t *testing.T) {
 	if config.Port != 3000 {
 		t.Fatalf("Port = %d, want 3000", config.Port)
 	}
+	if config.Environment != "production" {
+		t.Fatalf("Environment = %q, want production by default", config.Environment)
+	}
 	if _, ok := config.ClientOrigins["mite-user://app"]; !ok {
 		t.Fatal("mite-user origin is missing")
 	}
 	if _, ok := config.ClientOrigins["http://127.0.0.1:5173"]; !ok {
 		t.Fatal("user development origin is missing")
+	}
+}
+
+func TestLoadMockConfiguration(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name        string
+		environment string
+		wantError   string
+	}{
+		{name: "development", environment: "development"},
+		{name: "unset", wantError: "requires MITE_ENV=development"},
+		{name: "production", environment: "production", wantError: "requires MITE_ENV=development"},
+		{name: "unknown environment", environment: "developmnt", wantError: "MITE_ENV must be"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			environment := validEnvironment()
+			environment["AI_PROVIDER"] = "mock"
+			if test.environment != "" {
+				environment["MITE_ENV"] = test.environment
+			}
+			for _, name := range []string{"AI_BASE_URL", "GEMINI_API_KEY", "AI_MODEL", "AI_PROMPT_VERSION"} {
+				delete(environment, name)
+			}
+			cfg, err := load(func(name string) (string, bool) {
+				value, ok := environment[name]
+				return value, ok
+			})
+			if test.wantError != "" {
+				if err == nil || !strings.Contains(err.Error(), test.wantError) {
+					t.Fatalf("load() error = %v, want %q", err, test.wantError)
+				}
+				return
+			}
+			if err != nil || cfg.Environment != "development" || cfg.AIProvider != "mock" || cfg.GeminiAPIKey != "" {
+				t.Fatalf("mock configuration was not loaded without Gemini settings: %v", err)
+			}
+		})
+	}
+}
+
+func TestLoadIgnoresGeminiSettingsInMockMode(t *testing.T) {
+	t.Parallel()
+	environment := validEnvironment()
+	environment["MITE_ENV"] = "development"
+	environment["AI_PROVIDER"] = "mock"
+	environment["AI_BASE_URL"] = "not-a-url"
+	environment["GEMINI_API_KEY"] = ""
+	environment["AI_MODEL"] = ""
+	environment["AI_PROMPT_VERSION"] = ""
+	cfg, err := load(func(name string) (string, bool) {
+		value, ok := environment[name]
+		return value, ok
+	})
+	if err != nil || cfg.AIBaseURL != "" || cfg.AIModel != "" || cfg.AIPromptVersion != "" {
+		t.Fatalf("mock mode used Gemini settings: %v", err)
+	}
+}
+
+func TestLoadRequiresGeminiSettingsInDevelopment(t *testing.T) {
+	t.Parallel()
+	for _, field := range []string{"AI_BASE_URL", "GEMINI_API_KEY", "AI_MODEL", "AI_PROMPT_VERSION"} {
+		t.Run(field, func(t *testing.T) {
+			t.Parallel()
+			environment := validEnvironment()
+			environment["MITE_ENV"] = "development"
+			delete(environment, field)
+			_, err := load(func(name string) (string, bool) {
+				value, ok := environment[name]
+				return value, ok
+			})
+			if err == nil || !strings.Contains(err.Error(), "required environment variable is missing: "+field) {
+				t.Fatalf("missing Gemini setting was accepted: %v", err)
+			}
+		})
 	}
 }
 
@@ -90,7 +169,7 @@ func validEnvironment() map[string]string {
 		"AI_BASE_URL":             "https://generativelanguage.googleapis.com/v1beta",
 		"GEMINI_API_KEY":          "gemini-key",
 		"AI_MODEL":                "gemini-3.8-flash",
-		"AI_PROMPT_VERSION":       "v1",
+		"AI_PROMPT_VERSION":       "v2",
 		"CLIENT_ORIGINS":          "http://localhost:5173,http://127.0.0.1:5173,mite-user://app",
 	}
 }

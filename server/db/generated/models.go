@@ -55,6 +55,8 @@ type GuideDraft struct {
 	Revision         int64              `json:"revision"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	Position         int32              `json:"position"`
+	GuideID          *string            `json:"guide_id"`
 }
 
 type GuideGenerationJob struct {

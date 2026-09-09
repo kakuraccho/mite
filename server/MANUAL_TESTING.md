@@ -82,7 +82,7 @@ export DEMO_USER_TOKEN=manual-user-token
 export DEMO_FAMILY_TOKEN=manual-family-token
 export AI_PROVIDER=gemini
 export AI_MODEL=gemini-3.8-flash
-export AI_PROMPT_VERSION=v1
+export AI_PROMPT_VERSION=v2
 export CLIENT_ORIGINS=http://localhost:5173,http://localhost:5174
 ```
 
@@ -98,7 +98,16 @@ export GEMINI_API_KEY=manual-gemini-key
 
 この設定のLiveKit tokenは形式確認用であり、LiveKit Cloudへは接続できない。`guideDecision=SKIP` のフローではGemini APIを呼ばない。
 
-実LiveKitまたはAI生成成功まで確認するときは、上のダミー値を設定せず、Git管理外の安全な環境または `server/.env` へ実際の認証情報を設定する。以前のダミー値が環境変数に残っている場合は更新するか解除する。Geminiの接続先は次を使う。
+Geminiのキーなしで第8章の生成成功から第9章の一括確定まで確認する場合は、続けて次を設定する。
+
+```bash
+export MITE_ENV=development
+export AI_PROVIDER=mock
+```
+
+このモードではGeminiへ接続せず、登録した画像を使った2ステップと3ステップの下書きを生成する。`AI_BASE_URL`、`GEMINI_API_KEY`、`AI_MODEL`、`AI_PROMPT_VERSION` は参照せず、未設定でもよい。`MITE_ENV` が未設定・空欄・productionの場合、mockでは起動できない。DBとStorageには通常どおり保存する。上のダミーLiveKit設定でも、この文書のREST操作は実行できる。
+
+実LiveKitまたは実Geminiまで確認するときは、対応するダミー値をGit管理外の環境または `server/.env` で実際の認証情報へ置き換える。Geminiを使う場合は `AI_PROVIDER=gemini` に戻し、4項目のAI設定をすべて設定する。以前のダミー値が環境変数に残っている場合は更新するか解除する。Geminiの接続先は次を使う。
 
 ```bash
 export AI_BASE_URL=https://generativelanguage.googleapis.com/v1beta
@@ -114,6 +123,8 @@ go run ./cmd/api
 ```
 
 `server started` が出力され、終了していないことを確認する。専用のhealth endpointはないため、起動確認には第5.3節の一覧APIを使う。
+
+mockを選んだ場合は `using mock guide generator for development` も出力される。設定の切り替え後はサーバーを再起動する。
 
 ### 3.5 操作用変数
 
@@ -677,7 +688,7 @@ mite_family \
 - [ ] `RUNNING` を観測できた場合はattemptが1、revisionが2である。処理が短い場合は `RUNNING` を観測できなくてもよい。
 - [ ] 失敗時の `errorCode` が仕様で定めた値のいずれかで、外部APIの詳細を含まない。
 
-第3.3節のローカル用ダミーAI設定では `FAILED` が期待結果である。実Geminiを設定した完全確認では `SUCCEEDED` と `guideDraftId` の設定を確認し、第9章へ進む。
+第3.3節で `AI_PROVIDER=gemini` のまま接続先・キーにダミー値を使った場合は `FAILED` が期待結果である。`AI_PROVIDER=mock` または実Geminiで成功した場合は `SUCCEEDED` と `guideDraftId` の設定を確認し、第9章へ進む。mockでも画像の登録・取得に失敗した場合は失敗となる。
 
 ### 8.5 FAILED時の再試行または中止
 
@@ -719,31 +730,31 @@ mite_family \
 
 中止した場合は第9章以降へ進まず、このシナリオを終了する。
 
-## 9. 下書き編集とガイド保存
+## 9. 複数ガイドのレビューと一括確定
 
 この章はjobが `SUCCEEDED` になった場合だけ実行する。
 
-jobレスポンスのdraft IDを設定する。
+mockの場合、下書き一覧には `【動作確認用】画面を確認する`（2ステップ）と `【動作確認用】手順を見直す`（3ステップ）が生成順で並ぶ。画面の開閉・編集・一括確定に加え、利用者の一覧へ2件とも保存されることを確認する。実AIによる操作の分割や説明文の品質はこのモードの確認対象に含まない。
+
+jobレスポンスのguideDraftIdは先頭の下書きを示す。編集例ではこのIDを使い、全件は支援の下書き一覧から確認する。
 
 ```bash
 export MITE_GUIDE_DRAFT_ID='<data.guideDraftId>'
 ```
 
-### 9.1 下書き取得
+### 9.1 支援の全下書き取得
 
 ```bash
-mite_user \
-  "$MITE_API_BASE_URL/v1/guide-drafts/$MITE_GUIDE_DRAFT_ID"
-
-mite_family \
-  "$MITE_API_BASE_URL/v1/guide-drafts/$MITE_GUIDE_DRAFT_ID"
+mite_user "$MITE_API_BASE_URL/v1/support-sessions/$MITE_SUPPORT_SESSION_ID/guide-drafts"
+mite_family "$MITE_API_BASE_URL/v1/support-sessions/$MITE_SUPPORT_SESSION_ID/guide-drafts"
 ```
 
 確認項目:
 
-- [ ] 両方ともHTTP 200で、同じ下書きが返る。
-- [ ] `status=EDITING`、revision 1、stepsが1〜8件である。
-- [ ] SupportSessionをGETすると `REVIEWING_GUIDE`・revision 6である。
+- [ ] 両方ともHTTP 200で、data.itemsに同じ全下書きが生成順で返る。
+- [ ] 各下書きのsupportSessionIdが今回の支援を指す。
+- [ ] 各下書きがstatus=EDITING、revision 1、stepsが1〜8件である。
+- [ ] SupportSessionをGETするとREVIEWING_GUIDE・revision 6である。
 
 ### 9.2 家族による下書き更新
 
@@ -766,35 +777,45 @@ mite_family \
 
 - [ ] HTTP 409、`REVISION_CONFLICT` である。
 
-### 9.3 ガイド保存
+### 9.3 レビュー完了による全件確定
+
+全下書きをGETし直し、そのIDと現在のrevisionを本文へ列挙する。次は2件で、先頭だけを9.2で編集した場合の例である。生成件数に合わせてdraftsを変更する。
 
 ```bash
+export MITE_REVIEW_BODY='{"expectedSessionRevision":6,"drafts":[{"id":"<先頭の下書きID>","expectedRevision":2},{"id":"<2件目の下書きID>","expectedRevision":1}]}'
 mite_family \
   -X POST \
   -H 'Content-Type: application/json' \
   -H "Idempotency-Key: manual-$MITE_MANUAL_RUN_ID-draft-save" \
-  --data '{"expectedRevision":2}' \
-  "$MITE_API_BASE_URL/v1/guide-drafts/$MITE_GUIDE_DRAFT_ID/save"
+  --data "$MITE_REVIEW_BODY" \
+  "$MITE_API_BASE_URL/v1/support-sessions/$MITE_SUPPORT_SESSION_ID/complete-guide-review"
 ```
 
 確認項目:
 
 - [ ] HTTP 201である。
-- [ ] Guideの `currentVersionNumber=1`、revision 1、stepsが2件である。
+- [ ] data.guidesに全件が返り、各GuideのcurrentVersionNumber=1、revision 1である。先頭は9.2で編集した2ステップとなる。
 - [ ] SupportSessionが `ENDED`・revision 7・`endReason=GUIDE_SAVED` である。
-- [ ] GuideDraftが `SAVED`・revision 3である。
+- [ ] 全GuideDraftがSAVEDで、revisionが1増える。例では先頭が3、2件目が2となる。
 - [ ] batchとjobへの参照が `null` になる。
 
 Guide IDを設定する。
 
 ```bash
-export MITE_GUIDE_ID='<data.guide.id>'
+export MITE_GUIDE_ID='<data.guides[0].id>'
 ```
 
-同じsaveを同じIdempotency-Keyとbodyで再送する。
+同じレビュー完了リクエストを同じIdempotency-Keyとbodyで再送する。
 
 - [ ] HTTP 201と、初回と同一バイト列のJSON本文が返る。
 - [ ] Guide、GuideVersion、GuideVersionStepが増えない。
+- [ ] 確定前に1件でも省略すると409になり、すべての下書きがEDITINGのままである。
+- [ ] 2件目以降だけが使用する画像も、全件保存後に表示できる。
+- [ ] 家族側では各ガイドのタイトル・ステップ数が表示され、開閉・編集できる。
+- [ ] 全ガイドを開かなくても「レビュー完了」1回で確定できる。
+- [ ] 保存待ち・入力不備がある間はレビュー完了が無効となる。
+- [ ] 応答不明時に再起動しても同じキーと本文で再送できる。
+- [ ] 「作成せず終了」で全下書きが削除される。
 
 ### 9.4 ガイド一覧・詳細
 

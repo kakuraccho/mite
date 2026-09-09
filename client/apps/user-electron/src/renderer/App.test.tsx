@@ -1,8 +1,10 @@
+import '@testing-library/jest-dom/vitest'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
   Artifact,
   GuideDetail,
+  GuideDraft,
   GuideRun,
   MiteApi,
   SupportRequest,
@@ -955,4 +957,59 @@ describe('UserClient', () => {
     await vi.advanceTimersByTimeAsync(15_000)
     expect(saveCapture).toHaveBeenCalledTimes(1)
   })
+})
+
+it('利用者も同じ支援の全ガイドのタイトル・ステップ数・内容を閲覧できる', async () => {
+  const drafts: GuideDraft[] = ['ログインする', '住所を変更する'].map(
+    (title, index) => ({
+      id: `draft_${index}`,
+      supportSessionId: activeSession.id,
+      title,
+      steps: [
+        {
+          position: 1,
+          artifactId: `artifact_${index}`,
+          instruction: `${title}ボタンを押す`,
+        },
+      ],
+      status: 'EDITING',
+      revision: 1,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }),
+  )
+  const session = {
+    ...activeSession,
+    status: 'REVIEWING_GUIDE',
+    guideDecision: 'CREATE',
+    guideDraftId: drafts[0]!.id,
+  }
+  const api = makeApi({
+    listSupportRequests: vi
+      .fn()
+      .mockResolvedValue([supportRequest(session.id)]),
+    getSupportRequest: vi.fn().mockResolvedValue(supportRequest(session.id)),
+    getSupportSession: vi.fn().mockResolvedValue(session),
+    listSessionGuideDrafts: vi.fn().mockResolvedValue(drafts),
+    getArtifactContent: vi.fn().mockResolvedValue(new Blob()),
+  })
+  render(
+    <UserClient
+      api={api}
+      runtime={runtime}
+      desktop={makeDesktop()}
+      storage={new MemoryStorage()}
+      createEventStream={eventStreamFactory}
+    />,
+  )
+  for (const draft of drafts) {
+    expect(
+      await screen.findByRole('heading', { name: draft.title }),
+    ).toBeVisible()
+    expect(screen.getByText(draft.steps[0]!.instruction)).toBeVisible()
+  }
+  expect(api.listSessionGuideDrafts).toHaveBeenCalledWith(session.id)
+  expect(
+    screen.queryByRole('button', { name: 'レビュー完了' }),
+  ).not.toBeInTheDocument()
 })

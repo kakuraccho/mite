@@ -11,6 +11,7 @@ import {
   MiteEventStream,
   type EventConnectionStatus,
   type GuideDraft,
+  type CompleteGuideReviewInput,
   type GuideGenerationJob,
   type GuideMaterialBatch,
   type MiteApi,
@@ -37,7 +38,7 @@ import {
   Surface,
 } from '@mite/ui'
 import { ArtifactImage } from './ArtifactImage'
-import { DraftEditor } from './DraftEditor'
+import { GuideReview } from './GuideReview'
 import {
   LiveKitFamilySupport,
   type FamilyLiveSupport,
@@ -65,13 +66,44 @@ export interface FamilyClientProps {
 }
 
 interface PendingAction {
-  kind: 'CALL' | 'RESOLVE' | 'RETRY_JOB' | 'CANCEL_GUIDE' | 'SAVE_DRAFT'
+  kind: 'CALL' | 'RESOLVE' | 'RETRY_JOB' | 'CANCEL_GUIDE' | 'COMPLETE_REVIEW'
   label: string
   operationId: string
   entityId: string
   expectedRevision: number
   decision?: 'CREATE' | 'SKIP'
-  draft?: GuideDraft
+  reviewInput?: CompleteGuideReviewInput
+}
+
+const PENDING_REVIEW_KEY = 'mite.family.pendingGuideReview'
+
+function restorePendingReview(storage: KeyValueStorage): PendingAction | null {
+  try {
+    const raw = storage.getItem(PENDING_REVIEW_KEY)
+    if (!raw) return null
+    const pending = JSON.parse(raw) as PendingAction
+    const input = pending.reviewInput
+    if (
+      pending.kind !== 'COMPLETE_REVIEW' ||
+      typeof pending.entityId !== 'string' ||
+      pending.operationId !== `complete-review:${pending.entityId}` ||
+      !input ||
+      !Number.isInteger(input.expectedSessionRevision) ||
+      input.expectedSessionRevision < 1 ||
+      !Array.isArray(input.drafts) ||
+      input.drafts.length === 0 ||
+      !input.drafts.every(
+        (draft) =>
+          typeof draft.id === 'string' &&
+          Number.isInteger(draft.expectedRevision) &&
+          draft.expectedRevision >= 1,
+      )
+    )
+      return null
+    return pending
+  } catch {
+    return null
+  }
 }
 
 const requestStatus = (status: SupportRequest['status']) => {
@@ -679,11 +711,13 @@ export function FamilyClient({
   const [session, setSession] = useState<SupportSession | null>(null)
   const [batch, setBatch] = useState<GuideMaterialBatch | null>(null)
   const [job, setJob] = useState<GuideGenerationJob | null>(null)
-  const [draft, setDraft] = useState<GuideDraft | null>(null)
+  const [drafts, setDrafts] = useState<GuideDraft[]>([])
   const [initialLoading, setInitialLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
-  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null)
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(() =>
+    restorePendingReview(storage),
+  )
   const [restoredResolveDecision, setRestoredResolveDecision] = useState<
     'CREATE' | 'SKIP' | null
   >(null)
@@ -696,7 +730,7 @@ export function FamilyClient({
   const requestRef = useRef<SupportRequest | null>(null)
   const sessionRef = useRef<SupportSession | null>(null)
   const jobRef = useRef<GuideGenerationJob | null>(null)
-  const draftRef = useRef<GuideDraft | null>(null)
+  const draftsRef = useRef<GuideDraft[]>([])
   const liveSessionIdRef = useRef<string | null>(null)
 
   const acceptRequest = useCallback(
@@ -727,6 +761,13 @@ export function FamilyClient({
       }
       sessionRef.current = incoming
       setSession(incoming)
+      if (incoming.status === 'ENDED') {
+        const pending = restorePendingReview(storage)
+        if (pending?.entityId === incoming.id) {
+          operationKeys.complete(pending.operationId)
+          storage.removeItem(PENDING_REVIEW_KEY)
+        }
+      }
       if (incoming.status === 'ACTIVE') {
         const decision = operationKeys.peek(`resolve:${incoming.id}:CREATE`)
           ? 'CREATE'
@@ -744,7 +785,8 @@ export function FamilyClient({
           return null
         }
         if (
-          (pending.kind === 'CANCEL_GUIDE' || pending.kind === 'SAVE_DRAFT') &&
+          (pending.kind === 'CANCEL_GUIDE' ||
+            pending.kind === 'COMPLETE_REVIEW') &&
           incoming.status === 'ENDED'
         ) {
           return null
@@ -753,7 +795,7 @@ export function FamilyClient({
       })
       return incoming
     },
-    [operationKeys],
+    [operationKeys, storage],
   )
 
   const handleError = useCallback((error: unknown) => {
@@ -772,21 +814,20 @@ export function FamilyClient({
     return incoming
   }, [])
 
-  const acceptDraft = useCallback((incoming: GuideDraft) => {
-    const current = draftRef.current
-    if (current?.id === incoming.id && current.revision >= incoming.revision) {
-      return current
-    }
-    draftRef.current = incoming
-    setDraft(incoming)
-    return incoming
+  const acceptDrafts = useCallback((incoming: GuideDraft[]) => {
+    const accepted = incoming.map((draft) => {
+      const current = draftsRef.current.find((item) => item.id === draft.id)
+      return current && current.revision >= draft.revision ? current : draft
+    })
+    draftsRef.current = accepted
+    setDrafts(accepted)
   }, [])
 
   const refreshChildren = useCallback(
     async (currentSession: SupportSession) => {
       if (currentSession.status === 'GENERATING_GUIDE') {
-        draftRef.current = null
-        setDraft(null)
+        draftsRef.current = []
+        setDrafts([])
         const [batchResult, jobResult] = await Promise.all([
           currentSession.guideMaterialBatchId
             ? api.getGuideMaterialBatch(currentSession.guideMaterialBatchId)
@@ -822,19 +863,24 @@ export function FamilyClient({
         currentSession.status === 'REVIEWING_GUIDE' &&
         currentSession.guideDraftId
       ) {
-        const incomingDraft = await api.getGuideDraft(
-          currentSession.guideDraftId,
+        const incomingDrafts = await api.listSessionGuideDrafts(
+          currentSession.id,
         )
-        acceptDraft(incomingDraft)
+        if (
+          sessionRef.current?.id === currentSession.id &&
+          sessionRef.current.status === 'REVIEWING_GUIDE'
+        ) {
+          acceptDrafts(incomingDrafts)
+        }
         return
       }
       setBatch(null)
       jobRef.current = null
       setJob(null)
-      draftRef.current = null
-      setDraft(null)
+      draftsRef.current = []
+      setDrafts([])
     },
-    [acceptDraft, acceptJob, api],
+    [acceptDrafts, acceptJob, api],
   )
 
   const hydrateRequest = useCallback(
@@ -849,8 +895,8 @@ export function FamilyClient({
         setBatch(null)
         jobRef.current = null
         setJob(null)
-        draftRef.current = null
-        setDraft(null)
+        draftsRef.current = []
+        setDrafts([])
         return
       }
       const incomingSession =
@@ -1107,14 +1153,9 @@ export function FamilyClient({
           current.attempt < 3
         )
       }
-      case 'SAVE_DRAFT': {
-        const current = draftRef.current
-        return (
-          sessionRef.current?.status === 'REVIEWING_GUIDE' &&
-          current?.id === pending.entityId &&
-          current.revision === pending.expectedRevision &&
-          current.status === 'EDITING'
-        )
+      case 'COMPLETE_REVIEW': {
+        const current = sessionRef.current
+        return current?.id === pending.entityId && current.status !== 'ENDED'
       }
     }
   }, [])
@@ -1296,37 +1337,48 @@ export function FamilyClient({
     }
   }
 
-  const saveDraft = async (
-    currentDraft: GuideDraft,
+  const completeReview = async (
+    currentDrafts: GuideDraft[],
     retryAction?: PendingAction,
   ) => {
-    if (busy) return
+    const currentSession = sessionRef.current
+    if (busy || !currentSession) return
     const pending: PendingAction =
-      retryAction?.kind === 'SAVE_DRAFT'
+      retryAction?.kind === 'COMPLETE_REVIEW'
         ? retryAction
         : {
-            kind: 'SAVE_DRAFT',
-            label: '同じ内容で保存を確認する',
-            operationId: `save-draft:${currentDraft.id}`,
-            entityId: currentDraft.id,
-            expectedRevision: currentDraft.revision,
-            draft: currentDraft,
+            kind: 'COMPLETE_REVIEW',
+            label: '同じ内容でレビュー完了を確認する',
+            operationId: `complete-review:${currentSession.id}`,
+            entityId: currentSession.id,
+            expectedRevision: currentSession.revision,
+            reviewInput: {
+              expectedSessionRevision: currentSession.revision,
+              drafts: currentDrafts.map((draft) => ({
+                id: draft.id,
+                expectedRevision: draft.revision,
+              })),
+            },
           }
+    if (!pending.reviewInput) return
+    const input = pending.reviewInput
+    storage.setItem(PENDING_REVIEW_KEY, JSON.stringify(pending))
     setBusy(true)
     setMessage(null)
     try {
       const result = await runIdempotent(pending.operationId, (key) =>
-        api.saveGuideDraft(
-          pending.entityId,
-          { expectedRevision: pending.expectedRevision },
-          { idempotencyKey: key },
-        ),
+        api.completeGuideReview(pending.entityId, input, {
+          idempotencyKey: key,
+        }),
       )
+      storage.removeItem(PENDING_REVIEW_KEY)
       acceptSession(result.supportSession)
       await refreshCurrent()
       setPendingAction(null)
     } catch (error) {
       await recoverAfterActionError(error, pending)
+      if (!operationKeys.peek(pending.operationId))
+        storage.removeItem(PENDING_REVIEW_KEY)
     } finally {
       setBusy(false)
     }
@@ -1366,8 +1418,8 @@ export function FamilyClient({
       case 'CANCEL_GUIDE':
         void cancelGuide(pending)
         break
-      case 'SAVE_DRAFT':
-        if (pending.draft) void saveDraft(pending.draft, pending)
+      case 'COMPLETE_REVIEW':
+        void completeReview([], pending)
         break
     }
   }
@@ -1440,18 +1492,20 @@ export function FamilyClient({
         )
         break
       case 'REVIEWING_GUIDE':
-        content = draft ? (
-          <DraftEditor
-            key={draft.id}
-            api={api}
-            draft={draft}
-            busy={actionLocked}
-            onSave={(currentDraft) => void saveDraft(currentDraft)}
-            onCancel={() => void cancelGuide()}
-          />
-        ) : (
-          <LoadingState>手順の下書きを読み込んでいます</LoadingState>
-        )
+        content =
+          drafts.length > 0 ? (
+            <GuideReview
+              key={session.id}
+              api={api}
+              supportSessionId={session.id}
+              drafts={drafts}
+              busy={actionLocked}
+              onComplete={(currentDrafts) => void completeReview(currentDrafts)}
+              onCancel={() => void cancelGuide()}
+            />
+          ) : (
+            <LoadingState>手順の下書きを読み込んでいます</LoadingState>
+          )
         break
       case 'ENDED':
         content = (

@@ -288,13 +288,13 @@ func (q *Queries) SessionDeleteGenerationJob(ctx context.Context, id string) err
 	return err
 }
 
-const sessionDeleteGuideDraft = `-- name: SessionDeleteGuideDraft :exec
+const sessionDeleteGuideDrafts = `-- name: SessionDeleteGuideDrafts :exec
 DELETE FROM guide_drafts
-WHERE id = $1
+WHERE support_session_id = $1
 `
 
-func (q *Queries) SessionDeleteGuideDraft(ctx context.Context, id string) error {
-	_, err := q.db.Exec(ctx, sessionDeleteGuideDraft, id)
+func (q *Queries) SessionDeleteGuideDrafts(ctx context.Context, supportSessionID string) error {
+	_, err := q.db.Exec(ctx, sessionDeleteGuideDrafts, supportSessionID)
 	return err
 }
 

@@ -837,7 +837,7 @@ function DraftViewer({ api, draft }: { api: MiteApi; draft: GuideDraft }) {
       <ScreenHeading
         eyebrow="家族が確認中"
         title={draft.title}
-        description="家族が手順を整えています。内容は自動で新しくなります。"
+        description={`全${draft.steps.length}ステップ。家族が手順を整えています。内容は自動で新しくなります。`}
       />
       <ol className="user-draft-steps">
         {draft.steps.map((step) => (
@@ -1185,7 +1185,7 @@ export function UserClient({
   const [fatalConfiguration, setFatalConfiguration] = useState(false)
   const [request, setRequest] = useState<SupportRequest | null>(null)
   const [session, setSession] = useState<SupportSession | null>(null)
-  const [draft, setDraft] = useState<GuideDraft | null>(null)
+  const [drafts, setDrafts] = useState<GuideDraft[]>([])
   const [guides, setGuides] = useState<GuideSummary[]>([])
   const [guidesLoading, setGuidesLoading] = useState(false)
   const [guide, setGuide] = useState<GuideDetail | null>(null)
@@ -1321,8 +1321,20 @@ export function UserClient({
         effectiveSession.status === 'REVIEWING_GUIDE' &&
         effectiveSession.guideDraftId
       ) {
-        const nextDraft = await api.getGuideDraft(effectiveSession.guideDraftId)
-        setDraft((current) => selectNewestRevision(current, nextDraft))
+        const incoming = await api.listSessionGuideDrafts(effectiveSession.id)
+        if (
+          sessionRef.current?.id === effectiveSession.id &&
+          sessionRef.current.status === 'REVIEWING_GUIDE'
+        ) {
+          setDrafts((current) =>
+            incoming.map((draft) =>
+              selectNewestRevision(
+                current.find((item) => item.id === draft.id) ?? null,
+                draft,
+              ),
+            ),
+          )
+        }
       }
       if (effectiveSession.status !== 'ACTIVE') await disconnectMedia()
       if (effectiveSession.status === 'ENDED') {
@@ -2038,8 +2050,14 @@ export function UserClient({
         onRetry={() => setUploadRetry((value) => value + 1)}
       />
     )
-  } else if (supportScreen === 'GUIDE_DRAFT_REVIEW' && draft) {
-    content = <DraftViewer api={api} draft={draft} />
+  } else if (supportScreen === 'GUIDE_DRAFT_REVIEW' && drafts.length > 0) {
+    content = (
+      <div className="user-stack">
+        {drafts.map((draft) => (
+          <DraftViewer key={draft.id} api={api} draft={draft} />
+        ))}
+      </div>
+    )
   } else if (supportScreen === 'GUIDE_DRAFT_REVIEW') {
     content = <LoadingState>手順を読み込んでいます</LoadingState>
   } else if (supportScreen === 'SUPPORT_ENDED' && session) {
@@ -2053,7 +2071,7 @@ export function UserClient({
           sessionRef.current = null
           setRequest(null)
           setSession(null)
-          setDraft(null)
+          setDrafts([])
           setGuideRun(null)
           setGuide(null)
           setView('HOME')

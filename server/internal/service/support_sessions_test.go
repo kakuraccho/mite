@@ -188,7 +188,7 @@ func TestSupportSessionServiceEndWithoutGuideCleansIntermediateData(t *testing.T
 	if result.Status != domain.SupportSessionEnded || result.Revision != 7 || result.EndReason == nil || *result.EndReason != domain.EndReasonGuideCancelled || result.GuideMaterialBatchID != nil || result.GuideGenerationJobID != nil || result.GuideDraftID != nil {
 		t.Fatalf("session=%+v", result)
 	}
-	if len(store.queuedArtifacts) != 1 || !store.deletedJobs[jobID] || !store.deletedBatches[batchID] || !store.deletedDrafts[draftID] {
+	if len(store.queuedArtifacts) != 1 || !store.deletedJobs[jobID] || !store.deletedBatches[batchID] || !store.deletedDrafts[session.ID] {
 		t.Fatalf("cleanup not completed: %+v", store)
 	}
 }
@@ -544,7 +544,7 @@ func (t *fakeSessionTransaction) DeleteGuideMaterialBatch(_ context.Context, id 
 	t.deletedBatches[id] = true
 	return nil
 }
-func (t *fakeSessionTransaction) DeleteGuideDraft(_ context.Context, id domain.ID) error {
+func (t *fakeSessionTransaction) DeleteGuideDrafts(_ context.Context, id domain.ID) error {
 	t.deletedDrafts[id] = true
 	return nil
 }
