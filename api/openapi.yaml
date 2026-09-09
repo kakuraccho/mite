@@ -227,6 +227,7 @@ paths:
       tags: [SupportSessions]
       operationId: createLiveKitToken
       summary: LiveKit接続用トークンを取得する
+      description: ACTIVE、GENERATING_GUIDE、REVIEWING_GUIDE、GUIDE_SAVEDで参加・再接続できる。
       requestBody:
         required: true
         content:
@@ -305,6 +306,36 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/support-sessions/{id}/end:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      tags: [SupportSessions]
+      operationId: endSupportSession
+      summary: 保存したガイドの確認後に通話を終了する
+      description: 家族のみ。GUIDE_SAVEDからENDEDへ遷移する。保存したガイドと画像を保持する。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EndSupportSessionRequest'
+      responses:
+        '200':
+          description: 通話終了成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportSessionResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
         '500': { $ref: '#/components/responses/InternalError' }
 
   /v1/support-sessions/{id}/end-without-guide:
@@ -517,7 +548,7 @@ paths:
     post:
       tags: [GuideDrafts, Guides]
       operationId: saveGuideDraft
-      summary: ガイド下書きをガイドとして保存する
+      summary: ガイド下書きを保存し、GUIDE_SAVEDで通話と共有を継続する
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -827,7 +858,7 @@ components:
       enum: [PENDING, IN_SUPPORT, RESOLVED]
     SupportSessionStatus:
       type: string
-      enum: [RINGING, ACTIVE, GENERATING_GUIDE, REVIEWING_GUIDE, ENDED]
+      enum: [RINGING, ACTIVE, GENERATING_GUIDE, REVIEWING_GUIDE, GUIDE_SAVED, ENDED]
     GuideDecision:
       type: string
       enum: [CREATE, SKIP]
@@ -985,7 +1016,8 @@ components:
         periodicCapture: { type: boolean }
         textVersion:
           type: string
-          enum: [v1]
+          enum: [v1, v2]
+          description: v1は過去の同意。新しい応答は10秒撮影と保存後の通話継続を説明するv2を使う。
 
     SupportSession:
       type: object
@@ -1060,7 +1092,7 @@ components:
         id: { type: string }
         supportSessionId: { type: string }
         status: { $ref: '#/components/schemas/GuideMaterialBatchStatus' }
-        captureIntervalSeconds: { type: integer, enum: [5] }
+        captureIntervalSeconds: { type: integer, enum: [5, 10], description: 新規は10。5は変更前の履歴。 }
         expectedItemCount: { type: integer, minimum: 1, maximum: 360 }
         receivedItemCount: { type: integer, minimum: 0, maximum: 360 }
         capturedFrom: { type: string, format: date-time }
@@ -1255,7 +1287,18 @@ components:
       required: [expectedSessionRevision, consent]
       properties:
         expectedSessionRevision: { type: integer, format: int64, minimum: 1 }
-        consent: { $ref: '#/components/schemas/Consent' }
+        consent:
+          allOf:
+            - $ref: '#/components/schemas/Consent'
+            - type: object
+              properties:
+                textVersion: { type: string, enum: [v2] }
+    EndSupportSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedSessionRevision]
+      properties:
+        expectedSessionRevision: { type: integer, format: int64, minimum: 1 }
     EmptyRequest:
       type: object
       additionalProperties: false
@@ -1278,7 +1321,7 @@ components:
         - expectedItemCount
       properties:
         expectedSessionRevision: { type: integer, format: int64, minimum: 1 }
-        captureIntervalSeconds: { type: integer, enum: [5] }
+        captureIntervalSeconds: { type: integer, enum: [10] }
         capturedFrom: { type: string, format: date-time, nullable: true }
         capturedTo: { type: string, format: date-time, nullable: true }
         expectedItemCount: { type: integer, minimum: 0, maximum: 360 }

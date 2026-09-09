@@ -7,6 +7,7 @@ export type UserSupportScreen =
   | 'ACTIVE_SUPPORT'
   | 'GUIDE_GENERATING'
   | 'GUIDE_DRAFT_REVIEW'
+  | 'GUIDE_SAVED'
   | 'SUPPORT_ENDED'
 
 export type FamilySupportScreen =
@@ -16,6 +17,7 @@ export type FamilySupportScreen =
   | 'ACTIVE_SUPPORT'
   | 'GUIDE_GENERATING'
   | 'GUIDE_DRAFT_EDIT'
+  | 'GUIDE_SAVED'
   | 'SUPPORT_ENDED'
 
 export const deriveUserSupportScreen = (
@@ -33,6 +35,8 @@ export const deriveUserSupportScreen = (
       return 'GUIDE_GENERATING'
     case 'REVIEWING_GUIDE':
       return 'GUIDE_DRAFT_REVIEW'
+    case 'GUIDE_SAVED':
+      return 'GUIDE_SAVED'
     case 'ENDED':
       return 'SUPPORT_ENDED'
   }
@@ -53,7 +57,22 @@ export const deriveFamilySupportScreen = (
       return 'GUIDE_GENERATING'
     case 'REVIEWING_GUIDE':
       return 'GUIDE_DRAFT_EDIT'
+    case 'GUIDE_SAVED':
+      return 'GUIDE_SAVED'
     case 'ENDED':
       return 'SUPPORT_ENDED'
   }
 }
+
+export const canContinueCall = (session: SupportSession | null): boolean =>
+  !!session &&
+  ['ACTIVE', 'GENERATING_GUIDE', 'REVIEWING_GUIDE', 'GUIDE_SAVED'].includes(
+    session.status,
+  )
+
+export const canCaptureGuideMaterial = (
+  session: SupportSession | null,
+  sharing: boolean,
+): boolean => session?.status === 'ACTIVE' && sharing
+
+export const CAPTURE_INTERVAL_MS = 10_000

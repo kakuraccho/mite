@@ -68,7 +68,7 @@ type GuideTx interface {
 	PromoteArtifact(context.Context, domain.ID, pgtype.Timestamptz) error
 	ListUnusedArtifacts(context.Context, domain.ID, []domain.ID) ([]ArtifactReference, error)
 	SaveDraft(context.Context, domain.ID, pgtype.Timestamptz) (domain.GuideDraft, error)
-	FinishGuideSession(context.Context, domain.ID, domain.ID, pgtype.Timestamptz) (domain.SupportSession, error)
+	SaveGuideInSession(context.Context, domain.ID, domain.ID, pgtype.Timestamptz) (domain.SupportSession, error)
 	DeleteGenerationJob(context.Context, domain.ID) error
 	DeleteMaterials(context.Context, domain.ID) error
 	DeleteBatch(context.Context, domain.ID) error
@@ -592,9 +592,9 @@ func (t *postgresGuideTx) SaveDraft(ctx context.Context, id domain.ID, now pgtyp
 	return guideDraftFromDB(row)
 }
 
-func (t *postgresGuideTx) FinishGuideSession(ctx context.Context, sessionID, guideID domain.ID, now pgtype.Timestamptz) (domain.SupportSession, error) {
+func (t *postgresGuideTx) SaveGuideInSession(ctx context.Context, sessionID, guideID domain.ID, now pgtype.Timestamptz) (domain.SupportSession, error) {
 	id := string(guideID)
-	row, err := t.queries.FinishGuideSession(ctx, dbgen.FinishGuideSessionParams{GuideID: &id, EndedAt: now, ID: string(sessionID)})
+	row, err := t.queries.SaveGuideInSession(ctx, dbgen.SaveGuideInSessionParams{GuideID: &id, UpdatedAt: now, ID: string(sessionID)})
 	if err != nil {
 		return domain.SupportSession{}, err
 	}

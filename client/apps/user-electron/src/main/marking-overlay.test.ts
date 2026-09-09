@@ -167,3 +167,51 @@ describe('MarkingOverlay', () => {
     overlay.dispose()
   })
 })
+
+it('expires pressed guidance independently of the hidden main renderer and clears on geometry changes', () => {
+  const overlay = new MarkingOverlay(
+    'mite-user://app/index.html?view=marking',
+    '/marking-preload.js',
+  )
+  ready(overlay)
+  const guidance = {
+    mode: 'CURSOR_MOUSE',
+    x: 0.25,
+    y: 0.75,
+    buttons: 1,
+    keys: [],
+    expiresAt: Date.now() + 2000,
+  }
+  overlay.setMarks([mark()])
+  overlay.setGuidance(guidance)
+  expect(overlay.window.webContents.send).toHaveBeenCalledWith(
+    'guidance:changed',
+    guidance,
+  )
+  expect(overlay.window.webContents.send).toHaveBeenLastCalledWith(
+    'marking:changed',
+    [],
+  )
+  expect(overlay.window.showInactive).toHaveBeenCalled()
+  vi.advanceTimersByTime(1999)
+  expect(overlay.window.webContents.send).toHaveBeenCalledWith(
+    'guidance:changed',
+    guidance,
+  )
+  vi.advanceTimersByTime(1)
+  expect(overlay.window.webContents.send).toHaveBeenCalledWith(
+    'guidance:changed',
+    null,
+  )
+  overlay.setGuidance({ ...guidance, expiresAt: Date.now() + 2000 })
+  overlay.refresh()
+  expect(overlay.window.webContents.send).toHaveBeenCalledWith(
+    'guidance:changed',
+    null,
+  )
+  expect(() => overlay.setGuidance({ ...guidance, buttons: 8 })).toThrow(
+    'Invalid guidance',
+  )
+  overlay.dispose()
+  expect(vi.getTimerCount()).toBe(0)
+})

@@ -178,3 +178,10 @@ WHERE actor_id = sqlc.arg(actor_id)
   AND key = sqlc.arg(key)
   AND status = 'IN_PROGRESS'
 RETURNING *;
+
+-- name: SessionEndSavedGuide :one
+UPDATE support_sessions
+SET status = 'ENDED', ended_at = $2, end_reason = 'GUIDE_SAVED',
+    updated_at = $2, revision = revision + 1
+WHERE id = $1
+RETURNING *;

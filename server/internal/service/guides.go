@@ -1047,15 +1047,18 @@ func (s *GuideService) SaveGuideDraft(ctx context.Context, command SaveGuideDraf
 		if err != nil {
 			return nil, err
 		}
-		if session.GuideMaterialBatchID == nil || session.GuideGenerationJobID == nil {
-			return nil, domain.NewError(domain.CodeInvalidState, "下書きを保存できない")
-		}
-		batchID, jobID := *session.GuideMaterialBatchID, *session.GuideGenerationJobID
-		if _, err := tx.GetBatch(ctx, batchID, true); err != nil {
+		if err := pairForSession(session).Authorize(command.Meta.Actor, domain.RoleFamily); err != nil {
 			return nil, err
 		}
-		if _, err := tx.GetJob(ctx, jobID, true); err != nil {
-			return nil, err
+		if session.GuideMaterialBatchID != nil {
+			if _, err := tx.GetBatch(ctx, *session.GuideMaterialBatchID, true); err != nil {
+				return nil, err
+			}
+		}
+		if session.GuideGenerationJobID != nil {
+			if _, err := tx.GetJob(ctx, *session.GuideGenerationJobID, true); err != nil {
+				return nil, err
+			}
 		}
 		draft, err := tx.GetDraft(ctx, command.DraftID, true)
 		if err != nil {
@@ -1067,9 +1070,10 @@ func (s *GuideService) SaveGuideDraft(ctx context.Context, command SaveGuideDraf
 		if err := checkRevision(draft.Revision, command.ExpectedRevision); err != nil {
 			return nil, err
 		}
-		if session.Status != domain.SupportSessionReviewingGuide || session.GuideDraftID == nil || *session.GuideDraftID != draft.ID || draft.Status != domain.GuideDraftEditing {
+		if session.GuideMaterialBatchID == nil || session.GuideGenerationJobID == nil || session.Status != domain.SupportSessionReviewingGuide || session.GuideDraftID == nil || *session.GuideDraftID != draft.ID || draft.Status != domain.GuideDraftEditing {
 			return nil, domain.NewError(domain.CodeInvalidState, "下書きを保存できない")
 		}
+		batchID, jobID := *session.GuideMaterialBatchID, *session.GuideGenerationJobID
 		allowed, err := tx.ListAllowedDraftArtifacts(ctx, session.ID)
 		if err != nil {
 			return nil, err
@@ -1115,7 +1119,7 @@ func (s *GuideService) SaveGuideDraft(ctx context.Context, command SaveGuideDraf
 		if err != nil {
 			return nil, err
 		}
-		session, err = tx.FinishGuideSession(ctx, session.ID, guide.ID, timestamp(now))
+		session, err = tx.SaveGuideInSession(ctx, session.ID, guide.ID, timestamp(now))
 		if err != nil {
 			return nil, err
 		}

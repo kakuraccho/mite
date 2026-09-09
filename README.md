@@ -49,6 +49,7 @@ MVPでは固定の1対1とデモ用Bearerトークンを使用します。遠隔
 | API接続・再送・復旧・E2E確認 | [サーバー・クライアント接続ガイド](docs/server-client-integration.md) |
 | REST APIとWebSocketの手動確認 | [サーバー手動検証ガイド](server/MANUAL_TESTING.md) |
 | MVPの範囲・API・状態・画面・受け入れ条件 | [MVP実装仕様書](docs/specification.md) |
+| 実利用フィードバックへの対応・自動検証結果 | [対応記録](docs/family-support-improvements.md) |
 | 対象ユーザー・課題・提供価値 | [プロダクトシート](docs/PS.md) |
 
 実装時の判断はMVP実装仕様書を優先してください。
@@ -85,6 +86,6 @@ WSLから起動した利用者アプリではWindows画面全体を撮影・共�
 ## 既知の未確認事項
 
 - Windows AppBarの登録、他アプリの最大化との共存、DPI・表示設定変更、タスクバーとの競合および終了時の予約解除は、Windows 11実機での確認が必要です。
-- 全画面撮影・共有時にプライマリ画面だけが使われ、Mite自身のパネルやマーキングが写らないことは、Windows 11実機での確認が必要です。[確認手順](docs/development.md#全画面撮影と共有の確認)を参照してください。Linuxでは静止画取得時にMiteを一時的に隠しますが、共有映像からの除外は対応していません。
+- 全画面撮影・共有時にプライマリ画面だけが使われ、Mite自身のパネルや丸・マウス・キーの案内が写らないことは、Windows 11実機での確認が必要です。[確認手順](docs/development.md#全画面撮影と共有の確認)を参照してください。Linuxでは静止画取得時にMiteを一時的に隠しますが、共有映像からの除外は対応していません。
 - 実LiveKit Cloudによる音声・画面共有・マーキングと、実Gemini APIによるガイド生成は、有効な認証情報を用意した環境でのsmoke testが必要です。
 - 2台のWindows PCと公開Goサーバーを使う最終E2Eは未実施です。

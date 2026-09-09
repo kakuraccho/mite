@@ -19,6 +19,21 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for AcceptSupportSessionRequestConsentTextVersion.
+const (
+	AcceptSupportSessionRequestConsentTextVersionV2 AcceptSupportSessionRequestConsentTextVersion = "v2"
+)
+
+// Valid indicates whether the value is a known member of the AcceptSupportSessionRequestConsentTextVersion enum.
+func (e AcceptSupportSessionRequestConsentTextVersion) Valid() bool {
+	switch e {
+	case AcceptSupportSessionRequestConsentTextVersionV2:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ArtifactMimeType.
 const (
 	Imagejpeg ArtifactMimeType = "image/jpeg"
@@ -57,13 +72,16 @@ func (e ArtifactPurpose) Valid() bool {
 
 // Defines values for ConsentTextVersion.
 const (
-	V1 ConsentTextVersion = "v1"
+	ConsentTextVersionV1 ConsentTextVersion = "v1"
+	ConsentTextVersionV2 ConsentTextVersion = "v2"
 )
 
 // Valid indicates whether the value is a known member of the ConsentTextVersion enum.
 func (e ConsentTextVersion) Valid() bool {
 	switch e {
-	case V1:
+	case ConsentTextVersionV1:
+		return true
+	case ConsentTextVersionV2:
 		return true
 	default:
 		return false
@@ -87,13 +105,13 @@ func (e CreateArtifactRequestPurpose) Valid() bool {
 
 // Defines values for CreateGuideMaterialBatchRequestCaptureIntervalSeconds.
 const (
-	CreateGuideMaterialBatchRequestCaptureIntervalSecondsN5 CreateGuideMaterialBatchRequestCaptureIntervalSeconds = 5
+	CreateGuideMaterialBatchRequestCaptureIntervalSecondsN10 CreateGuideMaterialBatchRequestCaptureIntervalSeconds = 10
 )
 
 // Valid indicates whether the value is a known member of the CreateGuideMaterialBatchRequestCaptureIntervalSeconds enum.
 func (e CreateGuideMaterialBatchRequestCaptureIntervalSeconds) Valid() bool {
 	switch e {
-	case CreateGuideMaterialBatchRequestCaptureIntervalSecondsN5:
+	case CreateGuideMaterialBatchRequestCaptureIntervalSecondsN10:
 		return true
 	default:
 		return false
@@ -267,12 +285,15 @@ func (e GuideGenerationJobStatus) Valid() bool {
 
 // Defines values for GuideMaterialBatchCaptureIntervalSeconds.
 const (
-	GuideMaterialBatchCaptureIntervalSecondsN5 GuideMaterialBatchCaptureIntervalSeconds = 5
+	GuideMaterialBatchCaptureIntervalSecondsN10 GuideMaterialBatchCaptureIntervalSeconds = 10
+	GuideMaterialBatchCaptureIntervalSecondsN5  GuideMaterialBatchCaptureIntervalSeconds = 5
 )
 
 // Valid indicates whether the value is a known member of the GuideMaterialBatchCaptureIntervalSeconds enum.
 func (e GuideMaterialBatchCaptureIntervalSeconds) Valid() bool {
 	switch e {
+	case GuideMaterialBatchCaptureIntervalSecondsN10:
+		return true
 	case GuideMaterialBatchCaptureIntervalSecondsN5:
 		return true
 	default:
@@ -384,25 +405,28 @@ func (e SupportSessionEndReason) Valid() bool {
 
 // Defines values for SupportSessionStatus.
 const (
-	ACTIVE          SupportSessionStatus = "ACTIVE"
-	ENDED           SupportSessionStatus = "ENDED"
-	GENERATINGGUIDE SupportSessionStatus = "GENERATING_GUIDE"
-	REVIEWINGGUIDE  SupportSessionStatus = "REVIEWING_GUIDE"
-	RINGING         SupportSessionStatus = "RINGING"
+	SupportSessionStatusACTIVE          SupportSessionStatus = "ACTIVE"
+	SupportSessionStatusENDED           SupportSessionStatus = "ENDED"
+	SupportSessionStatusGENERATINGGUIDE SupportSessionStatus = "GENERATING_GUIDE"
+	SupportSessionStatusGUIDESAVED      SupportSessionStatus = "GUIDE_SAVED"
+	SupportSessionStatusREVIEWINGGUIDE  SupportSessionStatus = "REVIEWING_GUIDE"
+	SupportSessionStatusRINGING         SupportSessionStatus = "RINGING"
 )
 
 // Valid indicates whether the value is a known member of the SupportSessionStatus enum.
 func (e SupportSessionStatus) Valid() bool {
 	switch e {
-	case ACTIVE:
+	case SupportSessionStatusACTIVE:
 		return true
-	case ENDED:
+	case SupportSessionStatusENDED:
 		return true
-	case GENERATINGGUIDE:
+	case SupportSessionStatusGENERATINGGUIDE:
 		return true
-	case REVIEWINGGUIDE:
+	case SupportSessionStatusGUIDESAVED:
 		return true
-	case RINGING:
+	case SupportSessionStatusREVIEWINGGUIDE:
+		return true
+	case SupportSessionStatusRINGING:
 		return true
 	default:
 		return false
@@ -429,9 +453,17 @@ func (e UserRole) Valid() bool {
 
 // AcceptSupportSessionRequest defines model for AcceptSupportSessionRequest.
 type AcceptSupportSessionRequest struct {
-	Consent                 Consent `json:"consent"`
-	ExpectedSessionRevision int64   `json:"expectedSessionRevision"`
+	Consent struct {
+		Audio           bool                                          `json:"audio"`
+		PeriodicCapture bool                                          `json:"periodicCapture"`
+		ScreenShare     bool                                          `json:"screenShare"`
+		TextVersion     AcceptSupportSessionRequestConsentTextVersion `json:"textVersion"`
+	} `json:"consent"`
+	ExpectedSessionRevision int64 `json:"expectedSessionRevision"`
 }
+
+// AcceptSupportSessionRequestConsentTextVersion defines model for AcceptSupportSessionRequest.Consent.TextVersion.
+type AcceptSupportSessionRequestConsentTextVersion string
 
 // Artifact defines model for Artifact.
 type Artifact struct {
@@ -487,13 +519,15 @@ type CompleteGuideRunRequest struct {
 
 // Consent defines model for Consent.
 type Consent struct {
-	Audio           bool               `json:"audio"`
-	PeriodicCapture bool               `json:"periodicCapture"`
-	ScreenShare     bool               `json:"screenShare"`
-	TextVersion     ConsentTextVersion `json:"textVersion"`
+	Audio           bool `json:"audio"`
+	PeriodicCapture bool `json:"periodicCapture"`
+	ScreenShare     bool `json:"screenShare"`
+
+	// TextVersion v1は過去の同意。新しい応答は10秒撮影と保存後の通話継続を説明するv2を使う。
+	TextVersion ConsentTextVersion `json:"textVersion"`
 }
 
-// ConsentTextVersion defines model for Consent.TextVersion.
+// ConsentTextVersion v1は過去の同意。新しい応答は10秒撮影と保存後の通話継続を説明するv2を使う。
 type ConsentTextVersion string
 
 // CreateArtifactRequest defines model for CreateArtifactRequest.
@@ -546,6 +580,11 @@ type CreateSupportRequestRequest struct {
 
 // EmptyRequest defines model for EmptyRequest.
 type EmptyRequest = map[string]interface{}
+
+// EndSupportSessionRequest defines model for EndSupportSessionRequest.
+type EndSupportSessionRequest struct {
+	ExpectedSessionRevision int64 `json:"expectedSessionRevision"`
+}
 
 // EndSupportSessionWithoutGuideRequest defines model for EndSupportSessionWithoutGuideRequest.
 type EndSupportSessionWithoutGuideRequest struct {
@@ -669,6 +708,7 @@ type GuideMaterial struct {
 
 // GuideMaterialBatch defines model for GuideMaterialBatch.
 type GuideMaterialBatch struct {
+	// CaptureIntervalSeconds 新規は10。5は変更前の履歴。
 	CaptureIntervalSeconds GuideMaterialBatchCaptureIntervalSeconds `json:"captureIntervalSeconds"`
 	CapturedFrom           time.Time                                `json:"capturedFrom"`
 	CapturedTo             time.Time                                `json:"capturedTo"`
@@ -683,7 +723,7 @@ type GuideMaterialBatch struct {
 	UpdatedAt              time.Time                                `json:"updatedAt"`
 }
 
-// GuideMaterialBatchCaptureIntervalSeconds defines model for GuideMaterialBatch.CaptureIntervalSeconds.
+// GuideMaterialBatchCaptureIntervalSeconds 新規は10。5は変更前の履歴。
 type GuideMaterialBatchCaptureIntervalSeconds int
 
 // GuideMaterialBatchCompletedResponse defines model for GuideMaterialBatchCompletedResponse.
@@ -1016,6 +1056,12 @@ type AcceptSupportSessionParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// EndSupportSessionParams defines parameters for EndSupportSession.
+type EndSupportSessionParams struct {
+	// IdempotencyKey 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // EndSupportSessionWithoutGuideParams defines parameters for EndSupportSessionWithoutGuide.
 type EndSupportSessionWithoutGuideParams struct {
 	// IdempotencyKey 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。
@@ -1073,6 +1119,9 @@ type CallSupportRequestJSONRequestBody = CallSupportRequestRequest
 // AcceptSupportSessionJSONRequestBody defines body for AcceptSupportSession for application/json ContentType.
 type AcceptSupportSessionJSONRequestBody = AcceptSupportSessionRequest
 
+// EndSupportSessionJSONRequestBody defines body for EndSupportSession for application/json ContentType.
+type EndSupportSessionJSONRequestBody = EndSupportSessionRequest
+
 // EndSupportSessionWithoutGuideJSONRequestBody defines body for EndSupportSessionWithoutGuide for application/json ContentType.
 type EndSupportSessionWithoutGuideJSONRequestBody = EndSupportSessionWithoutGuideRequest
 
@@ -1099,7 +1148,7 @@ type ServerInterface interface {
 	// UpdateGuideDraft ガイド下書き全体を更新する
 	// (PATCH /v1/guide-drafts/{id})
 	UpdateGuideDraft(w http.ResponseWriter, r *http.Request, id ResourceId)
-	// SaveGuideDraft ガイド下書きをガイドとして保存する
+	// SaveGuideDraft ガイド下書きを保存し、GUIDE_SAVEDで通話と共有を継続する
 	// (POST /v1/guide-drafts/{id}/save)
 	SaveGuideDraft(w http.ResponseWriter, r *http.Request, id ResourceId, params SaveGuideDraftParams)
 	// GetGuideGenerationJob AI生成状態を取得する
@@ -1156,6 +1205,9 @@ type ServerInterface interface {
 	// AcceptSupportSession 応答と同意を確定する
 	// (POST /v1/support-sessions/{id}/accept)
 	AcceptSupportSession(w http.ResponseWriter, r *http.Request, id ResourceId, params AcceptSupportSessionParams)
+	// EndSupportSession 保存したガイドの確認後に通話を終了する
+	// (POST /v1/support-sessions/{id}/end)
+	EndSupportSession(w http.ResponseWriter, r *http.Request, id ResourceId, params EndSupportSessionParams)
 	// EndSupportSessionWithoutGuide ガイド作成を中止して支援セッションを終了する
 	// (POST /v1/support-sessions/{id}/end-without-guide)
 	EndSupportSessionWithoutGuide(w http.ResponseWriter, r *http.Request, id ResourceId, params EndSupportSessionWithoutGuideParams)
@@ -1198,7 +1250,7 @@ func (_ Unimplemented) UpdateGuideDraft(w http.ResponseWriter, r *http.Request, 
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// SaveGuideDraft ガイド下書きをガイドとして保存する
+// SaveGuideDraft ガイド下書きを保存し、GUIDE_SAVEDで通話と共有を継続する
 // (POST /v1/guide-drafts/{id}/save)
 func (_ Unimplemented) SaveGuideDraft(w http.ResponseWriter, r *http.Request, id ResourceId, params SaveGuideDraftParams) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -1309,6 +1361,12 @@ func (_ Unimplemented) GetSupportSession(w http.ResponseWriter, r *http.Request,
 // AcceptSupportSession 応答と同意を確定する
 // (POST /v1/support-sessions/{id}/accept)
 func (_ Unimplemented) AcceptSupportSession(w http.ResponseWriter, r *http.Request, id ResourceId, params AcceptSupportSessionParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// EndSupportSession 保存したガイドの確認後に通話を終了する
+// (POST /v1/support-sessions/{id}/end)
+func (_ Unimplemented) EndSupportSession(w http.ResponseWriter, r *http.Request, id ResourceId, params EndSupportSessionParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2219,6 +2277,60 @@ func (siw *ServerInterfaceWrapper) AcceptSupportSession(w http.ResponseWriter, r
 	handler.ServeHTTP(w, r)
 }
 
+// EndSupportSession operation middleware
+func (siw *ServerInterfaceWrapper) EndSupportSession(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ResourceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params EndSupportSessionParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.EndSupportSession(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // EndSupportSessionWithoutGuide operation middleware
 func (siw *ServerInterfaceWrapper) EndSupportSessionWithoutGuide(w http.ResponseWriter, r *http.Request) {
 
@@ -2552,6 +2664,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/v1/support-sessions/{id}/guide-material-batches", wrapper.CreateGuideMaterialBatch)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/v1/support-sessions/{id}/end", wrapper.EndSupportSession)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/v1/support-sessions/{id}/end-without-guide", wrapper.EndSupportSessionWithoutGuide)
@@ -4901,6 +5016,117 @@ func (response AcceptSupportSession500JSONResponse) VisitAcceptSupportSessionRes
 	return err
 }
 
+type EndSupportSessionRequestObject struct {
+	Id     ResourceId `json:"id"`
+	Params EndSupportSessionParams
+	Body   *EndSupportSessionJSONRequestBody
+}
+
+type EndSupportSessionResponseObject interface {
+	VisitEndSupportSessionResponse(w http.ResponseWriter) error
+}
+
+type EndSupportSession200JSONResponse SupportSessionResponse
+
+func (response EndSupportSession200JSONResponse) VisitEndSupportSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EndSupportSession400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response EndSupportSession400JSONResponse) VisitEndSupportSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EndSupportSession401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response EndSupportSession401JSONResponse) VisitEndSupportSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EndSupportSession403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response EndSupportSession403JSONResponse) VisitEndSupportSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EndSupportSession404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response EndSupportSession404JSONResponse) VisitEndSupportSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EndSupportSession409JSONResponse struct{ ConflictJSONResponse }
+
+func (response EndSupportSession409JSONResponse) VisitEndSupportSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EndSupportSession500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response EndSupportSession500JSONResponse) VisitEndSupportSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type EndSupportSessionWithoutGuideRequestObject struct {
 	Id     ResourceId `json:"id"`
 	Params EndSupportSessionWithoutGuideParams
@@ -5388,7 +5614,7 @@ type StrictServerInterface interface {
 	// UpdateGuideDraft ガイド下書き全体を更新する
 	// (PATCH /v1/guide-drafts/{id})
 	UpdateGuideDraft(ctx context.Context, request UpdateGuideDraftRequestObject) (UpdateGuideDraftResponseObject, error)
-	// SaveGuideDraft ガイド下書きをガイドとして保存する
+	// SaveGuideDraft ガイド下書きを保存し、GUIDE_SAVEDで通話と共有を継続する
 	// (POST /v1/guide-drafts/{id}/save)
 	SaveGuideDraft(ctx context.Context, request SaveGuideDraftRequestObject) (SaveGuideDraftResponseObject, error)
 	// GetGuideGenerationJob AI生成状態を取得する
@@ -5445,6 +5671,9 @@ type StrictServerInterface interface {
 	// AcceptSupportSession 応答と同意を確定する
 	// (POST /v1/support-sessions/{id}/accept)
 	AcceptSupportSession(ctx context.Context, request AcceptSupportSessionRequestObject) (AcceptSupportSessionResponseObject, error)
+	// EndSupportSession 保存したガイドの確認後に通話を終了する
+	// (POST /v1/support-sessions/{id}/end)
+	EndSupportSession(ctx context.Context, request EndSupportSessionRequestObject) (EndSupportSessionResponseObject, error)
 	// EndSupportSessionWithoutGuide ガイド作成を中止して支援セッションを終了する
 	// (POST /v1/support-sessions/{id}/end-without-guide)
 	EndSupportSessionWithoutGuide(ctx context.Context, request EndSupportSessionWithoutGuideRequestObject) (EndSupportSessionWithoutGuideResponseObject, error)
@@ -6186,6 +6415,40 @@ func (sh *strictHandler) AcceptSupportSession(w http.ResponseWriter, r *http.Req
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(AcceptSupportSessionResponseObject); ok {
 		if err := validResponse.VisitAcceptSupportSessionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// EndSupportSession operation middleware
+func (sh *strictHandler) EndSupportSession(w http.ResponseWriter, r *http.Request, id ResourceId, params EndSupportSessionParams) {
+	var request EndSupportSessionRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	var body EndSupportSessionJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.EndSupportSession(ctx, request.(EndSupportSessionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "EndSupportSession")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(EndSupportSessionResponseObject); ok {
+		if err := validResponse.VisitEndSupportSessionResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

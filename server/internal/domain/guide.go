@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	CaptureIntervalSeconds = 5
+	CaptureIntervalSeconds = 10
 	MaxGuideMaterials      = 360
 	MaxGuideSteps          = 8
 	MaxAIInputMaterials    = 30

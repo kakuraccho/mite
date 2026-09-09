@@ -34,6 +34,7 @@ type SupportSessionTransaction interface {
 	GenerationJobStatus(context.Context, domain.ID) (domain.GuideGenerationJobStatus, error)
 	CleanupArtifacts(context.Context, domain.ID) ([]CleanupArtifact, error)
 	QueueArtifactDeletion(context.Context, domain.ID, CleanupArtifact, time.Time) error
+	EndSavedGuide(context.Context, domain.ID, time.Time) (domain.SupportSession, error)
 	EndWithoutGuide(context.Context, domain.ID, domain.SupportSessionEndReason, time.Time) (domain.SupportSession, error)
 	DeleteGenerationJob(context.Context, domain.ID) error
 	DeleteGuideMaterials(context.Context, domain.ID) error
@@ -359,4 +360,12 @@ func sessionRepositoryError(operation string, err error) error {
 		return domain.NewError(domain.CodeNotFound, "対象が存在しない")
 	}
 	return fmt.Errorf("%s: %w", operation, err)
+}
+
+func (t *postgresSupportSessionTransaction) EndSavedGuide(ctx context.Context, id domain.ID, now time.Time) (domain.SupportSession, error) {
+	row, err := t.queries.SessionEndSavedGuide(ctx, dbgen.SessionEndSavedGuideParams{ID: string(id), EndedAt: pgTimestamp(now)})
+	if err != nil {
+		return domain.SupportSession{}, sessionRepositoryError("end saved guide session", err)
+	}
+	return sessionFromDB(row)
 }

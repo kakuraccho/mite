@@ -22,6 +22,9 @@ import {
 } from '@mite/client-api'
 import {
   deriveUserSupportScreen,
+  canContinueCall,
+  canCaptureGuideMaterial,
+  CAPTURE_INTERVAL_MS,
   IdempotencyKeyStore,
   selectNewestRevision,
   startPolling,
@@ -31,6 +34,8 @@ import {
 } from '@mite/client-core'
 import {
   AppShell,
+  Modal,
+  CallElapsed,
   Button,
   EmptyState,
   LoadingState,
@@ -64,7 +69,7 @@ const guideRunKey = 'mite.user.guideRunId'
 const supportDraftKey = 'mite.user.supportDraftId'
 const supportDraftPayloadKey = 'mite.user.supportDraftPayload'
 const consentText =
-  '支援中は、家族との音声通話と、メインの画面全体の共有を行います。共有中の画面は、あとで手順を作るため5秒ごとにこの端末へ一時保存します。家族が手順を作ることを選んだ場合だけ、保存した画像をMiteサーバーへ送り、GoogleのGemini AIで下書きを作ります。画面に個人情報が映る可能性があります。3つすべてに同意して支援を始めますか。'
+  '応答すると、家族との音声通話とメインの画面全体の共有が始まります。共有の開始直後に1枚、その後10秒ごとに、この端末へ画像を一時保存します。家族が手順を作ることを選ぶと撮影を止め、画像をMiteサーバーへ送り、GoogleのGemini AIで下書きを作ります。手順の作成中と保存後も、通話と画面共有は続きます。画面共有はいつでも止められます。画面に個人情報が映る可能性があります。音声通話・画面共有・画像の保存と送信に同意して応答しますか。'
 
 interface EventStreamController {
   start(): void
@@ -496,7 +501,10 @@ export function EdgeHelpEntry({
   }
   const schedule = () => {
     if (timer.current) clearTimeout(timer.current)
-    timer.current = setTimeout(() => updateOpen(true), 300)
+    timer.current = setTimeout(() => {
+      if (resumeLabel && onResume) onResume()
+      else updateOpen(true)
+    }, 300)
   }
   const closeLater = () => {
     if (timer.current) clearTimeout(timer.current)
@@ -524,8 +532,14 @@ export function EdgeHelpEntry({
         aria-expanded={open}
         aria-label="家族に相談するメニューを開く"
         type="button"
-        onFocus={() => updateOpen(true)}
-        onClick={() => updateOpen(!open)}
+        onFocus={() => {
+          if (resumeLabel && onResume) onResume()
+          else updateOpen(true)
+        }}
+        onClick={() => {
+          if (resumeLabel && onResume) onResume()
+          else updateOpen(!open)
+        }}
       />
       <div className="user-edge-help__panel" aria-hidden={!open} inert={!open}>
         <strong>操作に困りましたか？</strong>
@@ -633,57 +647,35 @@ function IncomingCallScreen({
   busy,
   error,
   onAccept,
+  onClose,
 }: {
   session: SupportSession
   busy: boolean
   error: string | null
   onAccept(): void
+  onClose(): void
 }) {
-  const [checks, setChecks] = useState([false, false, false])
-  const labels = [
-    '家族と音声で話します',
-    'メインの画面全体を家族に見せます',
-    'あとで手順を作るため、画面を5秒ごとに一時保存します',
-  ]
-  const agreed = checks.every(Boolean)
   return (
-    <Surface elevated>
-      <ScreenHeading
-        eyebrow="家族から連絡"
-        title="家族が待っています"
-        description="内容を読んで、よければ3つすべてにチェックしてください。"
-      />
+    <Modal
+      title="家族が待っています"
+      busy={busy}
+      onClose={onClose}
+      actions={
+        <Button
+          block
+          size="large"
+          variant="call"
+          disabled={busy || session.status !== 'RINGING'}
+          onClick={onAccept}
+        >
+          {busy ? 'つないでいます…' : '同意して応答する'}
+        </Button>
+      }
+    >
+      <p>内容を確認し、同意して応答すると通話と画面共有が始まります。</p>
       {error ? <ErrorNotice message={error} /> : null}
       <div className="user-consent-copy">{consentText}</div>
-      <fieldset className="user-consent-list">
-        <legend>確認すること</legend>
-        {labels.map((label, index) => (
-          <label key={label}>
-            <input
-              type="checkbox"
-              checked={checks[index]}
-              onChange={(event) =>
-                setChecks((current) =>
-                  current.map((value, itemIndex) =>
-                    itemIndex === index ? event.target.checked : value,
-                  ),
-                )
-              }
-            />
-            <span>{label}</span>
-          </label>
-        ))}
-      </fieldset>
-      <Button
-        block
-        size="large"
-        variant="call"
-        disabled={!agreed || busy || session.status !== 'RINGING'}
-        onClick={onAccept}
-      >
-        {busy ? 'つないでいます…' : '応答する'}
-      </Button>
-    </Surface>
+    </Modal>
   )
 }
 
@@ -763,7 +755,7 @@ function ActiveSupportScreen({
         </div>
       ) : (
         <Notice tone="info" title="画面全体を共有中">
-          「しまう」でこのパネルを閉じて操作できます。家族が示す丸は、そのまま画面に表示されます。
+          「しまう」でこのパネルを閉じて操作できます。家族の操作案内は、そのまま画面に表示されます。
         </Notice>
       )}
       <div className="user-support-controls">
@@ -823,6 +815,9 @@ function GeneratingGuideScreen({
 }
 
 function DraftViewer({ api, draft }: { api: MiteApi; draft: GuideDraft }) {
+  const [selected, setSelected] = useState(0)
+  const index = Math.min(selected, draft.steps.length - 1)
+  const step = draft.steps[index]
   return (
     <Surface elevated>
       <ScreenHeading
@@ -830,21 +825,36 @@ function DraftViewer({ api, draft }: { api: MiteApi; draft: GuideDraft }) {
         title={draft.title}
         description="家族が手順を整えています。内容は自動で新しくなります。"
       />
-      <ol className="user-draft-steps">
-        {draft.steps.map((step) => (
-          <li key={`${step.position}-${step.artifactId}`}>
-            <ArtifactImage
-              api={api}
-              artifactId={step.artifactId}
-              alt={`手順${step.position}の画面`}
-            />
-            <div>
-              <span>手順 {step.position}</span>
-              <p>{step.instruction}</p>
-            </div>
-          </li>
-        ))}
-      </ol>
+      {step ? (
+        <div className="user-guide-step">
+          <ArtifactImage
+            api={api}
+            artifactId={step.artifactId}
+            alt={`手順${step.position}の画面`}
+          />
+          <div>
+            <span>
+              手順 {step.position} / {draft.steps.length}
+            </span>
+            <p>{step.instruction}</p>
+          </div>
+        </div>
+      ) : null}
+      <div className="user-actions user-actions--spread">
+        <Button
+          variant="secondary"
+          disabled={index <= 0}
+          onClick={() => setSelected(index - 1)}
+        >
+          前の手順
+        </Button>
+        <Button
+          disabled={index >= draft.steps.length - 1}
+          onClick={() => setSelected(index + 1)}
+        >
+          次の手順
+        </Button>
+      </div>
     </Surface>
   )
 }
@@ -872,7 +882,7 @@ function EndedScreen({
         description={message}
         action={
           <Button size="large" onClick={onDone}>
-            保存した手順を見る
+            閉じる
           </Button>
         }
       />
@@ -1069,6 +1079,7 @@ function GuideRunner({
   error,
   onMove,
   onComplete,
+  inCall,
   onAsk,
   keys,
   storage,
@@ -1081,6 +1092,7 @@ function GuideRunner({
   guide: GuideDetail
   busy: boolean
   error: string | null
+  inCall: boolean
   onMove(action: 'NEXT' | 'PREVIOUS'): void
   onComplete(): void
   onAsk(
@@ -1129,13 +1141,13 @@ function GuideRunner({
         <Button
           variant="quiet"
           size="large"
-          disabled={busy}
+          disabled={busy || inCall}
           onClick={() => {
             setHasAsked(true)
             setAsking((current) => !current)
           }}
         >
-          家族に聞く
+          {inCall ? '通話中の家族に聞けます' : '家族に聞く'}
         </Button>
         {isLast ? (
           <Button size="large" disabled={busy} onClick={onComplete}>
@@ -1149,15 +1161,22 @@ function GuideRunner({
       </div>
       {hasAsked ? (
         <div hidden={!asking}>
-          <GuideSupportComposer
-            key={`${run.id}:${run.revision}`}
-            desktop={desktop}
-            run={run}
-            keys={keys}
-            storage={storage}
+          <Modal
+            title="家族に聞く"
+            open={asking}
+            onClose={() => setAsking(false)}
             busy={busy}
-            onAsk={onAsk}
-          />
+          >
+            <GuideSupportComposer
+              key={`${run.id}:${run.revision}`}
+              desktop={desktop}
+              run={run}
+              keys={keys}
+              storage={storage}
+              busy={busy}
+              onAsk={onAsk}
+            />
+          </Modal>
         </div>
       ) : null}
     </Surface>
@@ -1183,6 +1202,9 @@ export function UserClient({
   const [guideRun, setGuideRun] = useState<GuideRun | null>(null)
   const [view, setView] = useState<'HOME' | 'REQUEST'>('HOME')
   const [overlayCollapsed, setOverlayCollapsed] = useState(true)
+  const [closedSavedSession, setClosedSavedSession] = useState<string | null>(
+    null,
+  )
   const [connectionStatus, setConnectionStatus] =
     useState<EventConnectionStatus>('CONNECTING')
   const [actionBusy, setActionBusy] = useState(false)
@@ -1195,6 +1217,7 @@ export function UserClient({
   const [screenSharing, setScreenSharing] = useState(false)
   const [microphoneEnabled, setMicrophoneEnabled] = useState(true)
   const [audioLevel, setAudioLevel] = useState(0)
+  const [localAudioLevel, setLocalAudioLevel] = useState(0)
   const [marks, setMarks] = useState<DesktopMark[]>([])
   const [captureError, setCaptureError] = useState<string | null>(null)
   const [captureCount, setCaptureCount] = useState(0)
@@ -1209,6 +1232,7 @@ export function UserClient({
   const screenSharingRef = useRef(false)
   const mediaGenerationRef = useRef(0)
   const mediaRef = useRef<UserMediaSession | null>(null)
+  const volumePreparedSessions = useRef(new Set<string>())
   const captureTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const captureInFlightRef = useRef(false)
   const captureGenerationRef = useRef(0)
@@ -1216,6 +1240,10 @@ export function UserClient({
   const lastUploadRef = useRef<string | null>(null)
   const uploadInFlightRef = useRef<string | null>(null)
   const keys = useMemo(() => new IdempotencyKeyStore(storage), [storage])
+  useEffect(
+    () => desktop.onOverlayCollapsed(() => setOverlayCollapsed(true)),
+    [desktop],
+  )
   const supportScreen = deriveUserSupportScreen(request, session)
   const reportError = useCallback((caught: unknown) => {
     if (caught instanceof MiteApiError && caught.status === 401) {
@@ -1236,6 +1264,13 @@ export function UserClient({
     if (restoring) return
     void desktop
       .setOverlayMode(overlayCollapsed ? 'COLLAPSED' : 'DETAIL')
+      .then(() => {
+        if (overlayCollapsed) return
+        const dialog = document.querySelector<HTMLElement>(
+          '.user-overlay-detail [role="dialog"]',
+        )
+        if (dialog && !dialog.closest('[hidden]')) dialog.focus()
+      })
       .catch(() => setFatalConfiguration(true))
   }, [desktop, overlayCollapsed, restoring])
 
@@ -1261,6 +1296,7 @@ export function UserClient({
 
   const clearMarks = useCallback(() => {
     setMarks([])
+    void desktop.setGuidance(null).catch(() => {})
     for (const timer of markTimers.current.values()) clearTimeout(timer)
     markTimers.current.clear()
     void desktop.setMarkings([]).catch(() => {})
@@ -1320,12 +1356,24 @@ export function UserClient({
         nextSession,
       )
       mergeSession(effectiveSession)
+      if (effectiveSession.status !== 'ACTIVE') stopCapturing()
       if (
-        (!previousSession && effectiveSession.status !== 'ENDED') ||
-        (previousSession && previousSession.status !== effectiveSession.status)
-      ) {
+        effectiveSession.status === 'RINGING' &&
+        previousSession?.status !== 'RINGING'
+      )
         setOverlayCollapsed(false)
-      }
+      if (
+        effectiveSession.status === 'ACTIVE' &&
+        previousSession?.status === 'RINGING'
+      )
+        setOverlayCollapsed(true)
+      if (
+        effectiveSession.status === 'GUIDE_SAVED' &&
+        previousSession?.status !== 'GUIDE_SAVED'
+      )
+        await loadGuides()
+      if (!previousSession && effectiveSession.status !== 'ENDED')
+        setOverlayCollapsed(false)
       if (
         effectiveSession.status === 'REVIEWING_GUIDE' &&
         effectiveSession.guideDraftId
@@ -1333,12 +1381,20 @@ export function UserClient({
         const nextDraft = await api.getGuideDraft(effectiveSession.guideDraftId)
         setDraft((current) => selectNewestRevision(current, nextDraft))
       }
-      if (effectiveSession.status !== 'ACTIVE') await disconnectMedia()
+      if (!canContinueCall(effectiveSession)) await disconnectMedia()
       if (effectiveSession.status === 'ENDED') {
         await desktop.deleteCaptureSession(effectiveSession.id).catch(() => {})
       }
     },
-    [api, desktop, disconnectMedia, mergeRequest, mergeSession],
+    [
+      api,
+      desktop,
+      disconnectMedia,
+      mergeRequest,
+      mergeSession,
+      stopCapturing,
+      loadGuides,
+    ],
   )
 
   const refreshSupport = useCallback(async () => {
@@ -1400,7 +1456,8 @@ export function UserClient({
         if (cancelled) return
         if (selectedRequest) {
           await applySupportState(selectedRequest, selectedSession)
-        } else {
+        }
+        if (!selectedRequest || selectedSession?.status === 'GUIDE_SAVED') {
           const savedRunId = storage.getItem(guideRunKey)
           if (savedRunId) {
             const restoredRun = await api.getGuideRun(savedRunId)
@@ -1493,6 +1550,7 @@ export function UserClient({
         'ACTIVE_SUPPORT',
         'GUIDE_GENERATING',
         'GUIDE_DRAFT_REVIEW',
+        'GUIDE_SAVED',
       ].includes(supportScreen)
     ) {
       return
@@ -1507,6 +1565,7 @@ export function UserClient({
 
   useEffect(() => {
     if (!session || session.status !== 'GENERATING_GUIDE') return
+    stopCapturing()
     const uploadKey = `${session.id}:${session.revision}:${uploadRetry}`
     if (
       lastUploadRef.current === uploadKey ||
@@ -1538,7 +1597,15 @@ export function UserClient({
       .finally(() => {
         uploadInFlightRef.current = null
       })
-  }, [api, desktop, mergeSession, refreshSupport, session, uploadRetry])
+  }, [
+    api,
+    desktop,
+    mergeSession,
+    refreshSupport,
+    session,
+    uploadRetry,
+    stopCapturing,
+  ])
 
   useEffect(
     () => () => {
@@ -1570,7 +1637,7 @@ export function UserClient({
                 audio: true,
                 screenShare: true,
                 periodicCapture: true,
-                textVersion: 'v1',
+                textVersion: 'v2',
               },
             },
             { idempotencyKey },
@@ -1578,6 +1645,8 @@ export function UserClient({
       )
       mergeRequest(result.supportRequest)
       mergeSession(result.supportSession)
+      setOverlayCollapsed(true)
+      await sharePrimaryScreen(result.supportSession)
     } catch (caught) {
       reportError(caught)
       if (caught instanceof MiteApiError && caught.status === 409) {
@@ -1592,9 +1661,12 @@ export function UserClient({
     (message: MarkingMessage) => {
       if (!screenSharingRef.current) return
       if (message.type === 'mark.clear') {
-        clearMarks()
+        setMarks([])
+        for (const timer of markTimers.current.values()) clearTimeout(timer)
+        markTimers.current.clear()
         return
       }
+      void desktop.setGuidance(null).catch(() => {})
       setMarks((current) => [
         ...current.filter((mark) => mark.id !== message.markId),
         {
@@ -1616,12 +1688,16 @@ export function UserClient({
         }, message.ttlMs),
       )
     },
-    [clearMarks],
+    [desktop],
   )
 
   const takeCapture = useCallback(
     async (supportSessionId: string): Promise<boolean> => {
-      if (captureInFlightRef.current) return false
+      if (
+        captureInFlightRef.current ||
+        !canCaptureGuideMaterial(sessionRef.current, screenSharingRef.current)
+      )
+        return false
       captureInFlightRef.current = true
       try {
         const result = await desktop.saveCapture(supportSessionId)
@@ -1647,6 +1723,10 @@ export function UserClient({
   const startCapturing = useCallback(
     async (supportSessionId: string) => {
       stopCapturing()
+      if (
+        !canCaptureGuideMaterial(sessionRef.current, screenSharingRef.current)
+      )
+        return
       const generation = captureGenerationRef.current
       try {
         const manifest =
@@ -1667,19 +1747,19 @@ export function UserClient({
       if (generation !== captureGenerationRef.current) return
       captureTimerRef.current = setInterval(() => {
         void takeCapture(supportSessionId)
-      }, runtime.captureIntervalMs)
+      }, CAPTURE_INTERVAL_MS)
     },
-    [
-      desktop,
-      runtime.captureIntervalMs,
-      runtime.captureMaxCount,
-      stopCapturing,
-      takeCapture,
-    ],
+    [desktop, runtime.captureMaxCount, stopCapturing, takeCapture],
   )
 
-  const sharePrimaryScreen = async () => {
-    if (!session || session.status !== 'ACTIVE' || actionBusy) return
+  const sharePrimaryScreen = async (acceptedSession?: SupportSession) => {
+    const sharingSession = acceptedSession ?? sessionRef.current
+    if (
+      !sharingSession ||
+      !canContinueCall(sharingSession) ||
+      (actionBusy && !acceptedSession)
+    )
+      return
     if (mediaState === 'CONNECTING' || mediaState === 'RECONNECTING') {
       setError('家族との通話をつなぎ直しています。少し待ってください。')
       return
@@ -1689,12 +1769,12 @@ export function UserClient({
     const generation = ++mediaGenerationRef.current
     const isCurrentShare = () =>
       generation === mediaGenerationRef.current &&
-      sessionRef.current?.id === session.id &&
-      sessionRef.current.status === 'ACTIVE'
+      sessionRef.current?.id === sharingSession.id &&
+      canContinueCall(sessionRef.current)
     try {
-      const current = await api.getSupportSession(session.id)
+      const current = await api.getSupportSession(sharingSession.id)
       mergeSession(current)
-      if (current.status !== 'ACTIVE') {
+      if (!canContinueCall(current)) {
         const activeRequest = requestRef.current
         if (activeRequest) await applySupportState(activeRequest, current)
         return
@@ -1703,13 +1783,25 @@ export function UserClient({
       const source = await desktop.prepareScreenShare()
       if (!isCurrentShare()) return
       let media = mediaRef.current
-      if (!media || mediaState === 'DISCONNECTED') {
+      const startingCall = !media || mediaState === 'DISCONNECTED'
+      if (!media || startingCall) {
         if (media) {
           mediaRef.current = null
           await media.disconnect()
         }
         media = createMediaSession()
         mediaRef.current = media
+        if (!volumePreparedSessions.current.has(current.id)) {
+          volumePreparedSessions.current.add(current.id)
+          await desktop
+            .prepareSpeakerVolume()
+            .catch(() =>
+              setError(
+                'スピーカーの音量を確認してください。通話は続けられます。',
+              ),
+            )
+        }
+        if (!isCurrentShare()) return
         const token = await api.getLiveKitToken(current.id)
         if (!isCurrentShare()) return
         await media.connect(token, {
@@ -1728,7 +1820,22 @@ export function UserClient({
             }
           },
           onMarking: recordMarking,
+          onGuidance: (message) => {
+            if (mediaRef.current !== media || !screenSharingRef.current) return
+            if (message === null || message.type === 'guidance.clear') {
+              void desktop.setGuidance(null).catch(() => {})
+              return
+            }
+            clearMarks()
+            void desktop
+              .setGuidance({
+                ...message,
+                expiresAt: Date.now() + message.ttlMs,
+              })
+              .catch(() => setError('家族の操作案内を表示できませんでした。'))
+          },
           onAudioLevel: setAudioLevel,
+          onLocalAudioLevel: setLocalAudioLevel,
           onScreenShareStopped: () => {
             if (mediaRef.current !== media) return
             mediaGenerationRef.current += 1
@@ -1749,7 +1856,7 @@ export function UserClient({
       screenSharingRef.current = true
       setScreenSource(source)
       setScreenSharing(true)
-      setMicrophoneEnabled(true)
+      if (startingCall) setMicrophoneEnabled(true)
       await startCapturing(current.id)
     } catch (caught) {
       screenSharingRef.current = false
@@ -2034,9 +2141,11 @@ export function UserClient({
                   ? '手順の作成状況を見る'
                   : supportScreen === 'GUIDE_DRAFT_REVIEW'
                     ? '作成中の手順を見る'
-                    : supportScreen === 'SUPPORT_ENDED'
-                      ? '支援結果を見る'
-                      : undefined
+                    : supportScreen === 'GUIDE_SAVED'
+                      ? '保存した手順を確認する'
+                      : supportScreen === 'SUPPORT_ENDED'
+                        ? '支援結果を見る'
+                        : undefined
 
     edge = (
       <div className="user-overlay-edge">
@@ -2069,6 +2178,7 @@ export function UserClient({
         busy={actionBusy}
         error={error}
         onAccept={() => void acceptCall()}
+        onClose={() => setOverlayCollapsed(true)}
       />
     )
   } else if (supportScreen === 'ACTIVE_SUPPORT' && session) {
@@ -2101,6 +2211,21 @@ export function UserClient({
     content = <DraftViewer api={api} draft={draft} />
   } else if (supportScreen === 'GUIDE_DRAFT_REVIEW') {
     content = <LoadingState>手順を読み込んでいます</LoadingState>
+  } else if (
+    supportScreen === 'GUIDE_SAVED' &&
+    session &&
+    closedSavedSession !== session.id
+  ) {
+    content = (
+      <Modal
+        title="手順を保存しました"
+        onClose={() => setClosedSavedSession(session.id)}
+      >
+        <p>
+          家族との通話と画面共有は続いています。閉じてから、保存した手順を試してみましょう。
+        </p>
+      </Modal>
+    )
   } else if (supportScreen === 'SUPPORT_ENDED' && session) {
     content = (
       <EndedScreen
@@ -2128,6 +2253,7 @@ export function UserClient({
         api={api}
         desktop={desktop}
         run={guideRun}
+        inCall={canContinueCall(session)}
         guide={guide}
         busy={actionBusy}
         error={error}
@@ -2203,6 +2329,47 @@ export function UserClient({
             </Button>
           }
         >
+          {session && canContinueCall(session) ? (
+            <div className="user-persistent-call-controls">
+              <CallElapsed startedAt={session.startedAt} />
+              <label>
+                自分のマイク{' '}
+                <meter
+                  min={0}
+                  max={1}
+                  value={microphoneEnabled ? localAudioLevel : 0}
+                  aria-label="自分のマイクの大きさ"
+                />
+              </label>
+              {session.status !== 'ACTIVE' ? (
+                <>
+                  <Button
+                    variant="secondary"
+                    disabled={actionBusy}
+                    onClick={() => void toggleMicrophone()}
+                  >
+                    {microphoneEnabled
+                      ? '自分の声を止める'
+                      : '自分の声を届ける'}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    disabled={actionBusy}
+                    onClick={() =>
+                      void (screenSharing
+                        ? stopSharing()
+                        : sharePrimaryScreen())
+                    }
+                  >
+                    {screenSharing
+                      ? '画面共有を止める'
+                      : '画面全体の共有を再開する'}
+                  </Button>
+                  {error ? <ErrorNotice message={error} /> : null}
+                </>
+              ) : null}
+            </div>
+          ) : null}
           {content}
         </AppShell>
       </div>

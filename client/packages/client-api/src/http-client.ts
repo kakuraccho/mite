@@ -18,6 +18,7 @@ import type {
   CreateSupportRequestInput,
   DataEnvelope,
   EndSupportSessionWithoutGuideInput,
+  EndSupportSessionInput,
   GuideDetail,
   GuideDraft,
   GuideGenerationJob,
@@ -377,6 +378,17 @@ export class HttpMiteApi implements MiteApi {
   ): Promise<SupportSession> {
     return this.#request(
       `/v1/support-sessions/${encodeId(supportSessionId)}/end-without-guide`,
+      { method: 'POST', body: JSON.stringify(input) },
+      operation,
+    )
+  }
+  endSupportSession(
+    supportSessionId: string,
+    input: EndSupportSessionInput,
+    operation: IdempotentOperation,
+  ): Promise<SupportSession> {
+    return this.#request(
+      `/v1/support-sessions/${encodeId(supportSessionId)}/end`,
       { method: 'POST', body: JSON.stringify(input) },
       operation,
     )

@@ -10,6 +10,7 @@ import type {
   CreateSupportRequestFromGuideRunInput,
   CreateSupportRequestInput,
   EndSupportSessionWithoutGuideInput,
+  EndSupportSessionInput,
   GuideDetail,
   GuideDraft,
   GuideGenerationJob,
@@ -135,6 +136,11 @@ export interface MiteApi {
     input: CreateSupportRequestFromGuideRunInput,
     operation: IdempotentOperation,
   ): Promise<{ guideRun: GuideRun; supportRequest: SupportRequest }>
+  endSupportSession(
+    supportSessionId: string,
+    input: EndSupportSessionInput,
+    operation: IdempotentOperation,
+  ): Promise<SupportSession>
   endSupportSessionWithoutGuide(
     supportSessionId: string,
     input: EndSupportSessionWithoutGuideInput,

@@ -21,7 +21,7 @@ API契約の正本は [`api/openapi.yaml`](../api/openapi.yaml)、状態遷移�
 次は別途、実クライアントを使って確認する。
 
 - LiveKit Cloudへの接続、音声、画面共有、マーキング
-- Electronによる5秒ごとの画面取得と端末上の復旧
+- Electronによる10秒ごとの画面取得と端末上の復旧
 - 切断、アプリ再起動、Goサーバー再起動からの復旧
 - 2台のWindows PCを使う仕様書第17章の最終受け入れテスト
 
@@ -459,7 +459,7 @@ mite_family \
   -X POST \
   -H 'Content-Type: application/json' \
   -H "Idempotency-Key: manual-$MITE_MANUAL_RUN_ID-accept-family" \
-  --data '{"expectedSessionRevision":1,"consent":{"audio":true,"screenShare":true,"periodicCapture":true,"textVersion":"v1"}}' \
+  --data '{"expectedSessionRevision":1,"consent":{"audio":true,"screenShare":true,"periodicCapture":true,"textVersion":"v2"}}' \
   "$MITE_API_BASE_URL/v1/support-sessions/$MITE_SUPPORT_SESSION_ID/accept"
 ```
 
@@ -472,7 +472,7 @@ mite_user \
   -X POST \
   -H 'Content-Type: application/json' \
   -H "Idempotency-Key: manual-$MITE_MANUAL_RUN_ID-accept" \
-  --data '{"expectedSessionRevision":1,"consent":{"audio":true,"screenShare":true,"periodicCapture":true,"textVersion":"v1"}}' \
+  --data '{"expectedSessionRevision":1,"consent":{"audio":true,"screenShare":true,"periodicCapture":true,"textVersion":"v2"}}' \
   "$MITE_API_BASE_URL/v1/support-sessions/$MITE_SUPPORT_SESSION_ID/accept"
 ```
 
@@ -571,7 +571,7 @@ mite_user \
   -X POST \
   -H 'Content-Type: application/json' \
   -H "Idempotency-Key: manual-$MITE_MANUAL_RUN_ID-batch" \
-  --data "{\"expectedSessionRevision\":3,\"captureIntervalSeconds\":5,\"capturedFrom\":\"$MITE_MATERIAL_CAPTURED_AT\",\"capturedTo\":\"$MITE_MATERIAL_CAPTURED_AT\",\"expectedItemCount\":1}" \
+  --data "{\"expectedSessionRevision\":3,\"captureIntervalSeconds\":10,\"capturedFrom\":\"$MITE_MATERIAL_CAPTURED_AT\",\"capturedTo\":\"$MITE_MATERIAL_CAPTURED_AT\",\"expectedItemCount\":1}" \
   "$MITE_API_BASE_URL/v1/support-sessions/$MITE_SUPPORT_SESSION_ID/guide-material-batches"
 ```
 
@@ -781,7 +781,7 @@ mite_family \
 
 - [ ] HTTP 201である。
 - [ ] Guideの `currentVersionNumber=1`、revision 1、stepsが2件である。
-- [ ] SupportSessionが `ENDED`・revision 7・`endReason=GUIDE_SAVED` である。
+- [ ] SupportSessionが `GUIDE_SAVED`・revision 7、`endedAt`と`endReason`がnullで、LiveKit tokenの取得ができる。
 - [ ] GuideDraftが `SAVED`・revision 3である。
 - [ ] batchとjobへの参照が `null` になる。
 
@@ -889,7 +889,23 @@ mite_user \
 - [ ] HTTP 200で `COMPLETED`・revision 3となる。
 - [ ] `completedAt` が設定される。
 
-### 10.3 ガイド途中から支援依頼
+### 10.3 保存後の通話終了
+
+ガイドの保存では通話・共有を終了しません。利用者がガイドを試し終えた後、家族が次を実行します。「閉じる」だけではこのAPIを呼びません。
+
+```bash
+mite_family -X POST \
+  -H 'Content-Type: application/json' \
+  -H "Idempotency-Key: manual-$MITE_MANUAL_RUN_ID-end-saved-guide" \
+  --data '{"expectedSessionRevision":7}' \
+  "$MITE_API_BASE_URL/v1/support-sessions/$MITE_SUPPORT_SESSION_ID/end"
+```
+
+- [ ] `ENDED`・revision 8・`endReason=GUIDE_SAVED`になり、Guideと画像は保持される。
+- [ ] 同じキーと本文の再送は、同一バイトの成功応答を返す。
+- [ ] 利用者による実行は403、終了後のLiveKit token発行は409になる。
+
+### 10.4 ガイド途中から支援依頼
 
 新しいGuideRunを作る。
 

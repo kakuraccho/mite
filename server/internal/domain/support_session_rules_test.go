@@ -28,7 +28,7 @@ func TestValidateAcceptSupportSession(t *testing.T) {
 	id := ID("session_1")
 	request := SupportRequest{Status: SupportRequestPending, SupportSessionID: &id}
 	session := SupportSession{ID: id, Status: SupportSessionRinging}
-	accepted := Consent{Audio: true, ScreenShare: true, PeriodicCapture: true, TextVersion: "v1"}
+	accepted := Consent{Audio: true, ScreenShare: true, PeriodicCapture: true, TextVersion: "v2"}
 	if err := ValidateAcceptSupportSession(session, request, accepted); err != nil {
 		t.Fatal(err)
 	}

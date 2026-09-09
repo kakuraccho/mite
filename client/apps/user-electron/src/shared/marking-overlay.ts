@@ -7,6 +7,9 @@ export interface DesktopMark {
 
 export interface MarkingOverlayBridge {
   onMarksChanged(listener: (marks: DesktopMark[]) => void): () => void
+  onGuidanceChanged(
+    listener: (guidance: DesktopGuidance | null) => void,
+  ): () => void
 }
 
 export const isDesktopMarkList = (value: unknown): value is DesktopMark[] =>
@@ -34,3 +37,13 @@ export const isDesktopMarkList = (value: unknown): value is DesktopMark[] =>
       typeof mark.expiresAt === 'number' &&
       Number.isSafeInteger(mark.expiresAt),
   )
+import { isGuidanceState, type GuidanceState } from '@mite/client-core'
+
+export interface DesktopGuidance extends GuidanceState {
+  expiresAt: number
+}
+export const isDesktopGuidance = (value: unknown): value is DesktopGuidance =>
+  isGuidanceState(value) &&
+  'expiresAt' in value &&
+  typeof value.expiresAt === 'number' &&
+  Number.isSafeInteger(value.expiresAt)

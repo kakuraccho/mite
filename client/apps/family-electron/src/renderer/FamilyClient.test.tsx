@@ -1,6 +1,8 @@
+import '@testing-library/jest-dom/vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type {
+  GuideDraft,
   GuideGenerationJob,
   GuideMaterialBatch,
   MiteApi,
@@ -16,7 +18,7 @@ const config: RuntimeConfig = {
   role: 'FAMILY',
   apiBaseUrl: 'http://localhost:3000',
   demoToken: 'family-token',
-  captureIntervalMs: 5_000,
+  captureIntervalMs: 10_000,
   captureMaxCount: 360,
   appVersion: '0.1.0',
 }
@@ -79,7 +81,7 @@ const activeSession = (): SupportSession => ({
     audio: true,
     screenShare: true,
     periodicCapture: true,
-    textVersion: 'v1',
+    textVersion: 'v2',
   },
   consentedAt: now,
   startedAt: now,
@@ -100,6 +102,7 @@ const quietLiveSupport = (
     audioPlaybackBlocked: false,
     screenTrackSid: null,
     receivedAudioLevel: 0,
+    localAudioLevel: 0,
     errorMessage: null,
     ...patch,
   }
@@ -115,6 +118,7 @@ const quietLiveSupport = (
     startAudio: vi.fn().mockResolvedValue(undefined),
     attachScreen: vi.fn(),
     sendMark: vi.fn().mockResolvedValue(undefined),
+    sendGuidance: vi.fn().mockResolvedValue(undefined),
     clearMarks: vi.fn().mockResolvedValue(undefined),
   }
   return support
@@ -181,7 +185,7 @@ describe('FamilyClient', () => {
         audio: true,
         screenShare: true,
         periodicCapture: true,
-        textVersion: 'v1',
+        textVersion: 'v2',
       },
       consentedAt: now,
       startedAt: now,
@@ -191,7 +195,7 @@ describe('FamilyClient', () => {
       id: 'batch_01',
       supportSessionId: session.id,
       status: 'COMPLETED',
-      captureIntervalSeconds: 5,
+      captureIntervalSeconds: 10,
       expectedItemCount: 4,
       receivedItemCount: 4,
       capturedFrom: now,
@@ -415,8 +419,8 @@ describe('FamilyClient', () => {
       />,
     )
 
-    const sharedScreen = await screen.findByRole('button', {
-      name: /共有画面。画面上をクリック/,
+    const sharedScreen = await screen.findByRole('group', {
+      name: /共有画面。選んだモード/,
     })
     fireEvent.keyDown(sharedScreen, { key: 'Enter' })
     await waitFor(() =>
@@ -424,3 +428,205 @@ describe('FamilyClient', () => {
     )
   })
 })
+
+it('retries a failed save and manual end exactly, keeps the call/video attached through save, and restores a saved call', async () => {
+  const request = { ...activeRequest(), status: 'RESOLVED' as const }
+  let session: SupportSession = {
+    ...activeSession(),
+    status: 'REVIEWING_GUIDE',
+    guideDecision: 'CREATE',
+    guideDraftId: 'draft_1',
+    guideMaterialBatchId: 'batch_1',
+    revision: 6,
+  }
+  const draft: GuideDraft = {
+    id: 'draft_1',
+    supportSessionId: session.id,
+    status: 'EDITING',
+    revision: 2,
+    title: '確認する手順',
+    steps: [
+      { position: 1, artifactId: 'art_1', instruction: '保存を押します' },
+    ],
+    createdAt: now,
+    updatedAt: now,
+  }
+  const saveGuideDraft = vi
+    .fn()
+    .mockRejectedValueOnce(new TypeError('save response lost'))
+    .mockImplementationOnce(async () => {
+      session = {
+        ...session,
+        status: 'GUIDE_SAVED',
+        guideId: 'guide_1',
+        guideMaterialBatchId: null,
+        revision: 7,
+      }
+      return { supportSession: session, guide: { id: 'guide_1' } }
+    })
+  const endSupportSession = vi
+    .fn()
+    .mockRejectedValueOnce(new TypeError('end response lost'))
+    .mockImplementationOnce(async () => {
+      session = {
+        ...session,
+        status: 'ENDED',
+        endedAt: now,
+        endReason: 'GUIDE_SAVED',
+        revision: 8,
+      }
+      return session
+    })
+  const api = {
+    listSupportRequests: vi.fn().mockResolvedValue([request]),
+    getSupportRequest: vi.fn().mockResolvedValue(request),
+    getSupportSession: vi.fn(async () => session),
+    getGuideDraft: vi.fn().mockResolvedValue(draft),
+    getArtifactContent: vi.fn().mockResolvedValue(new Blob(['jpeg'])),
+    getLiveKitToken: vi.fn().mockResolvedValue({ token: 'token' }),
+    saveGuideDraft,
+    endSupportSession,
+  } as unknown as MiteApi
+  const media = quietLiveSupport({
+    connectionStatus: 'CONNECTED',
+    screenTrackSid: 'TR_screen',
+    microphoneEnabled: true,
+    localAudioLevel: 0.6,
+  })
+  const storage = new MemoryStorage()
+  const first = render(
+    <FamilyClient
+      config={config}
+      api={api}
+      storage={storage}
+      liveSupport={media}
+      eventStreamFactory={noEvents}
+      pollIntervalMs={60000}
+    />,
+  )
+  const save = await screen.findByRole('button', { name: 'ガイドを保存' })
+  await waitFor(() => expect(media.connect).toHaveBeenCalledOnce())
+  expect(screen.queryByLabelText('支援依頼一覧')).toBeNull()
+  expect(screen.getByLabelText('自分のマイクの大きさ')).toHaveAttribute(
+    'value',
+    '0.6',
+  )
+  fireEvent.click(save)
+  const retry = await screen.findByRole('button', {
+    name: '同じ内容で保存を確認する',
+  })
+  expect(media.disconnect).not.toHaveBeenCalled()
+  fireEvent.click(retry)
+  await screen.findByRole('dialog', { name: 'ガイドを保存しました' })
+  expect(saveGuideDraft.mock.calls[1]).toEqual(saveGuideDraft.mock.calls[0])
+  expect(media.disconnect).not.toHaveBeenCalled()
+  expect(media.attachScreen).not.toHaveBeenCalledWith(null)
+  expect(media.connect).toHaveBeenCalledOnce()
+  fireEvent.click(screen.getByRole('button', { name: '閉じる' }))
+  expect(endSupportSession).not.toHaveBeenCalled()
+  expect(screen.queryByRole('dialog')).toBeNull()
+  first.unmount()
+  const restored = quietLiveSupport({
+    connectionStatus: 'CONNECTED',
+    screenTrackSid: 'TR_new',
+  })
+  render(
+    <FamilyClient
+      config={config}
+      api={api}
+      storage={storage}
+      liveSupport={restored}
+      eventStreamFactory={noEvents}
+      pollIntervalMs={60000}
+    />,
+  )
+  await screen.findByRole('dialog', { name: 'ガイドを保存しました' })
+  await waitFor(() => expect(restored.connect).toHaveBeenCalledOnce())
+  fireEvent.click(screen.getByRole('button', { name: '閉じる' }))
+  fireEvent.click(screen.getByRole('button', { name: '通話を終了する' }))
+  const retryEnd = await screen.findByRole('button', {
+    name: '同じ内容で通話終了を確認する',
+  })
+  expect(restored.disconnect).not.toHaveBeenCalled()
+  fireEvent.click(retryEnd)
+  await screen.findByText('支援が完了しました')
+  expect(endSupportSession.mock.calls[1]).toEqual(
+    endSupportSession.mock.calls[0],
+  )
+  expect(restored.disconnect).toHaveBeenCalledOnce()
+  expect(
+    screen.queryByRole('dialog', { name: 'ガイドを作りますか？' }),
+  ).toBeNull()
+  expect(screen.getByLabelText('支援依頼一覧')).toBeTruthy()
+  expect(screen.getByText('現在、支援依頼はありません。')).toBeTruthy()
+})
+
+it.each(['SKIP', 'CANCEL'] as const)(
+  'ends the call after %s with a confirmation popup',
+  async (decision) => {
+    const request = activeRequest()
+    let session: SupportSession =
+      decision === 'SKIP'
+        ? activeSession()
+        : {
+            ...activeSession(),
+            status: 'GENERATING_GUIDE',
+            guideDecision: 'CREATE',
+            revision: 3,
+          }
+    const end = async () => {
+      session = {
+        ...session,
+        status: 'ENDED',
+        endReason: decision === 'SKIP' ? 'GUIDE_SKIPPED' : 'GUIDE_CANCELLED',
+        endedAt: now,
+        revision: session.revision + 1,
+      }
+      return session
+    }
+    const resolveSupportSession = vi.fn(async () => ({
+      supportRequest: { ...request, status: 'RESOLVED' },
+      supportSession: await end(),
+    }))
+    const endSupportSessionWithoutGuide = vi.fn(end)
+    const api = {
+      listSupportRequests: vi.fn().mockResolvedValue([request]),
+      getSupportRequest: vi.fn().mockResolvedValue(request),
+      getSupportSession: vi.fn(async () => session),
+      getLiveKitToken: vi.fn().mockResolvedValue({ token: 'token' }),
+      getArtifactContent: vi.fn().mockResolvedValue(new Blob(['jpeg'])),
+      resolveSupportSession,
+      endSupportSessionWithoutGuide,
+    } as unknown as MiteApi
+    const media = quietLiveSupport({ connectionStatus: 'CONNECTED' })
+    render(
+      <FamilyClient
+        config={config}
+        api={api}
+        storage={new MemoryStorage()}
+        liveSupport={media}
+        eventStreamFactory={noEvents}
+        pollIntervalMs={60000}
+      />,
+    )
+    if (decision === 'SKIP') {
+      fireEvent.click(
+        await screen.findByRole('button', { name: '支援を解決済みにする' }),
+      )
+      expect(
+        screen.getByRole('dialog', { name: 'ガイドを作りますか？' }),
+      ).toBeTruthy()
+      fireEvent.click(screen.getByRole('button', { name: '作成せず終了' }))
+    } else {
+      fireEvent.click(
+        await screen.findByRole('button', { name: '作成せず終了' }),
+      )
+      expect(endSupportSessionWithoutGuide).not.toHaveBeenCalled()
+      fireEvent.click(
+        screen.getByRole('button', { name: '作成を中止して通話を終了' }),
+      )
+    }
+    await screen.findByText('支援が完了しました')
+    expect(media.disconnect).toHaveBeenCalled()
+  },
+)

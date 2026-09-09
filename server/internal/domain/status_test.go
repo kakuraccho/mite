@@ -31,12 +31,15 @@ func TestSupportSessionTransitions(t *testing.T) {
 		{SupportSessionGeneratingGuide, SupportSessionReviewingGuide}: true,
 		{SupportSessionGeneratingGuide, SupportSessionEnded}:          true,
 		{SupportSessionReviewingGuide, SupportSessionEnded}:           true,
+		{SupportSessionReviewingGuide, SupportSessionGuideSaved}:      true,
+		{SupportSessionGuideSaved, SupportSessionEnded}:               true,
 	}
 	statuses := []SupportSessionStatus{
 		SupportSessionRinging,
 		SupportSessionActive,
 		SupportSessionGeneratingGuide,
 		SupportSessionReviewingGuide,
+		SupportSessionGuideSaved,
 		SupportSessionEnded,
 	}
 	for _, from := range statuses {
@@ -98,7 +101,8 @@ func TestSupportSessionEndReasons(t *testing.T) {
 		{SupportSessionActive, EndReasonGuideSkipped, true},
 		{SupportSessionGeneratingGuide, EndReasonNoMaterials, true},
 		{SupportSessionGeneratingGuide, EndReasonGuideCancelled, true},
-		{SupportSessionReviewingGuide, EndReasonGuideSaved, true},
+		{SupportSessionReviewingGuide, EndReasonGuideSaved, false},
+		{SupportSessionGuideSaved, EndReasonGuideSaved, true},
 		{SupportSessionReviewingGuide, EndReasonGuideCancelled, true},
 		{SupportSessionActive, EndReasonGuideSaved, false},
 		{SupportSessionRinging, EndReasonGuideCancelled, false},

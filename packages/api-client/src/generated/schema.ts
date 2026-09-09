@@ -145,7 +145,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** LiveKit接続用トークンを取得する */
+        /**
+         * LiveKit接続用トークンを取得する
+         * @description ACTIVE、GENERATING_GUIDE、REVIEWING_GUIDE、GUIDE_SAVEDで参加・再接続できる。
+         */
         post: operations["createLiveKitToken"];
         delete?: never;
         options?: never;
@@ -185,6 +188,28 @@ export interface paths {
         put?: never;
         /** ガイド材料画像の一括登録を開始する */
         post: operations["createGuideMaterialBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/support-sessions/{id}/end": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 保存したガイドの確認後に通話を終了する
+         * @description 家族のみ。GUIDE_SAVEDからENDEDへ遷移する。保存したガイドと画像を保持する。
+         */
+        post: operations["endSupportSession"];
         delete?: never;
         options?: never;
         head?: never;
@@ -336,7 +361,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** ガイド下書きをガイドとして保存する */
+        /** ガイド下書きを保存し、GUIDE_SAVEDで通話と共有を継続する */
         post: operations["saveGuideDraft"];
         delete?: never;
         options?: never;
@@ -474,7 +499,7 @@ export interface components {
         /** @enum {string} */
         SupportRequestStatus: "PENDING" | "IN_SUPPORT" | "RESOLVED";
         /** @enum {string} */
-        SupportSessionStatus: "RINGING" | "ACTIVE" | "GENERATING_GUIDE" | "REVIEWING_GUIDE" | "ENDED";
+        SupportSessionStatus: "RINGING" | "ACTIVE" | "GENERATING_GUIDE" | "REVIEWING_GUIDE" | "GUIDE_SAVED" | "ENDED";
         /** @enum {string} */
         GuideDecision: "CREATE" | "SKIP";
         /** @enum {string} */
@@ -548,8 +573,11 @@ export interface components {
             audio: boolean;
             screenShare: boolean;
             periodicCapture: boolean;
-            /** @enum {string} */
-            textVersion: "v1";
+            /**
+             * @description v1は過去の同意。新しい応答は10秒撮影と保存後の通話継続を説明するv2を使う。
+             * @enum {string}
+             */
+            textVersion: "v1" | "v2";
         };
         SupportSession: {
             id: string;
@@ -582,8 +610,11 @@ export interface components {
             id: string;
             supportSessionId: string;
             status: components["schemas"]["GuideMaterialBatchStatus"];
-            /** @enum {integer} */
-            captureIntervalSeconds: 5;
+            /**
+             * @description 新規は10。5は変更前の履歴。
+             * @enum {integer}
+             */
+            captureIntervalSeconds: 5 | 10;
             expectedItemCount: number;
             receivedItemCount: number;
             /** Format: date-time */
@@ -715,7 +746,14 @@ export interface components {
         AcceptSupportSessionRequest: {
             /** Format: int64 */
             expectedSessionRevision: number;
-            consent: components["schemas"]["Consent"];
+            consent: components["schemas"]["Consent"] & {
+                /** @enum {string} */
+                textVersion?: "v2";
+            };
+        };
+        EndSupportSessionRequest: {
+            /** Format: int64 */
+            expectedSessionRevision: number;
         };
         EmptyRequest: Record<string, never>;
         ResolveSupportSessionRequest: {
@@ -727,7 +765,7 @@ export interface components {
             /** Format: int64 */
             expectedSessionRevision: number;
             /** @enum {integer} */
-            captureIntervalSeconds: 5;
+            captureIntervalSeconds: 10;
             /** Format: date-time */
             capturedFrom: string | null;
             /** Format: date-time */
@@ -1316,6 +1354,41 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["UnprocessableEntity"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    endSupportSession: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EndSupportSessionRequest"];
+            };
+        };
+        responses: {
+            /** @description 通話終了成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportSessionResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
         };
     };
