@@ -7,6 +7,14 @@ set -euo pipefail
   exit 1
 }
 binary="$1"
+script_directory="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# Never source release metadata: only this non-secret setting is accepted.
+release_environment="$(cat "$script_directory/mite-api.env")"
+[[ "$release_environment" =~ ^AI_PROMPT_VERSION=(v[1-9][0-9]*)$ ]] || {
+  printf 'Expected exactly AI_PROMPT_VERSION=v<number> in server/deploy/mite-api.env.\n' >&2
+  exit 1
+}
+prompt_version="${BASH_REMATCH[1]}"
 : "${GH_TOKEN:?GitHub token is required}"
 : "${GITHUB_REPOSITORY:?GitHub repository is required}"
 : "${GITHUB_REF:?GitHub branch reference is required}"
@@ -49,7 +57,10 @@ digest="$(sha256sum "$binary")"
 digest="${digest%% *}"
 
 # Check SSH access and the existing VPS deployment setup before changing the DB.
-"${ssh_command[@]}" "test -x /usr/local/sbin/mite-deploy && systemctl is-active --quiet mite-api.service && sudo -n -l /usr/local/sbin/mite-deploy $digest >/dev/null"
+if ! "${ssh_command[@]}" "sudo -n -l /usr/local/sbin/mite-deploy $digest $prompt_version >/dev/null && sudo -n /usr/local/sbin/mite-deploy --check"; then
+  printf '::error::VPS preflight failed. Install the current mite-deploy script and 50-mite-deploy.conf; see docs/ci-cd.md.\n' >&2
+  exit 1
+fi
 
 # Only versioned SQL migrations are applied; Vault, seed and roles are excluded.
 npx --no-install supabase db push --db-url "$SUPABASE_DB_URL" --skip-vault --dry-run
@@ -58,4 +69,4 @@ npx --no-install supabase db push --db-url "$SUPABASE_DB_URL" --skip-vault --yes
 
 # A new commit may arrive while the database is being migrated.
 require_current_commit
-"${ssh_command[@]}" "sudo -n /usr/local/sbin/mite-deploy $digest" < "$binary"
+"${ssh_command[@]}" "sudo -n /usr/local/sbin/mite-deploy $digest $prompt_version" < "$binary"
