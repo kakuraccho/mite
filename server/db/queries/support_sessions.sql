@@ -146,9 +146,9 @@ WHERE batch_id = $1;
 DELETE FROM guide_material_batches
 WHERE id = $1;
 
--- name: SessionDeleteGuideDrafts :exec
+-- name: SessionDeleteGuideDraft :exec
 DELETE FROM guide_drafts
-WHERE support_session_id = $1;
+WHERE id = $1;
 
 -- name: SessionCreateIdempotencyRecord :execrows
 INSERT INTO idempotency_records (
@@ -177,11 +177,4 @@ WHERE actor_id = sqlc.arg(actor_id)
   AND path = sqlc.arg(path)
   AND key = sqlc.arg(key)
   AND status = 'IN_PROGRESS'
-RETURNING *;
-
--- name: SessionEndSavedGuide :one
-UPDATE support_sessions
-SET status = 'ENDED', ended_at = $2, end_reason = 'GUIDE_SAVED',
-    updated_at = $2, revision = revision + 1
-WHERE id = $1
 RETURNING *;

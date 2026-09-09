@@ -72,7 +72,6 @@ func TestLoadDotEnvFromWorkingDirectory(t *testing.T) {
 			t.Chdir(t.TempDir())
 			keys := validEnvironment()
 			keys["PORT"] = ""
-			keys["MITE_ENV"] = ""
 			for key := range keys {
 				t.Setenv(key, "") // Restore even originally absent variables after the test.
 				if err := os.Unsetenv(key); err != nil {

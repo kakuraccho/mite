@@ -13,10 +13,10 @@ import (
 func TestGeneratedSupportSessionContainsAllSnapshotFields(t *testing.T) {
 	now := time.Date(2026, 9, 4, 10, 0, 0, 0, time.UTC)
 	decision := domain.GuideDecisionCreate
-	consent := domain.Consent{Audio: true, ScreenShare: true, PeriodicCapture: true, TextVersion: "v4"}
+	consent := domain.Consent{Audio: true, ScreenShare: true, PeriodicCapture: true, TextVersion: "v1"}
 	value := domain.SupportSession{ID: "session_1", SupportRequestID: "request_1", UserID: "user_1", FamilyID: "family_1", LiveKitRoomName: "mite-session_1", Status: domain.SupportSessionGeneratingGuide, GuideDecision: &decision, Consent: &consent, ConsentedAt: &now, StartedAt: &now, CreatedAt: now, UpdatedAt: now, Revision: 3}
 	converted := generatedSupportSession(value)
-	if converted.Id != "session_1" || converted.SupportRequestId != "request_1" || converted.GuideDecision == nil || *converted.GuideDecision != generated.CREATE || converted.Consent == nil || converted.Consent.TextVersion != "v4" || converted.Revision != 3 {
+	if converted.Id != "session_1" || converted.SupportRequestId != "request_1" || converted.GuideDecision == nil || *converted.GuideDecision != generated.CREATE || converted.Consent == nil || converted.Consent.TextVersion != "v1" || converted.Revision != 3 {
 		t.Fatalf("converted=%+v", converted)
 	}
 }

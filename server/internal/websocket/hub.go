@@ -104,19 +104,11 @@ func (h *Hub) handleConnection(socket *xwebsocket.Conn) {
 	}
 	_ = socket.SetReadDeadline(time.Time{})
 	current := &connection{socket: socket, actor: actor}
-	// Subscribe before acknowledging readiness, and hold the write lock so
-	// concurrent events cannot overtake the authenticated response.
-	current.mu.Lock()
-	h.add(current)
-	err = current.sendLocked(authenticatedMessage{Type: "authenticated"})
-	if err != nil {
-		h.remove(current)
+	if err := current.send(authenticatedMessage{Type: "authenticated"}); err != nil {
 		_ = socket.Close()
-	}
-	current.mu.Unlock()
-	if err != nil {
 		return
 	}
+	h.add(current)
 	defer h.remove(current)
 	for {
 		var ignored []byte
@@ -146,11 +138,6 @@ type connection struct {
 func (c *connection) send(value any) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.sendLocked(value)
-}
-
-// sendLocked requires c.mu to be held.
-func (c *connection) sendLocked(value any) error {
 	if err := c.socket.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
 		return err
 	}

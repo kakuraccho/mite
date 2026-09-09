@@ -80,16 +80,3 @@ func ValidateEndWithoutGuide(
 	}
 	return nil
 }
-
-// AllowsLiveKit separates the lifetime of the call from guide material capture.
-func (s SupportSessionStatus) AllowsLiveKit() bool {
-	return s == SupportSessionActive || s == SupportSessionGeneratingGuide ||
-		s == SupportSessionReviewingGuide || s == SupportSessionGuideSaved
-}
-
-func ValidateEndSavedSupportSession(session SupportSession) error {
-	if session.Status != SupportSessionGuideSaved || session.GuideID == nil || session.GuideDraftID == nil {
-		return NewError(CodeInvalidState, "保存したガイドを確認中の通話だけを終了できる")
-	}
-	return nil
-}

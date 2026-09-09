@@ -145,10 +145,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /**
-         * LiveKit接続用トークンを取得する
-         * @description ACTIVE、GENERATING_GUIDE、REVIEWING_GUIDE、GUIDE_SAVEDで参加・再接続できる。
-         */
+        /** LiveKit接続用トークンを取得する */
         post: operations["createLiveKitToken"];
         delete?: never;
         options?: never;
@@ -188,29 +185,6 @@ export interface paths {
         put?: never;
         /** ガイド材料画像の一括登録を開始する */
         post: operations["createGuideMaterialBatch"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/support-sessions/{id}/end": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: components["parameters"]["ResourceId"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * 旧版のGUIDE_SAVEDセッションを終了する
-         * @deprecated
-         * @description 家族のみ。旧版のGUIDE_SAVEDからENDEDへ遷移する互換API。新しい保存では直接ENDEDになる。保存したガイドと画像を保持する。
-         */
-        post: operations["endSupportSession"];
         delete?: never;
         options?: never;
         head?: never;
@@ -331,47 +305,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/support-sessions/{id}/guide-drafts": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: components["parameters"]["ResourceId"];
-            };
-            cookie?: never;
-        };
-        /** 支援に紐づくすべての下書きを生成順で返す */
-        get: operations["listSessionGuideDrafts"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/support-sessions/{id}/complete-guide-review": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: components["parameters"]["ResourceId"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * 支援の全下書きを1回で確定してレビューを完了する
-         * @description 家族だけが実行できる。全下書きのIDとrevision、および支援のrevisionを検証し、全件保存と支援終了を同一トランザクションで行う。
-         */
-        post: operations["completeGuideReview"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/guide-drafts/{id}": {
         parameters: {
             query?: never;
@@ -403,11 +336,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /**
-         * 下書きが1件の支援を保存する（旧クライアント互換）
-         * @deprecated
-         * @description 複数の下書きがある場合は409 INVALID_STATE。新しいクライアントはcompleteGuideReviewを使う。
-         */
+        /** ガイド下書きをガイドとして保存する */
         post: operations["saveGuideDraft"];
         delete?: never;
         options?: never;
@@ -545,7 +474,7 @@ export interface components {
         /** @enum {string} */
         SupportRequestStatus: "PENDING" | "IN_SUPPORT" | "RESOLVED";
         /** @enum {string} */
-        SupportSessionStatus: "RINGING" | "ACTIVE" | "GENERATING_GUIDE" | "REVIEWING_GUIDE" | "GUIDE_SAVED" | "ENDED";
+        SupportSessionStatus: "RINGING" | "ACTIVE" | "GENERATING_GUIDE" | "REVIEWING_GUIDE" | "ENDED";
         /** @enum {string} */
         GuideDecision: "CREATE" | "SKIP";
         /** @enum {string} */
@@ -619,11 +548,8 @@ export interface components {
             audio: boolean;
             screenShare: boolean;
             periodicCapture: boolean;
-            /**
-             * @description v1・v2・v3は過去の同意。新しい応答は10秒撮影、生成・レビュー中の音声通話継続と共有停止、全件保存と同時の支援終了を説明するv4を使う。
-             * @enum {string}
-             */
-            textVersion: "v1" | "v2" | "v3" | "v4";
+            /** @enum {string} */
+            textVersion: "v1";
         };
         SupportSession: {
             id: string;
@@ -635,9 +561,7 @@ export interface components {
             guideDecision: components["schemas"]["GuideDecision"] | null;
             guideMaterialBatchId: string | null;
             guideGenerationJobId: string | null;
-            /** @description 生成順で先頭の下書きID。全件は支援の下書き一覧APIで取得する */
             guideDraftId: string | null;
-            /** @description 生成順で先頭の保存済みガイドID */
             guideId: string | null;
             consent: components["schemas"]["Consent"] | null;
             /** Format: date-time */
@@ -658,11 +582,8 @@ export interface components {
             id: string;
             supportSessionId: string;
             status: components["schemas"]["GuideMaterialBatchStatus"];
-            /**
-             * @description 新規は10。5は変更前の履歴。
-             * @enum {integer}
-             */
-            captureIntervalSeconds: 5 | 10;
+            /** @enum {integer} */
+            captureIntervalSeconds: 5;
             expectedItemCount: number;
             receivedItemCount: number;
             /** Format: date-time */
@@ -694,7 +615,6 @@ export interface components {
             batchId: string;
             status: components["schemas"]["GuideGenerationJobStatus"];
             attempt: number;
-            /** @description 生成順で先頭の下書きID。全件は支援の下書き一覧APIで取得する */
             guideDraftId: string | null;
             errorCode: components["schemas"]["GuideGenerationErrorCode"] | null;
             /** Format: date-time */
@@ -795,14 +715,7 @@ export interface components {
         AcceptSupportSessionRequest: {
             /** Format: int64 */
             expectedSessionRevision: number;
-            consent: components["schemas"]["Consent"] & {
-                /** @enum {string} */
-                textVersion?: "v4";
-            };
-        };
-        EndSupportSessionRequest: {
-            /** Format: int64 */
-            expectedSessionRevision: number;
+            consent: components["schemas"]["Consent"];
         };
         EmptyRequest: Record<string, never>;
         ResolveSupportSessionRequest: {
@@ -814,7 +727,7 @@ export interface components {
             /** Format: int64 */
             expectedSessionRevision: number;
             /** @enum {integer} */
-            captureIntervalSeconds: 10;
+            captureIntervalSeconds: 5;
             /** Format: date-time */
             capturedFrom: string | null;
             /** Format: date-time */
@@ -843,16 +756,6 @@ export interface components {
             expectedRevision: number;
             title: string;
             steps: components["schemas"]["GuideStep"][];
-        };
-        GuideDraftRevision: {
-            id: string;
-            /** Format: int64 */
-            expectedRevision: number;
-        };
-        CompleteGuideReviewRequest: {
-            /** Format: int64 */
-            expectedSessionRevision: number;
-            drafts: components["schemas"]["GuideDraftRevision"][];
         };
         SaveGuideDraftRequest: {
             /** Format: int64 */
@@ -949,17 +852,6 @@ export interface components {
         };
         GuideDraftResponse: {
             data: components["schemas"]["GuideDraft"];
-        };
-        GuideDraftListResponse: {
-            data: {
-                items: components["schemas"]["GuideDraft"][];
-            };
-        };
-        GuideReviewCompletedResponse: {
-            data: {
-                guides: components["schemas"]["GuideDetail"][];
-                supportSession: components["schemas"]["SupportSession"];
-            };
         };
         GuideSavedResponse: {
             data: {
@@ -1427,41 +1319,6 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
-    endSupportSession: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。 */
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-            };
-            path: {
-                id: components["parameters"]["ResourceId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["EndSupportSessionRequest"];
-            };
-        };
-        responses: {
-            /** @description 通話終了成功 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SupportSessionResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            500: components["responses"]["InternalError"];
-        };
-    };
     endSupportSessionWithoutGuide: {
         parameters: {
             query?: never;
@@ -1655,67 +1512,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GuideGenerationJobResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            500: components["responses"]["InternalError"];
-        };
-    };
-    listSessionGuideDrafts: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: components["parameters"]["ResourceId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 取得成功 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["GuideDraftListResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            500: components["responses"]["InternalError"];
-        };
-    };
-    completeGuideReview: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。 */
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-            };
-            path: {
-                id: components["parameters"]["ResourceId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CompleteGuideReviewRequest"];
-            };
-        };
-        responses: {
-            /** @description 全件保存成功 */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["GuideReviewCompletedResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];
