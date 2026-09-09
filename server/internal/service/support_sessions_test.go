@@ -75,7 +75,7 @@ func TestSupportSessionServiceRejectsWrongPairAndRole(t *testing.T) {
 	if _, err := service.Get(context.Background(), domain.Actor{ID: "user_other", Role: domain.RoleUser}, "session_1"); testErrorCode(err) != domain.CodeForbidden {
 		t.Fatalf("Get code=%s err=%v", testErrorCode(err), err)
 	}
-	consent := domain.Consent{Audio: true, ScreenShare: true, PeriodicCapture: true, TextVersion: "v2"}
+	consent := domain.Consent{Audio: true, ScreenShare: true, PeriodicCapture: true, TextVersion: "v3"}
 	if _, err := service.Accept(context.Background(), domain.Actor{ID: "family_1", Role: domain.RoleFamily}, "session_1", 1, consent, "key", "request"); testErrorCode(err) != domain.CodeForbidden {
 		t.Fatalf("Accept code=%s err=%v", testErrorCode(err), err)
 	}
@@ -85,7 +85,7 @@ func TestSupportSessionServiceAccept(t *testing.T) {
 	store := ringingStore()
 	publisher := &supportSessionFakeEventPublisher{}
 	service := newTestSessionService(store, publisher, &fakeTokenIssuer{})
-	consent := domain.Consent{Audio: true, ScreenShare: true, PeriodicCapture: true, TextVersion: "v2"}
+	consent := domain.Consent{Audio: true, ScreenShare: true, PeriodicCapture: true, TextVersion: "v3"}
 	result, err := service.Accept(context.Background(), domain.Actor{ID: "user_1", Role: domain.RoleUser}, "session_1", 1, consent, "accept-key", "request-1")
 	if err != nil {
 		t.Fatal(err)
@@ -101,7 +101,7 @@ func TestSupportSessionServiceAccept(t *testing.T) {
 func TestSupportSessionServiceAcceptRequiresFullConsent(t *testing.T) {
 	store := ringingStore()
 	service := newTestSessionService(store, &supportSessionFakeEventPublisher{}, &fakeTokenIssuer{})
-	consent := domain.Consent{Audio: true, ScreenShare: false, PeriodicCapture: true, TextVersion: "v2"}
+	consent := domain.Consent{Audio: true, ScreenShare: false, PeriodicCapture: true, TextVersion: "v3"}
 	_, err := service.Accept(context.Background(), domain.Actor{ID: "user_1", Role: domain.RoleUser}, "session_1", 1, consent, "accept-key", "request-1")
 	if code, _ := domain.ErrorCodeOf(err); code != domain.CodeValidationError {
 		t.Fatalf("code=%s err=%v", code, err)
@@ -270,7 +270,7 @@ func TestSupportSessionServiceDoesNotPublishOnRollback(t *testing.T) {
 	store.failComplete = true
 	publisher := &supportSessionFakeEventPublisher{}
 	service := newTestSessionService(store, publisher, &fakeTokenIssuer{})
-	consent := domain.Consent{Audio: true, ScreenShare: true, PeriodicCapture: true, TextVersion: "v2"}
+	consent := domain.Consent{Audio: true, ScreenShare: true, PeriodicCapture: true, TextVersion: "v3"}
 	_, err := service.Accept(context.Background(), domain.Actor{ID: "user_1", Role: domain.RoleUser}, "session_1", 1, consent, "accept-key", "request-1")
 	if err == nil {
 		t.Fatal("expected error")
@@ -339,7 +339,7 @@ func activeStore() *fakeSessionStore {
 	request.Revision = 3
 	store.requests[request.ID] = request
 	session := store.sessions["session_1"]
-	consent := domain.Consent{Audio: true, ScreenShare: true, PeriodicCapture: true, TextVersion: "v2"}
+	consent := domain.Consent{Audio: true, ScreenShare: true, PeriodicCapture: true, TextVersion: "v3"}
 	started := sessionTestNow.Add(-time.Minute)
 	session.Status = domain.SupportSessionActive
 	session.Consent = &consent

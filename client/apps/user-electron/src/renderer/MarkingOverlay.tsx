@@ -5,6 +5,7 @@ import type {
   MarkingOverlayBridge,
 } from '../shared/marking-overlay'
 import './marking-overlay.css'
+import { KeyboardGuide } from './KeyboardGuide'
 
 export function MarkingOverlay({ bridge }: { bridge: MarkingOverlayBridge }) {
   const [marks, setMarks] = useState<DesktopMark[]>([])
@@ -33,74 +34,69 @@ export function MarkingOverlay({ bridge }: { bridge: MarkingOverlayBridge }) {
               strokeWidth="3"
             />
           </svg>
-          <div className="desktop-guidance-card" aria-label="家族のマウス操作">
-            <strong>家族のマウス</strong>
-            <svg
-              width="108"
-              height="120"
-              viewBox="0 0 108 120"
-              aria-hidden="true"
+          {guidance.buttons !== 0 ? (
+            <div
+              className="desktop-guidance-mouse"
+              aria-label="家族のマウス操作"
+              style={{
+                left: `clamp(12px, calc(${guidance.x * 100}% + 48px), calc(100% - 204px))`,
+                top: `clamp(12px, calc(${guidance.y * 100}% + 12px), calc(100% - 192px))`,
+              }}
             >
-              <rect
-                x="4"
-                y="4"
-                width="100"
-                height="112"
-                rx="40"
-                fill="white"
-                stroke="#222"
-                strokeWidth="4"
-              />
-              <path
-                d="M54 5 Q6 5 6 48 V57 H54Z"
-                fill={guidance.buttons & 1 ? '#ffb000' : '#eee'}
-                stroke="#222"
-                strokeWidth="3"
-              />
-              <path
-                d="M54 5 Q102 5 102 48 V57 H54Z"
-                fill={guidance.buttons & 2 ? '#ffb000' : '#eee'}
-                stroke="#222"
-                strokeWidth="3"
-              />
-              <rect
-                x="47"
-                y="19"
-                width="14"
-                height="27"
-                rx="7"
-                fill={guidance.buttons & 4 ? '#ffb000' : '#777'}
-              />
-            </svg>
-            <span>
-              {guidance.buttons
-                ? [
-                    guidance.buttons & 1 ? '左' : '',
-                    guidance.buttons & 2 ? '右' : '',
-                    guidance.buttons & 4 ? '中央' : '',
-                  ]
-                    .filter(Boolean)
-                    .join('・') + 'ボタンを押しています'
-                : 'ボタンを離しています'}
-            </span>
-          </div>
+              <svg
+                width="72"
+                height="80"
+                viewBox="0 0 108 120"
+                aria-hidden="true"
+              >
+                <rect
+                  x="4"
+                  y="4"
+                  width="100"
+                  height="112"
+                  rx="40"
+                  fill="white"
+                  stroke="#222"
+                  strokeWidth="4"
+                />
+                <path
+                  d="M54 5 Q6 5 6 48 V57 H54Z"
+                  fill={guidance.buttons & 1 ? '#ffb000' : '#eee'}
+                  stroke="#222"
+                  strokeWidth="3"
+                />
+                <path
+                  d="M54 5 Q102 5 102 48 V57 H54Z"
+                  fill={guidance.buttons & 2 ? '#ffb000' : '#eee'}
+                  stroke="#222"
+                  strokeWidth="3"
+                />
+                <rect
+                  x="47"
+                  y="19"
+                  width="14"
+                  height="27"
+                  rx="7"
+                  fill={guidance.buttons & 4 ? '#ffb000' : '#777'}
+                />
+              </svg>
+              <span>
+                {[
+                  guidance.buttons & 1 ? '左' : '',
+                  guidance.buttons & 2 ? '右' : '',
+                  guidance.buttons & 4 ? '中央' : '',
+                ]
+                  .filter(Boolean)
+                  .join('・')}
+                <br />
+                押しています
+              </span>
+            </div>
+          ) : null}
         </>
       ) : null}
       {guidance?.mode === 'KEYBOARD' && guidance.keys.length ? (
-        <div
-          className="desktop-guidance-card"
-          aria-label="家族のキーボード操作"
-        >
-          <strong>このキーを一緒に押します</strong>
-          <div className="desktop-guidance-keys">
-            {guidance.keys.map((key, i) => (
-              <span key={key}>
-                {i ? ' + ' : ''}
-                <kbd>{key}</kbd>
-              </span>
-            ))}
-          </div>
-        </div>
+        <KeyboardGuide keys={guidance.keys} />
       ) : null}
       {marks.map((mark) => (
         <span

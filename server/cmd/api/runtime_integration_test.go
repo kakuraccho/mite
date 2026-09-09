@@ -221,7 +221,7 @@ func TestServerRuntimeE2E(t *testing.T) {
 	client.json(t, http.MethodGet, "/v1/support-sessions/"+sessionID, e2eUserToken, "", nil, http.StatusOK)
 	client.json(t, http.MethodPost, "/v1/support-sessions/"+sessionID+"/accept", e2eUserToken, keyPrefix+"accept", map[string]any{
 		"expectedSessionRevision": 1,
-		"consent":                 map[string]any{"audio": true, "screenShare": true, "periodicCapture": true, "textVersion": "v2"},
+		"consent":                 map[string]any{"audio": true, "screenShare": true, "periodicCapture": true, "textVersion": "v3"},
 	}, http.StatusOK)
 	client.json(t, http.MethodPost, "/v1/support-sessions/"+sessionID+"/livekit-token", e2eFamilyToken, "", map[string]any{}, http.StatusOK)
 	conflict := client.json(t, http.MethodPost, "/v1/support-sessions/"+sessionID+"/resolve", e2eFamilyToken, keyPrefix+"conflict", map[string]any{

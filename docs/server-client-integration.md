@@ -36,13 +36,13 @@ REQUEST_SCREENSHOT登録
                    → batch作成・material upload・complete
                    → job SUCCEEDED / FAILED
                    → draft確認・編集・save
-                   → Guide保存・session GUIDE_SAVED（通話・共有を継続）
+                   → Guide保存・session GUIDE_SAVED（通話継続、作成前の共有を再開）
                    → 手順を一緒に確認・家族がPOST end → ENDED
 ```
 
 保存後は利用者がGuideRunを作成し、`NEXT` / `PREVIOUS`、最終stepでcompleteを行います。今回の通話を手動終了した後、別の相談として途中で家族へ聞く場合は、現在画面を新しい `REQUEST_SCREENSHOT` Artifactとして登録してから `POST /v1/guide-runs/{id}/support-request` を呼びます。
 
-応答は同意文v2を使い、音声と共有を自動開始します。定期撮影は共有開始直後と10秒ごと、ACTIVEかつ共有中だけ行います。CREATEで撮影を止め、生成・編集・保存後も通話と共有を保ちます。保存済み状態で家族が `POST /v1/support-sessions/{id}/end` に `expectedSessionRevision` とIdempotency-Keyを送ると終了します。
+応答は同意文v3を使い、音声と共有を自動開始します。定期撮影は共有開始直後と10秒ごと、ACTIVEかつ共有中だけ行います。CREATEで撮影と画面共有を止め、アップロード・生成・編集中は音声通話だけを保ちます。保存時には、作成前に共有していた場合だけ自動で共有を再開します。手動停止していた場合やアプリ再起動後は利用者の再開ボタンを使います。保存済み状態で家族が `POST /v1/support-sessions/{id}/end` に `expectedSessionRevision` とIdempotency-Keyを送ると終了します。
 
 ## 4. 再送と復旧
 
@@ -101,7 +101,7 @@ LiveKit tokenはSupportSessionが `ACTIVE`、`GENERATING_GUIDE`、`REVIEWING_GUI
 
 コード生成・テスト・静的解析・ビルドは[開発ガイドのGoサーバー検証](development.md#goサーバー)を参照してください。
 
-ローカルSupabaseとfake GuideGeneratorを使うHTTP/WebSocket E2Eは、専用DBと非公開Storage bucketを用意して実行します。共有DBや普段の開発データがあるDBは使用しないでください。DBには `20260904000100`、`20260904000300`、`20260909000100` のmigrationを順に適用します。Storageのbucketは接続先のStorage APIで作成します。
+ローカルSupabaseとfake GuideGeneratorを使うHTTP/WebSocket E2Eは、専用DBと非公開Storage bucketを用意して実行します。共有DBや普段の開発データがあるDBは使用しないでください。DBには `20260904000100`、`20260904000300`、`20260909000100`、`20260909000200` のmigrationを順に適用します。Storageのbucketは接続先のStorage APIで作成します。
 
 PowerShellで、秘密値を表示せず設定する例です。`mite_test_only` は新規のテスト専用DB、`mite-test-only` は専用bucketの名前へ置き換えます。両方のruntimeテストはシナリオの末尾にデータを残すため、それぞれ別の新規DBで実行します。
 

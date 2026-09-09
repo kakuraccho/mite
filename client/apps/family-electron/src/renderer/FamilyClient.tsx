@@ -15,6 +15,7 @@ import {
 import {
   IdempotencyKeyStore,
   canContinueCall,
+  canShareScreen,
   startPolling,
   type KeyValueStorage,
   type RuntimeConfig,
@@ -363,8 +364,16 @@ function ActiveSupportScreen({
       <Surface elevated>
         <ScreenHeading
           eyebrow="支援中"
-          title="利用者の画面を見ながら案内する"
-          description="操作は利用者本人が行います。必要な場所は共有画面をクリックして伝えられます。"
+          title={
+            canShareScreen(session)
+              ? '利用者の画面を見ながら案内する'
+              : '音声で相談しながら手順を作る'
+          }
+          description={
+            canShareScreen(session)
+              ? '操作は利用者本人が行います。必要な場所は共有画面をクリックして伝えられます。'
+              : '作成中も利用者と話せます。保存した画面を使って手順を確認しましょう。'
+          }
           aside={
             <StatusBadge tone={connected ? 'active' : 'warning'}>
               {connected ? '通話中' : '通話を再接続中'}
@@ -390,7 +399,17 @@ function ActiveSupportScreen({
             </Button>
           </Notice>
         ) : null}
-        <ScreenShare liveSupport={liveSupport} live={live} onError={onError} />
+        {canShareScreen(session) ? (
+          <ScreenShare
+            liveSupport={liveSupport}
+            live={live}
+            onError={onError}
+          />
+        ) : (
+          <Notice title="手順の作成中は画面共有を停止しています">
+            音声通話はそのまま続けられます。
+          </Notice>
+        )}
         <div className="family-call-controls">
           <Button
             variant={live.microphoneEnabled ? 'secondary' : 'danger'}
@@ -453,7 +472,7 @@ function ActiveSupportScreen({
           }
         >
           <p>
-            撮影を止め、保存した画面から手順を作ります。音声通話と画面共有は、ガイドを保存したあとも続きます。
+            撮影と画面共有を止め、保存した画面から手順を作ります。作成中も音声通話は続き、保存すると作成前に共有していた画面の配信を再開します。
           </p>
         </Modal>
       ) : null}
@@ -1423,7 +1442,7 @@ export function FamilyClient({
               onClose={() => setClosedSavedSession(session.id)}
             >
               <p>
-                通話と画面共有は続いています。利用者が手順を試す様子を確認し、最後に「通話を終了する」を押してください。
+                音声通話は続いています。作成前に共有していた画面は配信を再開します。利用者が手順を試したら、最後に「通話を終了する」を押してください。
               </p>
             </Modal>
           ) : (

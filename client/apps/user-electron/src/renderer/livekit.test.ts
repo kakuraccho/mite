@@ -57,6 +57,50 @@ afterEach(() => {
   meter.track = null
 })
 
+it('connects audio alone and serializes a sharing stop requested during publication without disconnecting audio', async () => {
+  const session = new LiveKitUserMediaSession()
+  const callbacks: UserMediaCallbacks = {
+    onStateChange: vi.fn(),
+    onMarking: vi.fn(),
+    onAudioLevel: vi.fn(),
+    onScreenShareStopped: vi.fn(),
+  }
+  expect(
+    await session.connect(
+      {
+        serverUrl: 'wss://example.invalid',
+        token: 'test',
+      } as LiveKitConnectionInfo,
+      callbacks,
+      { shareScreen: false },
+    ),
+  ).toEqual({ screenTrackSid: null })
+  const room = vi.mocked(Room).mock.results[0]!.value as Room
+  expect(room.localParticipant.setMicrophoneEnabled).toHaveBeenCalledWith(true)
+  expect(room.localParticipant.setScreenShareEnabled).not.toHaveBeenCalled()
+  let finish!: (value: never) => void
+  vi.mocked(room.localParticipant.setScreenShareEnabled).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+  )
+  const start = session.startScreenShare()
+  await vi.waitFor(() =>
+    expect(room.localParticipant.setScreenShareEnabled).toHaveBeenCalledOnce(),
+  )
+  const stop = session.stopScreenShare()
+  expect(room.localParticipant.setScreenShareEnabled).toHaveBeenCalledOnce()
+  finish({ trackSid: 'TR_current' } as never)
+  await Promise.all([start, stop])
+  expect(room.localParticipant.setScreenShareEnabled).toHaveBeenLastCalledWith(
+    false,
+  )
+  expect(room.disconnect).not.toHaveBeenCalled()
+  expect(room.localParticipant.setMicrophoneEnabled).toHaveBeenCalledTimes(1)
+  await session.disconnect()
+})
+
 describe('LiveKitUserMediaSession marking reception', () => {
   it('accepts the family packet format only for the current topic and screen track, including after republishing', async () => {
     const session = new LiveKitUserMediaSession()

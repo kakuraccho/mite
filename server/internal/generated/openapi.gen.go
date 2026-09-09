@@ -21,13 +21,13 @@ import (
 
 // Defines values for AcceptSupportSessionRequestConsentTextVersion.
 const (
-	AcceptSupportSessionRequestConsentTextVersionV2 AcceptSupportSessionRequestConsentTextVersion = "v2"
+	AcceptSupportSessionRequestConsentTextVersionV3 AcceptSupportSessionRequestConsentTextVersion = "v3"
 )
 
 // Valid indicates whether the value is a known member of the AcceptSupportSessionRequestConsentTextVersion enum.
 func (e AcceptSupportSessionRequestConsentTextVersion) Valid() bool {
 	switch e {
-	case AcceptSupportSessionRequestConsentTextVersionV2:
+	case AcceptSupportSessionRequestConsentTextVersionV3:
 		return true
 	default:
 		return false
@@ -74,6 +74,7 @@ func (e ArtifactPurpose) Valid() bool {
 const (
 	ConsentTextVersionV1 ConsentTextVersion = "v1"
 	ConsentTextVersionV2 ConsentTextVersion = "v2"
+	ConsentTextVersionV3 ConsentTextVersion = "v3"
 )
 
 // Valid indicates whether the value is a known member of the ConsentTextVersion enum.
@@ -82,6 +83,8 @@ func (e ConsentTextVersion) Valid() bool {
 	case ConsentTextVersionV1:
 		return true
 	case ConsentTextVersionV2:
+		return true
+	case ConsentTextVersionV3:
 		return true
 	default:
 		return false
@@ -523,11 +526,11 @@ type Consent struct {
 	PeriodicCapture bool `json:"periodicCapture"`
 	ScreenShare     bool `json:"screenShare"`
 
-	// TextVersion v1は過去の同意。新しい応答は10秒撮影と保存後の通話継続を説明するv2を使う。
+	// TextVersion v1・v2は過去の同意。新しい応答は10秒撮影、手順作成中の共有停止と保存後の再開を説明するv3を使う。
 	TextVersion ConsentTextVersion `json:"textVersion"`
 }
 
-// ConsentTextVersion v1は過去の同意。新しい応答は10秒撮影と保存後の通話継続を説明するv2を使う。
+// ConsentTextVersion v1・v2は過去の同意。新しい応答は10秒撮影、手順作成中の共有停止と保存後の再開を説明するv3を使う。
 type ConsentTextVersion string
 
 // CreateArtifactRequest defines model for CreateArtifactRequest.
@@ -1148,7 +1151,7 @@ type ServerInterface interface {
 	// UpdateGuideDraft ガイド下書き全体を更新する
 	// (PATCH /v1/guide-drafts/{id})
 	UpdateGuideDraft(w http.ResponseWriter, r *http.Request, id ResourceId)
-	// SaveGuideDraft ガイド下書きを保存し、GUIDE_SAVEDで通話と共有を継続する
+	// SaveGuideDraft ガイド下書きを保存し、GUIDE_SAVEDで通話を継続し共有を再開できる状態にする
 	// (POST /v1/guide-drafts/{id}/save)
 	SaveGuideDraft(w http.ResponseWriter, r *http.Request, id ResourceId, params SaveGuideDraftParams)
 	// GetGuideGenerationJob AI生成状態を取得する
@@ -1250,7 +1253,7 @@ func (_ Unimplemented) UpdateGuideDraft(w http.ResponseWriter, r *http.Request, 
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// SaveGuideDraft ガイド下書きを保存し、GUIDE_SAVEDで通話と共有を継続する
+// SaveGuideDraft ガイド下書きを保存し、GUIDE_SAVEDで通話を継続し共有を再開できる状態にする
 // (POST /v1/guide-drafts/{id}/save)
 func (_ Unimplemented) SaveGuideDraft(w http.ResponseWriter, r *http.Request, id ResourceId, params SaveGuideDraftParams) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -5614,7 +5617,7 @@ type StrictServerInterface interface {
 	// UpdateGuideDraft ガイド下書き全体を更新する
 	// (PATCH /v1/guide-drafts/{id})
 	UpdateGuideDraft(ctx context.Context, request UpdateGuideDraftRequestObject) (UpdateGuideDraftResponseObject, error)
-	// SaveGuideDraft ガイド下書きを保存し、GUIDE_SAVEDで通話と共有を継続する
+	// SaveGuideDraft ガイド下書きを保存し、GUIDE_SAVEDで通話を継続し共有を再開できる状態にする
 	// (POST /v1/guide-drafts/{id}/save)
 	SaveGuideDraft(ctx context.Context, request SaveGuideDraftRequestObject) (SaveGuideDraftResponseObject, error)
 	// GetGuideGenerationJob AI生成状態を取得する

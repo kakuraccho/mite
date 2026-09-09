@@ -81,7 +81,7 @@ const activeSession = (): SupportSession => ({
     audio: true,
     screenShare: true,
     periodicCapture: true,
-    textVersion: 'v2',
+    textVersion: 'v3',
   },
   consentedAt: now,
   startedAt: now,
@@ -185,7 +185,7 @@ describe('FamilyClient', () => {
         audio: true,
         screenShare: true,
         periodicCapture: true,
-        textVersion: 'v2',
+        textVersion: 'v3',
       },
       consentedAt: now,
       startedAt: now,
@@ -609,6 +609,7 @@ it.each(['SKIP', 'CANCEL'] as const)(
         pollIntervalMs={60000}
       />,
     )
+    await waitFor(() => expect(media.connect).toHaveBeenCalledOnce())
     if (decision === 'SKIP') {
       fireEvent.click(
         await screen.findByRole('button', { name: '支援を解決済みにする' }),
@@ -627,6 +628,6 @@ it.each(['SKIP', 'CANCEL'] as const)(
       )
     }
     await screen.findByText('支援が完了しました')
-    expect(media.disconnect).toHaveBeenCalled()
+    await waitFor(() => expect(media.disconnect).toHaveBeenCalled())
   },
 )

@@ -168,6 +168,31 @@ describe('MarkingOverlay', () => {
   })
 })
 
+it('keeps the native window visible across movement and heartbeats, then hides when updates stop', () => {
+  const overlay = new MarkingOverlay(
+    'mite-user://app/index.html?view=marking',
+    '/marking-preload.js',
+  )
+  ready(overlay)
+  for (let i = 0; i < 8; i++) {
+    overlay.setMarks([])
+    overlay.setGuidance({
+      mode: 'CURSOR_MOUSE',
+      x: i / 10,
+      y: 0.5,
+      buttons: 1,
+      keys: [],
+      expiresAt: Date.now() + 2000,
+    })
+    vi.advanceTimersByTime(500)
+  }
+  expect(overlay.window.showInactive).toHaveBeenCalledOnce()
+  expect(overlay.window.hide).not.toHaveBeenCalled()
+  vi.advanceTimersByTime(1500)
+  expect(overlay.window.hide).toHaveBeenCalledOnce()
+  overlay.dispose()
+})
+
 it('expires pressed guidance independently of the hidden main renderer and clears on geometry changes', () => {
   const overlay = new MarkingOverlay(
     'mite-user://app/index.html?view=marking',

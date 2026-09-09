@@ -32,7 +32,8 @@ export interface UserMediaSession {
   connect(
     connection: LiveKitConnectionInfo,
     callbacks: UserMediaCallbacks,
-  ): Promise<{ screenTrackSid: string }>
+    options?: { shareScreen?: boolean },
+  ): Promise<{ screenTrackSid: string | null }>
   setMicrophoneEnabled(enabled: boolean): Promise<void>
   startScreenShare(): Promise<{ screenTrackSid: string }>
   stopScreenShare(): Promise<void>
@@ -46,11 +47,13 @@ export class LiveKitUserMediaSession implements UserMediaSession {
   #guidanceSequence = new Map<string, number>()
   #screenTrackSid: string | null = null
   readonly #audioElements = new Set<HTMLMediaElement>()
+  #screenOperation: Promise<unknown> = Promise.resolve()
 
   async connect(
     connection: LiveKitConnectionInfo,
     callbacks: UserMediaCallbacks,
-  ): Promise<{ screenTrackSid: string }> {
+    options: { shareScreen?: boolean } = {},
+  ): Promise<{ screenTrackSid: string | null }> {
     await this.disconnect()
     this.#callbacks = callbacks
     callbacks.onStateChange('CONNECTING')
@@ -152,18 +155,12 @@ export class LiveKitUserMediaSession implements UserMediaSession {
       await room.localParticipant.setMicrophoneEnabled(true)
       if (this.#room !== room) throw new Error('通話は終了しています')
       this.#startMeter()
-      const publication = await room.localParticipant.setScreenShareEnabled(
-        true,
-        { audio: false },
-      )
-      if (this.#room !== room) {
-        await room.disconnect()
-        throw new Error('通話は終了しています')
-      }
-      if (!publication?.trackSid) throw new Error('画面を共有できません')
-      this.#screenTrackSid = publication.trackSid
+      const sharing =
+        options.shareScreen === false
+          ? { screenTrackSid: null }
+          : await this.startScreenShare()
       callbacks.onStateChange('CONNECTED')
-      return { screenTrackSid: publication.trackSid }
+      return sharing
     } catch (error) {
       if (this.#room === room) await this.disconnect()
       else await room.disconnect()
@@ -178,27 +175,42 @@ export class LiveKitUserMediaSession implements UserMediaSession {
     this.#startMeter()
   }
 
-  async startScreenShare() {
+  startScreenShare() {
     const room = this.#room
-    if (!room) throw new Error('家族との通話に接続されていません')
-    const publication = await room.localParticipant.setScreenShareEnabled(
-      true,
-      { audio: false },
-    )
-    if (this.#room !== room) {
-      await room.disconnect()
-      throw new Error('通話は終了しています')
-    }
-    if (!publication?.trackSid) throw new Error('画面を共有できません')
-    this.#screenTrackSid = publication.trackSid
-    return { screenTrackSid: publication.trackSid }
+    const operation = this.#screenOperation
+      .catch(() => {})
+      .then(async () => {
+        if (!room || this.#room !== room)
+          throw new Error('家族との通話に接続されていません')
+        const publication = await room.localParticipant.setScreenShareEnabled(
+          true,
+          { audio: false },
+        )
+        if (this.#room !== room) {
+          await room.disconnect()
+          throw new Error('通話は終了しています')
+        }
+        if (!publication?.trackSid) throw new Error('画面を共有できません')
+        this.#screenTrackSid = publication.trackSid
+        return { screenTrackSid: publication.trackSid }
+      })
+    this.#screenOperation = operation
+    return operation
   }
 
-  async stopScreenShare() {
-    if (!this.#room) return
+  stopScreenShare() {
+    const room = this.#room
     this.#screenTrackSid = null
     this.#callbacks?.onGuidance?.(null)
-    await this.#room.localParticipant.setScreenShareEnabled(false)
+    const operation = this.#screenOperation
+      .catch(() => {})
+      .then(async () => {
+        if (!room || this.#room !== room) return
+        await room.localParticipant.setScreenShareEnabled(false)
+        this.#screenTrackSid = null
+      })
+    this.#screenOperation = operation
+    return operation
   }
 
   #startMeter() {

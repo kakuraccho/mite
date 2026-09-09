@@ -459,7 +459,7 @@ mite_family \
   -X POST \
   -H 'Content-Type: application/json' \
   -H "Idempotency-Key: manual-$MITE_MANUAL_RUN_ID-accept-family" \
-  --data '{"expectedSessionRevision":1,"consent":{"audio":true,"screenShare":true,"periodicCapture":true,"textVersion":"v2"}}' \
+  --data '{"expectedSessionRevision":1,"consent":{"audio":true,"screenShare":true,"periodicCapture":true,"textVersion":"v3"}}' \
   "$MITE_API_BASE_URL/v1/support-sessions/$MITE_SUPPORT_SESSION_ID/accept"
 ```
 
@@ -472,7 +472,7 @@ mite_user \
   -X POST \
   -H 'Content-Type: application/json' \
   -H "Idempotency-Key: manual-$MITE_MANUAL_RUN_ID-accept" \
-  --data '{"expectedSessionRevision":1,"consent":{"audio":true,"screenShare":true,"periodicCapture":true,"textVersion":"v2"}}' \
+  --data '{"expectedSessionRevision":1,"consent":{"audio":true,"screenShare":true,"periodicCapture":true,"textVersion":"v3"}}' \
   "$MITE_API_BASE_URL/v1/support-sessions/$MITE_SUPPORT_SESSION_ID/accept"
 ```
 

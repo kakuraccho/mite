@@ -100,7 +100,7 @@ describeIntegration('HttpMiteApi local A/B/C integration', () => {
           audio: true,
           screenShare: true,
           periodicCapture: true,
-          textVersion: 'v2',
+          textVersion: 'v3',
         },
       },
       { idempotencyKey: operationKey('accept') },

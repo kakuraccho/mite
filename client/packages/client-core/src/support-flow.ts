@@ -75,4 +75,7 @@ export const canCaptureGuideMaterial = (
   sharing: boolean,
 ): boolean => session?.status === 'ACTIVE' && sharing
 
+export const canShareScreen = (session: SupportSession | null): boolean =>
+  session?.status === 'ACTIVE' || session?.status === 'GUIDE_SAVED'
+
 export const CAPTURE_INTERVAL_MS = 10_000
