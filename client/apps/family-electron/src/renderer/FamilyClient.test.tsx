@@ -553,7 +553,7 @@ it('retries a failed save and manual end exactly, keeps the call/video attached 
   expect(endSupportSession.mock.calls[1]).toEqual(
     endSupportSession.mock.calls[0],
   )
-  expect(restored.disconnect).toHaveBeenCalledOnce()
+  await waitFor(() => expect(restored.disconnect).toHaveBeenCalledOnce())
   expect(
     screen.queryByRole('dialog', { name: 'ガイドを作りますか？' }),
   ).toBeNull()

@@ -81,7 +81,7 @@ it('shows a real Ctrl+C chord, repeats held keys, and clears on key release, mod
   expect(vi.getTimerCount()).toBe(0)
 })
 
-it('maps a letterboxed video, carries pressed buttons through a drag, and clears on focus loss or share stop', async () => {
+it('maps a letterboxed video and keeps the cursor after release, capture loss, leaving the video and focus loss', async () => {
   vi.useFakeTimers()
   vi.stubGlobal('PointerEvent', MouseEvent)
   const media = support(),
@@ -104,6 +104,14 @@ it('maps a letterboxed video, carries pressed buttons through a drag, and clears
   stage.setPointerCapture = vi.fn()
   stage.hasPointerCapture = vi.fn(() => true)
   fireEvent.click(screen.getByRole('button', { name: 'カーソルとマウス' }))
+  expect(media.sendGuidance).toHaveBeenLastCalledWith({
+    mode: 'CURSOR_MOUSE',
+    x: 0.5,
+    y: 0.5,
+    buttons: 0,
+    keys: [],
+  })
+  vi.mocked(media.sendGuidance).mockClear()
   fireEvent.pointerDown(stage, { clientX: 500, clientY: 350, buttons: 1 })
   expect(media.sendGuidance).toHaveBeenLastCalledWith({
     mode: 'CURSOR_MOUSE',
@@ -121,14 +129,46 @@ it('maps a letterboxed video, carries pressed buttons through a drag, and clears
     expect.objectContaining({ x: 0.75, buttons: 1 }),
   )
   fireEvent.pointerUp(stage, { clientX: 700, clientY: 350, buttons: 0 })
+  // Browsers release capture automatically after pointerup, even for a click.
+  fireEvent.lostPointerCapture(stage)
   expect(media.sendGuidance).toHaveBeenLastCalledWith(
-    expect.objectContaining({ buttons: 0 }),
+    expect.objectContaining({ x: 0.75, buttons: 0 }),
   )
+  await act(async () => vi.advanceTimersByTimeAsync(2500))
+  expect(media.sendGuidance).toHaveBeenLastCalledWith(
+    expect.objectContaining({ x: 0.75, buttons: 0 }),
+  )
+  expect(media.sendGuidance).not.toHaveBeenCalledWith(null)
+  // A same-mode click must not silently disable the cursor heartbeat.
+  fireEvent.click(screen.getByRole('button', { name: 'カーソルとマウス' }))
   fireEvent.pointerMove(stage, { clientX: 500, clientY: 60, buttons: 0 })
-  expect(media.sendGuidance).toHaveBeenLastCalledWith(null)
+  expect(media.sendGuidance).not.toHaveBeenCalledWith(null)
+  expect(media.sendGuidance).toHaveBeenLastCalledWith(
+    expect.objectContaining({ x: 0.75, buttons: 0 }),
+  )
   fireEvent.pointerMove(stage, { clientX: 500, clientY: 350, buttons: 2 })
+  stage.hasPointerCapture = vi.fn(() => false)
+  fireEvent.pointerLeave(stage)
+  expect(media.sendGuidance).toHaveBeenLastCalledWith(
+    expect.objectContaining({ x: 0.5, y: 0.5, buttons: 0 }),
+  )
+  fireEvent.pointerDown(stage, { clientX: 700, clientY: 350, buttons: 1 })
+  fireEvent.pointerCancel(stage)
+  expect(media.sendGuidance).toHaveBeenLastCalledWith(
+    expect.objectContaining({ x: 0.75, buttons: 0 }),
+  )
+  fireEvent.pointerDown(stage, { clientX: 500, clientY: 350, buttons: 1 })
   fireEvent(window, new Event('blur'))
+  expect(media.sendGuidance).toHaveBeenLastCalledWith(
+    expect.objectContaining({ x: 0.5, buttons: 0 }),
+  )
+  await act(async () => vi.advanceTimersByTimeAsync(2500))
+  expect(media.sendGuidance).not.toHaveBeenCalledWith(null)
+  fireEvent.click(screen.getByRole('button', { name: '案内を消す' }))
   expect(media.sendGuidance).toHaveBeenLastCalledWith(null)
+  const clearedCount = vi.mocked(media.sendGuidance).mock.calls.length
+  await act(async () => vi.advanceTimersByTimeAsync(2500))
+  expect(vi.mocked(media.sendGuidance).mock.calls.length).toBe(clearedCount)
   fireEvent.pointerMove(stage, { clientX: 500, clientY: 350, buttons: 1 })
   rerender(
     <ScreenShare
@@ -138,4 +178,7 @@ it('maps a letterboxed video, carries pressed buttons through a drag, and clears
     />,
   )
   expect(media.sendGuidance).toHaveBeenLastCalledWith(null)
+  const stoppedCount = vi.mocked(media.sendGuidance).mock.calls.length
+  await act(async () => vi.advanceTimersByTimeAsync(2500))
+  expect(vi.mocked(media.sendGuidance).mock.calls.length).toBe(stoppedCount)
 })
