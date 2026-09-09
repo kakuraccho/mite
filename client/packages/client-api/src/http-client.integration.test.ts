@@ -46,7 +46,9 @@ describeIntegration('HttpMiteApi local A/B/C integration', () => {
     const capturedAt = new Date(
       Math.floor(Date.now() / 1_000) * 1_000,
     ).toISOString()
-    const capturedLater = new Date(Date.parse(capturedAt) + 5_000).toISOString()
+    const capturedLater = new Date(
+      Date.parse(capturedAt) + 10_000,
+    ).toISOString()
 
     const initialArtifact = await user.uploadArtifact(
       {
@@ -98,7 +100,7 @@ describeIntegration('HttpMiteApi local A/B/C integration', () => {
           audio: true,
           screenShare: true,
           periodicCapture: true,
-          textVersion: 'v1',
+          textVersion: 'v4',
         },
       },
       { idempotencyKey: operationKey('accept') },
@@ -134,7 +136,7 @@ describeIntegration('HttpMiteApi local A/B/C integration', () => {
       resolved.supportSession.id,
       {
         expectedSessionRevision: resolved.supportSession.revision,
-        captureIntervalSeconds: 5,
+        captureIntervalSeconds: 10,
         capturedFrom: capturedAt,
         capturedTo: capturedLater,
         expectedItemCount: 2,
@@ -196,21 +198,53 @@ describeIntegration('HttpMiteApi local A/B/C integration', () => {
       title: `${draft.title}（確認済み）`,
       steps: draft.steps,
     })
-    const saved = await family.saveGuideDraft(
-      updatedDraft.id,
-      { expectedRevision: updatedDraft.revision },
-      { idempotencyKey: operationKey('save-guide') },
+    const drafts = await family.listSessionGuideDrafts(
+      resolved.supportSession.id,
     )
-    expect(saved.supportSession.status).toBe('ENDED')
-    expect((await user.listGuides()).map((guide) => guide.id)).toContain(
-      saved.guide.id,
+    expect(drafts).toHaveLength(2)
+    expect(drafts[0]?.revision).toBe(updatedDraft.revision)
+    const reviewing = await family.getSupportSession(resolved.supportSession.id)
+    await user.getLiveKitToken(reviewing.id)
+    await family.getLiveKitToken(reviewing.id)
+    const reviewInput = {
+      expectedSessionRevision: reviewing.revision,
+      drafts: drafts.map((item) => ({
+        id: item.id,
+        expectedRevision: item.revision,
+      })),
+    }
+    const reviewOptions = { idempotencyKey: operationKey('save-guides') }
+    const saved = await family.completeGuideReview(
+      reviewing.id,
+      reviewInput,
+      reviewOptions,
     )
     expect(
-      (await user.getGuide(saved.guide.id)).currentVersion.steps,
+      await family.completeGuideReview(
+        reviewing.id,
+        reviewInput,
+        reviewOptions,
+      ),
+    ).toEqual(saved)
+    expect(saved.guides).toHaveLength(2)
+    expect(saved.supportSession.status).toBe('ENDED')
+    expect(saved.supportSession.endedAt).not.toBeNull()
+    expect(saved.supportSession.endReason).toBe('GUIDE_SAVED')
+    await expect(
+      user.getLiveKitToken(saved.supportSession.id),
+    ).rejects.toMatchObject({ status: 409 })
+    await expect(
+      family.getLiveKitToken(saved.supportSession.id),
+    ).rejects.toMatchObject({ status: 409 })
+    const savedGuide = saved.guides[0]!
+    const listedGuideIds = (await user.listGuides()).map((item) => item.id)
+    for (const item of saved.guides) expect(listedGuideIds).toContain(item.id)
+    expect(
+      (await user.getGuide(savedGuide.id)).currentVersion.steps,
     ).toHaveLength(2)
 
     const run = await user.createGuideRun(
-      { guideId: saved.guide.id },
+      { guideId: savedGuide.id },
       { idempotencyKey: operationKey('create-run') },
     )
     const next = await user.moveGuideRun(run.id, {
@@ -233,7 +267,7 @@ describeIntegration('HttpMiteApi local A/B/C integration', () => {
     expect(completedRun.status).toBe('COMPLETED')
 
     const pausedRun = await user.createGuideRun(
-      { guideId: saved.guide.id },
+      { guideId: savedGuide.id },
       { idempotencyKey: operationKey('create-paused-run') },
     )
     const followUpArtifact = await user.uploadArtifact(

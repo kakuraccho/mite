@@ -1,16 +1,10 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type MouseEvent,
-} from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   MiteApiError,
   MiteEventStream,
   type EventConnectionStatus,
   type GuideDraft,
+  type CompleteGuideReviewInput,
   type GuideGenerationJob,
   type GuideMaterialBatch,
   type MiteApi,
@@ -21,13 +15,16 @@ import {
 } from '@mite/client-api'
 import {
   IdempotencyKeyStore,
-  normalizedPointInVideo,
+  canContinueCall,
+  canShareScreen,
   startPolling,
   type KeyValueStorage,
   type RuntimeConfig,
 } from '@mite/client-core'
 import {
   AppShell,
+  Modal,
+  CallElapsed,
   Button,
   EmptyState,
   LoadingState,
@@ -37,7 +34,8 @@ import {
   Surface,
 } from '@mite/ui'
 import { ArtifactImage } from './ArtifactImage'
-import { DraftEditor } from './DraftEditor'
+import { ScreenShare } from './ScreenShare'
+import { GuideReview } from './GuideReview'
 import {
   LiveKitFamilySupport,
   type FamilyLiveSupport,
@@ -65,13 +63,50 @@ export interface FamilyClientProps {
 }
 
 interface PendingAction {
-  kind: 'CALL' | 'RESOLVE' | 'RETRY_JOB' | 'CANCEL_GUIDE' | 'SAVE_DRAFT'
+  kind:
+    | 'CALL'
+    | 'RESOLVE'
+    | 'RETRY_JOB'
+    | 'CANCEL_GUIDE'
+    | 'COMPLETE_REVIEW'
+    | 'END_CALL'
   label: string
   operationId: string
   entityId: string
   expectedRevision: number
   decision?: 'CREATE' | 'SKIP'
-  draft?: GuideDraft
+  reviewInput?: CompleteGuideReviewInput
+}
+
+const PENDING_REVIEW_KEY = 'mite.family.pendingGuideReview'
+
+function restorePendingReview(storage: KeyValueStorage): PendingAction | null {
+  try {
+    const raw = storage.getItem(PENDING_REVIEW_KEY)
+    if (!raw) return null
+    const pending = JSON.parse(raw) as PendingAction
+    const input = pending.reviewInput
+    if (
+      pending.kind !== 'COMPLETE_REVIEW' ||
+      typeof pending.entityId !== 'string' ||
+      pending.operationId !== `complete-review:${pending.entityId}` ||
+      !input ||
+      !Number.isInteger(input.expectedSessionRevision) ||
+      input.expectedSessionRevision < 1 ||
+      !Array.isArray(input.drafts) ||
+      input.drafts.length === 0 ||
+      !input.drafts.every(
+        (draft) =>
+          typeof draft.id === 'string' &&
+          Number.isInteger(draft.expectedRevision) &&
+          draft.expectedRevision >= 1,
+      )
+    )
+      return null
+    return pending
+  } catch {
+    return null
+  }
 }
 
 const requestStatus = (status: SupportRequest['status']) => {
@@ -176,7 +211,7 @@ function RequestList({
     <aside className="family-request-list" aria-label="支援依頼一覧">
       <div className="family-list-heading">
         <div>
-          <span className="mite-eyebrow">F-01 依頼一覧</span>
+          <span className="mite-eyebrow">依頼一覧</span>
           <h2>利用者からの依頼</h2>
         </div>
         <span className="family-count" aria-label={`${requests.length}件`}>
@@ -242,7 +277,7 @@ function RequestDetail({ api, request, busy, onCall }: RequestDetailProps) {
   return (
     <Surface elevated className="family-detail">
       <ScreenHeading
-        eyebrow="F-01 依頼の詳細"
+        eyebrow="依頼の詳細"
         title="利用者から支援依頼が届いています"
         description="画面と困っている内容を確認してから発信してください。"
         aside={<StatusBadge tone={status.tone}>{status.text}</StatusBadge>}
@@ -333,104 +368,6 @@ function RingingScreen({ request }: { request: SupportRequest }) {
   )
 }
 
-interface ScreenShareProps {
-  liveSupport: FamilyLiveSupport
-  live: LiveSupportSnapshot
-  onError(error: unknown): void
-}
-
-function ScreenShare({ liveSupport, live, onError }: ScreenShareProps) {
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const [localMark, setLocalMark] = useState<{
-    x: number
-    y: number
-    key: number
-  } | null>(null)
-
-  useEffect(() => {
-    liveSupport.attachScreen(videoRef.current)
-    return () => liveSupport.attachScreen(null)
-  }, [liveSupport])
-
-  const sendPoint = (point: { x: number; y: number }) => {
-    if (!point) return
-    setLocalMark({ ...point, key: Date.now() })
-    void liveSupport.sendMark(point).catch(onError)
-  }
-
-  const mark = (event: MouseEvent<HTMLDivElement>) => {
-    const video = videoRef.current
-    if (!video || !live.screenTrackSid) return
-    const bounds = video.getBoundingClientRect()
-    const point = normalizedPointInVideo(event.clientX, event.clientY, {
-      left: bounds.left,
-      top: bounds.top,
-      width: bounds.width,
-      height: bounds.height,
-      videoWidth: video.videoWidth,
-      videoHeight: video.videoHeight,
-    })
-    if (point) sendPoint(point)
-  }
-
-  return (
-    <div className="family-screen-share">
-      <div
-        className="family-video-stage"
-        onClick={mark}
-        onKeyDown={(event) => {
-          if (
-            live.screenTrackSid &&
-            (event.key === 'Enter' || event.key === ' ')
-          ) {
-            event.preventDefault()
-            sendPoint({ x: 0.5, y: 0.5 })
-          }
-        }}
-        role="button"
-        tabIndex={live.screenTrackSid ? 0 : -1}
-        aria-label={
-          live.screenTrackSid
-            ? '共有画面。画面上をクリックすると利用者へ印を送ります'
-            : '共有画面を待っています'
-        }
-      >
-        <video ref={videoRef} autoPlay playsInline />
-        {!live.screenTrackSid ? (
-          <div className="family-video-empty">
-            <span aria-hidden="true">▣</span>
-            <strong>利用者の画面共有を待っています</strong>
-            <p>音声通話はそのまま続けられます。</p>
-          </div>
-        ) : null}
-        {localMark ? (
-          <span
-            key={localMark.key}
-            className="family-local-mark"
-            style={{
-              left: `${localMark.x * 100}%`,
-              top: `${localMark.y * 100}%`,
-            }}
-            aria-hidden="true"
-          />
-        ) : null}
-      </div>
-      <div className="family-mark-help">
-        <span>
-          共有画面をクリックすると、利用者の画面に2秒間だけ印を表示します。
-        </span>
-        <Button
-          variant="quiet"
-          disabled={!live.screenTrackSid}
-          onClick={() => void liveSupport.clearMarks().catch(onError)}
-        >
-          印を消す
-        </Button>
-      </div>
-    </div>
-  )
-}
-
 interface ActiveSupportScreenProps {
   session: SupportSession
   liveSupport: FamilyLiveSupport
@@ -438,6 +375,7 @@ interface ActiveSupportScreenProps {
   busy: boolean
   onReconnect(): void
   onResolve(decision: 'CREATE' | 'SKIP'): void
+  onEnd(): void
   onError(error: unknown): void
 }
 
@@ -448,6 +386,7 @@ function ActiveSupportScreen({
   busy,
   onReconnect,
   onResolve,
+  onEnd,
   onError,
 }: ActiveSupportScreenProps) {
   const [showDecision, setShowDecision] = useState(false)
@@ -456,9 +395,17 @@ function ActiveSupportScreen({
     <div className="family-stack">
       <Surface elevated>
         <ScreenHeading
-          eyebrow="F-03 支援中"
-          title="利用者の画面を見ながら案内する"
-          description="操作は利用者本人が行います。必要な場所は共有画面をクリックして伝えられます。"
+          eyebrow="支援中"
+          title={
+            canShareScreen(session)
+              ? '利用者の画面を見ながら案内する'
+              : '音声で相談しながら手順を作る'
+          }
+          description={
+            canShareScreen(session)
+              ? '操作は利用者本人が行います。必要な場所は共有画面をクリックして伝えられます。'
+              : '作成中も利用者と話せます。保存した画面を使って手順を確認しましょう。'
+          }
           aside={
             <StatusBadge tone={connected ? 'active' : 'warning'}>
               {connected ? '通話中' : '通話を再接続中'}
@@ -484,7 +431,17 @@ function ActiveSupportScreen({
             </Button>
           </Notice>
         ) : null}
-        <ScreenShare liveSupport={liveSupport} live={live} onError={onError} />
+        {canShareScreen(session) ? (
+          <ScreenShare
+            liveSupport={liveSupport}
+            live={live}
+            onError={onError}
+          />
+        ) : (
+          <Notice title="手順の作成中は画面共有を停止しています">
+            音声通話はそのまま続けられます。
+          </Notice>
+        )}
         <div className="family-call-controls">
           <Button
             variant={live.microphoneEnabled ? 'secondary' : 'danger'}
@@ -499,54 +456,57 @@ function ActiveSupportScreen({
             {live.microphoneEnabled ? 'マイクをオフ' : 'マイクをオン'}
           </Button>
           <div className="family-audio-level">
-            <span>利用者の声</span>
+            <span>自分のマイク</span>
             <meter
               min="0"
               max="1"
-              value={live.receivedAudioLevel}
-              aria-label="利用者の音声レベル"
+              value={live.localAudioLevel}
+              aria-label="自分のマイクの大きさ"
             />
           </div>
-          <Button
-            variant="primary"
-            disabled={busy}
-            onClick={() => setShowDecision(true)}
-          >
-            支援を解決済みにする
-          </Button>
+          <CallElapsed startedAt={session.startedAt} />
+          {session.status === 'ACTIVE' || session.status === 'GUIDE_SAVED' ? (
+            <Button
+              variant="primary"
+              disabled={busy}
+              onClick={() =>
+                session.status === 'GUIDE_SAVED'
+                  ? onEnd()
+                  : setShowDecision(true)
+              }
+            >
+              {session.status === 'GUIDE_SAVED'
+                ? '通話を終了する'
+                : '支援を解決済みにする'}
+            </Button>
+          ) : null}
         </div>
       </Surface>
 
-      {showDecision ? (
-        <Surface
-          className="family-decision"
-          aria-labelledby="guide-decision-heading"
+      {showDecision && session.status === 'ACTIVE' ? (
+        <Modal
+          title="ガイドを作りますか？"
+          onClose={() => setShowDecision(false)}
+          busy={busy}
+          actions={
+            <>
+              <Button
+                variant="secondary"
+                disabled={busy}
+                onClick={() => onResolve('SKIP')}
+              >
+                作成せず終了
+              </Button>
+              <Button disabled={busy} onClick={() => onResolve('CREATE')}>
+                ガイドを作る
+              </Button>
+            </>
+          }
         >
-          <div>
-            <h2 id="guide-decision-heading">
-              今回の操作をガイドに残しますか？
-            </h2>
-            <p>
-              ガイドを作る場合、利用者が保存した画面から下書きを作成します。
-            </p>
-          </div>
-          <div className="family-action-row">
-            <Button
-              variant="secondary"
-              disabled={busy || session.status !== 'ACTIVE'}
-              onClick={() => onResolve('SKIP')}
-            >
-              作成せず終了
-            </Button>
-            <Button
-              size="large"
-              disabled={busy || session.status !== 'ACTIVE'}
-              onClick={() => onResolve('CREATE')}
-            >
-              ガイドを作る
-            </Button>
-          </div>
-        </Surface>
+          <p>
+            撮影と画面共有を止め、保存した画面から手順を作ります。作成中も音声通話は続き、保存すると作成前に共有していた画面の配信を再開します。
+          </p>
+        </Modal>
       ) : null}
     </div>
   )
@@ -575,7 +535,7 @@ function GenerationScreen({
   return (
     <Surface elevated className="family-generation">
       <ScreenHeading
-        eyebrow="F-04 ガイド作成中"
+        eyebrow="ガイド作成中"
         title="利用者の画面から手順を作っています"
         description="画像の受け取りと手順の作成状況は自動で更新されます。"
         aside={<StatusBadge tone="active">処理中</StatusBadge>}
@@ -679,11 +639,17 @@ export function FamilyClient({
   const [session, setSession] = useState<SupportSession | null>(null)
   const [batch, setBatch] = useState<GuideMaterialBatch | null>(null)
   const [job, setJob] = useState<GuideGenerationJob | null>(null)
-  const [draft, setDraft] = useState<GuideDraft | null>(null)
+  const [drafts, setDrafts] = useState<GuideDraft[]>([])
+  const [confirmCancel, setConfirmCancel] = useState(false)
+  const [closedSavedSession, setClosedSavedSession] = useState<string | null>(
+    null,
+  )
   const [initialLoading, setInitialLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
-  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null)
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(() =>
+    restorePendingReview(storage),
+  )
   const [restoredResolveDecision, setRestoredResolveDecision] = useState<
     'CREATE' | 'SKIP' | null
   >(null)
@@ -696,7 +662,7 @@ export function FamilyClient({
   const requestRef = useRef<SupportRequest | null>(null)
   const sessionRef = useRef<SupportSession | null>(null)
   const jobRef = useRef<GuideGenerationJob | null>(null)
-  const draftRef = useRef<GuideDraft | null>(null)
+  const draftsRef = useRef<GuideDraft[]>([])
   const liveSessionIdRef = useRef<string | null>(null)
 
   const acceptRequest = useCallback(
@@ -727,6 +693,13 @@ export function FamilyClient({
       }
       sessionRef.current = incoming
       setSession(incoming)
+      if (incoming.status === 'GUIDE_SAVED' || incoming.status === 'ENDED') {
+        const pending = restorePendingReview(storage)
+        if (pending?.entityId === incoming.id) {
+          operationKeys.complete(pending.operationId)
+          storage.removeItem(PENDING_REVIEW_KEY)
+        }
+      }
       if (incoming.status === 'ACTIVE') {
         const decision = operationKeys.peek(`resolve:${incoming.id}:CREATE`)
           ? 'CREATE'
@@ -744,8 +717,10 @@ export function FamilyClient({
           return null
         }
         if (
-          (pending.kind === 'CANCEL_GUIDE' || pending.kind === 'SAVE_DRAFT') &&
-          incoming.status === 'ENDED'
+          ((pending.kind === 'CANCEL_GUIDE' || pending.kind === 'END_CALL') &&
+            incoming.status === 'ENDED') ||
+          (pending.kind === 'COMPLETE_REVIEW' &&
+            (incoming.status === 'GUIDE_SAVED' || incoming.status === 'ENDED'))
         ) {
           return null
         }
@@ -753,7 +728,7 @@ export function FamilyClient({
       })
       return incoming
     },
-    [operationKeys],
+    [operationKeys, storage],
   )
 
   const handleError = useCallback((error: unknown) => {
@@ -772,21 +747,20 @@ export function FamilyClient({
     return incoming
   }, [])
 
-  const acceptDraft = useCallback((incoming: GuideDraft) => {
-    const current = draftRef.current
-    if (current?.id === incoming.id && current.revision >= incoming.revision) {
-      return current
-    }
-    draftRef.current = incoming
-    setDraft(incoming)
-    return incoming
+  const acceptDrafts = useCallback((incoming: GuideDraft[]) => {
+    const accepted = incoming.map((draft) => {
+      const current = draftsRef.current.find((item) => item.id === draft.id)
+      return current && current.revision >= draft.revision ? current : draft
+    })
+    draftsRef.current = accepted
+    setDrafts(accepted)
   }, [])
 
   const refreshChildren = useCallback(
     async (currentSession: SupportSession) => {
       if (currentSession.status === 'GENERATING_GUIDE') {
-        draftRef.current = null
-        setDraft(null)
+        draftsRef.current = []
+        setDrafts([])
         const [batchResult, jobResult] = await Promise.all([
           currentSession.guideMaterialBatchId
             ? api.getGuideMaterialBatch(currentSession.guideMaterialBatchId)
@@ -822,19 +796,24 @@ export function FamilyClient({
         currentSession.status === 'REVIEWING_GUIDE' &&
         currentSession.guideDraftId
       ) {
-        const incomingDraft = await api.getGuideDraft(
-          currentSession.guideDraftId,
+        const incomingDrafts = await api.listSessionGuideDrafts(
+          currentSession.id,
         )
-        acceptDraft(incomingDraft)
+        if (
+          sessionRef.current?.id === currentSession.id &&
+          sessionRef.current.status === 'REVIEWING_GUIDE'
+        ) {
+          acceptDrafts(incomingDrafts)
+        }
         return
       }
       setBatch(null)
       jobRef.current = null
       setJob(null)
-      draftRef.current = null
-      setDraft(null)
+      draftsRef.current = []
+      setDrafts([])
     },
-    [acceptDraft, acceptJob, api],
+    [acceptDrafts, acceptJob, api],
   )
 
   const hydrateRequest = useCallback(
@@ -849,8 +828,8 @@ export function FamilyClient({
         setBatch(null)
         jobRef.current = null
         setJob(null)
-        draftRef.current = null
-        setDraft(null)
+        draftsRef.current = []
+        setDrafts([])
         return
       }
       const incomingSession =
@@ -1002,18 +981,30 @@ export function FamilyClient({
     refreshOverview,
   ])
 
+  const connectionAttemptRef = useRef(0)
   const connectLive = useCallback(async () => {
+    const attempt = ++connectionAttemptRef.current
     const currentSession = sessionRef.current
     if (!currentSession) return
     try {
       const latest = await api.getSupportSession(currentSession.id)
       const accepted = acceptSession(latest)
-      if (accepted.status !== 'ACTIVE') {
+      if (!canContinueCall(accepted)) {
         await liveSupport.disconnect()
         return
       }
+      const isCurrent = () =>
+        attempt === connectionAttemptRef.current &&
+        sessionRef.current?.id === accepted.id &&
+        canContinueCall(sessionRef.current)
+      if (!isCurrent()) return
       const info = await api.getLiveKitToken(accepted.id)
+      if (!isCurrent()) return
       await liveSupport.connect(info)
+      if (!isCurrent()) {
+        await liveSupport.disconnect()
+        return
+      }
       liveSessionIdRef.current = accepted.id
     } catch (error) {
       handleError(error)
@@ -1021,21 +1012,23 @@ export function FamilyClient({
   }, [acceptSession, api, handleError, liveSupport])
 
   useEffect(() => {
-    if (session?.status === 'ACTIVE') {
+    if (session && canContinueCall(session)) {
       if (liveSessionIdRef.current !== session.id) {
         liveSessionIdRef.current = session.id
         void connectLive()
       }
       return
     }
+    connectionAttemptRef.current += 1
     if (liveSessionIdRef.current) {
       liveSessionIdRef.current = null
       void liveSupport.disconnect()
     }
-  }, [connectLive, liveSupport, session?.id, session?.status])
+  }, [connectLive, liveSupport, session])
 
   useEffect(
     () => () => {
+      connectionAttemptRef.current += 1
       void liveSupport.disconnect()
     },
     [liveSupport],
@@ -1107,15 +1100,19 @@ export function FamilyClient({
           current.attempt < 3
         )
       }
-      case 'SAVE_DRAFT': {
-        const current = draftRef.current
+      case 'COMPLETE_REVIEW': {
+        const current = sessionRef.current
         return (
-          sessionRef.current?.status === 'REVIEWING_GUIDE' &&
           current?.id === pending.entityId &&
-          current.revision === pending.expectedRevision &&
-          current.status === 'EDITING'
+          current.status === 'REVIEWING_GUIDE'
         )
       }
+      case 'END_CALL':
+        return (
+          sessionRef.current?.id === pending.entityId &&
+          sessionRef.current.status === 'GUIDE_SAVED' &&
+          sessionRef.current.revision === pending.expectedRevision
+        )
     }
   }, [])
 
@@ -1296,33 +1293,76 @@ export function FamilyClient({
     }
   }
 
-  const saveDraft = async (
-    currentDraft: GuideDraft,
+  const completeReview = async (
+    currentDrafts: GuideDraft[],
     retryAction?: PendingAction,
   ) => {
-    if (busy) return
+    const currentSession = sessionRef.current
+    if (busy || !currentSession) return
     const pending: PendingAction =
-      retryAction?.kind === 'SAVE_DRAFT'
+      retryAction?.kind === 'COMPLETE_REVIEW'
         ? retryAction
         : {
-            kind: 'SAVE_DRAFT',
-            label: '同じ内容で保存を確認する',
-            operationId: `save-draft:${currentDraft.id}`,
-            entityId: currentDraft.id,
-            expectedRevision: currentDraft.revision,
-            draft: currentDraft,
+            kind: 'COMPLETE_REVIEW',
+            label: '同じ内容でレビュー完了を確認する',
+            operationId: `complete-review:${currentSession.id}`,
+            entityId: currentSession.id,
+            expectedRevision: currentSession.revision,
+            reviewInput: {
+              expectedSessionRevision: currentSession.revision,
+              drafts: currentDrafts.map((draft) => ({
+                id: draft.id,
+                expectedRevision: draft.revision,
+              })),
+            },
           }
+    if (!pending.reviewInput) return
+    const input = pending.reviewInput
+    storage.setItem(PENDING_REVIEW_KEY, JSON.stringify(pending))
     setBusy(true)
     setMessage(null)
     try {
       const result = await runIdempotent(pending.operationId, (key) =>
-        api.saveGuideDraft(
-          pending.entityId,
-          { expectedRevision: pending.expectedRevision },
-          { idempotencyKey: key },
-        ),
+        api.completeGuideReview(pending.entityId, input, {
+          idempotencyKey: key,
+        }),
       )
+      storage.removeItem(PENDING_REVIEW_KEY)
       acceptSession(result.supportSession)
+      await refreshCurrent()
+      setPendingAction(null)
+    } catch (error) {
+      await recoverAfterActionError(error, pending)
+      if (!operationKeys.peek(pending.operationId))
+        storage.removeItem(PENDING_REVIEW_KEY)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const endCall = async (retryAction?: PendingAction) => {
+    const current = sessionRef.current
+    if (busy || !current || current.status !== 'GUIDE_SAVED') return
+    const pending: PendingAction = retryAction ?? {
+      kind: 'END_CALL',
+      label: '同じ内容で通話終了を確認する',
+      operationId: `end-call:${current.id}`,
+      entityId: current.id,
+      expectedRevision: current.revision,
+    }
+    setBusy(true)
+    setMessage(null)
+    try {
+      const updated = await runIdempotent(
+        pending.operationId,
+        (idempotencyKey) =>
+          api.endSupportSession(
+            pending.entityId,
+            { expectedSessionRevision: pending.expectedRevision },
+            { idempotencyKey },
+          ),
+      )
+      acceptSession(updated)
       await refreshCurrent()
       setPendingAction(null)
     } catch (error) {
@@ -1366,8 +1406,11 @@ export function FamilyClient({
       case 'CANCEL_GUIDE':
         void cancelGuide(pending)
         break
-      case 'SAVE_DRAFT':
-        if (pending.draft) void saveDraft(pending.draft, pending)
+      case 'COMPLETE_REVIEW':
+        void completeReview([], pending)
+        break
+      case 'END_CALL':
+        void endCall(pending)
         break
     }
   }
@@ -1387,14 +1430,16 @@ export function FamilyClient({
   } else if (!request) {
     content = (
       <EmptyState
-        symbol={requests.length ? '選' : '待'}
+        symbol={
+          requests.some((item) => item.status !== 'RESOLVED') ? '選' : '待'
+        }
         title={
-          requests.length
+          requests.some((item) => item.status !== 'RESOLVED')
             ? '確認する依頼を選んでください'
             : '支援依頼はありません'
         }
         description={
-          requests.length
+          requests.some((item) => item.status !== 'RESOLVED')
             ? '左の一覧から依頼を選ぶと、画面とコメントを確認できます。'
             : '利用者から依頼が届くと、ここに画面とコメントが表示されます。'
         }
@@ -1416,17 +1461,7 @@ export function FamilyClient({
         content = <RingingScreen request={request} />
         break
       case 'ACTIVE':
-        content = (
-          <ActiveSupportScreen
-            session={session}
-            liveSupport={liveSupport}
-            live={live}
-            busy={actionLocked}
-            onReconnect={() => void connectLive()}
-            onResolve={(decision) => void resolve(decision)}
-            onError={handleError}
-          />
-        )
+        content = null
         break
       case 'GENERATING_GUIDE':
         content = (
@@ -1435,23 +1470,42 @@ export function FamilyClient({
             job={job}
             busy={actionLocked}
             onRetry={() => void retryGeneration()}
-            onCancel={() => void cancelGuide()}
+            onCancel={() => setConfirmCancel(true)}
           />
         )
         break
       case 'REVIEWING_GUIDE':
-        content = draft ? (
-          <DraftEditor
-            key={draft.id}
-            api={api}
-            draft={draft}
-            busy={actionLocked}
-            onSave={(currentDraft) => void saveDraft(currentDraft)}
-            onCancel={() => void cancelGuide()}
-          />
-        ) : (
-          <LoadingState>手順の下書きを読み込んでいます</LoadingState>
-        )
+        content =
+          drafts.length > 0 ? (
+            <GuideReview
+              key={session.id}
+              api={api}
+              supportSessionId={session.id}
+              drafts={drafts}
+              busy={actionLocked}
+              onComplete={(currentDrafts) => void completeReview(currentDrafts)}
+              onCancel={() => setConfirmCancel(true)}
+            />
+          ) : (
+            <LoadingState>手順の下書きを読み込んでいます</LoadingState>
+          )
+        break
+      case 'GUIDE_SAVED':
+        content =
+          closedSavedSession !== session.id ? (
+            <Modal
+              title="ガイドを保存しました"
+              onClose={() => setClosedSavedSession(session.id)}
+            >
+              <p>
+                音声通話は続いています。作成前に共有していた画面は配信を再開します。利用者が手順を試したら、最後に「通話を終了する」を押してください。
+              </p>
+            </Modal>
+          ) : (
+            <Notice title="ガイドを確認中" tone="success">
+              利用者と内容を確認できたら、通話を終了してください。
+            </Notice>
+          )
         break
       case 'ENDED':
         content = (
@@ -1510,16 +1564,64 @@ export function FamilyClient({
           </Button>
         </Notice>
       ) : null}
-      <div className="family-workspace">
-        <RequestList
-          api={api}
-          requests={requests}
-          selectedId={request?.id ?? null}
-          disabled={actionLocked}
-          onSelect={chooseRequest}
-        />
+      {confirmCancel &&
+      (session?.status === 'GENERATING_GUIDE' ||
+        session?.status === 'REVIEWING_GUIDE') ? (
+        <Modal
+          title="手順の作成を中止しますか？"
+          busy={actionLocked}
+          onClose={() => setConfirmCancel(false)}
+          actions={
+            <Button
+              variant="danger"
+              disabled={actionLocked}
+              onClick={() => {
+                setConfirmCancel(false)
+                void cancelGuide()
+              }}
+            >
+              作成を中止して通話を終了
+            </Button>
+          }
+        >
+          <p>作成中の手順を取り消し、通話と画面共有を終了します。</p>
+        </Modal>
+      ) : null}
+      <div
+        className={`family-workspace ${session && session.status !== 'ENDED' ? 'family-workspace--support' : ''}`}
+      >
+        {!session || session.status === 'ENDED' ? (
+          <RequestList
+            api={api}
+            requests={requests.filter((item) => item.status !== 'RESOLVED')}
+            selectedId={request?.id ?? null}
+            disabled={actionLocked}
+            onSelect={chooseRequest}
+          />
+        ) : null}
         <section className="family-content" aria-label="選択中の支援">
-          {content}
+          <div
+            className={
+              session?.status === 'REVIEWING_GUIDE' ||
+              session?.status === 'GENERATING_GUIDE'
+                ? 'family-call-and-editor'
+                : 'family-stack'
+            }
+          >
+            {session && canContinueCall(session) ? (
+              <ActiveSupportScreen
+                session={session}
+                liveSupport={liveSupport}
+                live={live}
+                busy={actionLocked}
+                onReconnect={() => void connectLive()}
+                onResolve={(decision) => void resolve(decision)}
+                onEnd={() => void endCall()}
+                onError={handleError}
+              />
+            ) : null}
+            {content}
+          </div>
         </section>
       </div>
     </AppShell>

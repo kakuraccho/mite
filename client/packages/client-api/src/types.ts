@@ -85,3 +85,6 @@ export interface MiteEvent<TData = unknown> {
 export interface DataEnvelope<TData> {
   data: TData
 }
+
+export type EndSupportSessionInput = Schema<'EndSupportSessionRequest'>
+export type CompleteGuideReviewInput = Schema<'CompleteGuideReviewRequest'>

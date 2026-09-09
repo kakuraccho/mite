@@ -18,8 +18,10 @@ import type {
   CreateSupportRequestInput,
   DataEnvelope,
   EndSupportSessionWithoutGuideInput,
+  EndSupportSessionInput,
   GuideDetail,
   GuideDraft,
+  CompleteGuideReviewInput,
   GuideGenerationJob,
   GuideMaterial,
   GuideMaterialBatch,
@@ -286,6 +288,25 @@ export class HttpMiteApi implements MiteApi {
     )
   }
 
+  async listSessionGuideDrafts(sessionId: string): Promise<GuideDraft[]> {
+    const data = await this.#request<{ items: GuideDraft[] }>(
+      `/v1/support-sessions/${encodeId(sessionId)}/guide-drafts`,
+    )
+    return data.items
+  }
+
+  completeGuideReview(
+    sessionId: string,
+    input: CompleteGuideReviewInput,
+    operation: IdempotentOperation,
+  ): Promise<{ guides: GuideDetail[]; supportSession: SupportSession }> {
+    return this.#request(
+      `/v1/support-sessions/${encodeId(sessionId)}/complete-guide-review`,
+      { method: 'POST', body: JSON.stringify(input) },
+      operation,
+    )
+  }
+
   getGuideDraft(draftId: string): Promise<GuideDraft> {
     return this.#request(`/v1/guide-drafts/${encodeId(draftId)}`)
   }
@@ -377,6 +398,17 @@ export class HttpMiteApi implements MiteApi {
   ): Promise<SupportSession> {
     return this.#request(
       `/v1/support-sessions/${encodeId(supportSessionId)}/end-without-guide`,
+      { method: 'POST', body: JSON.stringify(input) },
+      operation,
+    )
+  }
+  endSupportSession(
+    supportSessionId: string,
+    input: EndSupportSessionInput,
+    operation: IdempotentOperation,
+  ): Promise<SupportSession> {
+    return this.#request(
+      `/v1/support-sessions/${encodeId(supportSessionId)}/end`,
       { method: 'POST', body: JSON.stringify(input) },
       operation,
     )

@@ -1,11 +1,18 @@
 import { BrowserWindow, screen, type IpcMainEvent } from 'electron'
-import { isDesktopMarkList, type DesktopMark } from '../shared/marking-overlay'
+import {
+  isDesktopMarkList,
+  isDesktopGuidance,
+  type DesktopMark,
+  type DesktopGuidance,
+} from '../shared/marking-overlay'
 import { isTrustedRendererUrl } from './security'
 
 export class MarkingOverlay {
   readonly window: BrowserWindow
   #marks: DesktopMark[] = []
+  #guidance: DesktopGuidance | null = null
   #ready = false
+  #visible = false
   #timer: ReturnType<typeof setTimeout> | null = null
 
   constructor(url: string, preload: string) {
@@ -43,9 +50,9 @@ export class MarkingOverlay {
     )
     this.window.webContents.on('did-start-loading', () => {
       this.#ready = false
-      this.window.hide()
+      this.#setVisible(false)
     })
-    this.window.webContents.on('render-process-gone', () => this.setMarks([]))
+    this.window.webContents.on('render-process-gone', () => this.clear())
     this.window.once('closed', () => {
       if (this.#timer) clearTimeout(this.#timer)
     })
@@ -74,17 +81,45 @@ export class MarkingOverlay {
     this.#render()
   }
 
+  setGuidance(value: unknown) {
+    if (value !== null && !isDesktopGuidance(value))
+      throw new Error('Invalid guidance')
+    this.#guidance =
+      value === null
+        ? null
+        : {
+            ...value,
+            keys: [...value.keys],
+            expiresAt: Math.min(value.expiresAt, Date.now() + 2_000),
+          }
+    if (this.#guidance) this.#marks = []
+    this.#render()
+  }
+
+  clear() {
+    this.#guidance = null
+    this.setMarks([])
+  }
+
   refresh() {
     if (this.window.isDestroyed()) return
     this.window.setBounds(screen.getPrimaryDisplay().bounds, false)
     // A display change invalidates positions received for the old geometry.
-    this.setMarks([])
+    this.clear()
   }
 
   dispose() {
     if (this.#timer) clearTimeout(this.#timer)
     this.#marks = []
+    this.#guidance = null
     if (!this.window.isDestroyed()) this.window.destroy()
+  }
+
+  #setVisible(visible: boolean) {
+    if (visible === this.#visible) return
+    this.#visible = visible
+    if (visible) this.window.showInactive()
+    else this.window.hide()
   }
 
   #render() {
@@ -93,15 +128,17 @@ export class MarkingOverlay {
     if (this.window.isDestroyed()) return
     const now = Date.now()
     this.#marks = this.#marks.filter((mark) => mark.expiresAt > now)
+    if (this.#guidance && this.#guidance.expiresAt <= now) this.#guidance = null
+    if (this.#ready)
+      this.window.webContents.send('guidance:changed', this.#guidance)
     if (this.#ready)
       this.window.webContents.send('marking:changed', this.#marks)
-    if (!this.#ready || !this.#marks.length) {
-      this.window.hide()
-    } else {
-      this.window.showInactive()
-    }
-    if (this.#marks.length) {
-      const delay = Math.min(...this.#marks.map((mark) => mark.expiresAt - now))
+    this.#setVisible(this.#ready && (!!this.#marks.length || !!this.#guidance))
+    if (this.#marks.length || this.#guidance) {
+      const delay = Math.min(
+        ...this.#marks.map((mark) => mark.expiresAt - now),
+        this.#guidance ? this.#guidance.expiresAt - now : Infinity,
+      )
       this.#timer = setTimeout(
         () => this.#render(),
         Math.min(delay, 2_147_483_647),

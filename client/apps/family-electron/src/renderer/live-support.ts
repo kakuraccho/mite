@@ -1,7 +1,15 @@
 import type { LiveKitConnectionInfo } from '@mite/client-api'
-import { encodeMarkingMessage, MITE_MARKING_TOPIC } from '@mite/client-core'
+import {
+  encodeGuidanceMessage,
+  MITE_GUIDANCE_TOPIC,
+  GUIDANCE_TTL_MS,
+  type GuidanceState,
+  encodeMarkingMessage,
+  MITE_MARKING_TOPIC,
+} from '@mite/client-core'
 import {
   Room,
+  createAudioAnalyser,
   RoomEvent,
   Track,
   type RemoteTrack,
@@ -22,6 +30,7 @@ export interface LiveSupportSnapshot {
   audioPlaybackBlocked: boolean
   screenTrackSid: string | null
   receivedAudioLevel: number
+  localAudioLevel: number
   errorMessage: string | null
 }
 
@@ -40,6 +49,7 @@ export interface FamilyLiveSupport {
   attachScreen(element: HTMLVideoElement | null): void
   sendMark(point: MarkPoint): Promise<void>
   clearMarks(): Promise<void>
+  sendGuidance(state: GuidanceState | null): Promise<void>
 }
 
 const initialSnapshot = (): LiveSupportSnapshot => ({
@@ -48,11 +58,14 @@ const initialSnapshot = (): LiveSupportSnapshot => ({
   audioPlaybackBlocked: false,
   screenTrackSid: null,
   receivedAudioLevel: 0,
+  localAudioLevel: 0,
   errorMessage: null,
 })
 
 export class LiveKitFamilySupport implements FamilyLiveSupport {
   #room: Room | null = null
+  #guidanceSequence = 0
+  #stopMeter: (() => void) | null = null
   #screenTrack: RemoteTrack | null = null
   #screenElement: HTMLVideoElement | null = null
   #audioElements = new Set<HTMLMediaElement>()
@@ -79,16 +92,22 @@ export class LiveKitFamilySupport implements FamilyLiveSupport {
     })
 
     room.on(RoomEvent.Reconnecting, () => {
+      if (this.#room !== room) return
+      this.#stopMeter?.()
       this.#update({ connectionStatus: 'RECONNECTING', errorMessage: null })
     })
     room.on(RoomEvent.Reconnected, () => {
+      if (this.#room !== room) return
+      this.#startMeter(room)
       this.#update({ connectionStatus: 'CONNECTED', errorMessage: null })
     })
     room.on(RoomEvent.AudioPlaybackStatusChanged, (playing) => {
+      if (this.#room !== room) return
       this.#update({ audioPlaybackBlocked: !playing })
     })
     room.on(RoomEvent.Disconnected, () => {
       if (this.#room !== room) return
+      this.#stopMeter?.()
       this.#clearRemoteMedia()
       this.#update({
         connectionStatus: 'DISCONNECTED',
@@ -98,18 +117,22 @@ export class LiveKitFamilySupport implements FamilyLiveSupport {
       })
     })
     room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+      if (this.#room !== room) return
       if (!participant.identity.startsWith('user:')) return
       this.#handleSubscribedTrack(track, publication)
     })
     room.on(RoomEvent.TrackUnsubscribed, (track, publication) => {
+      if (this.#room !== room) return
       this.#handleUnsubscribedTrack(track, publication)
     })
     room.on(RoomEvent.TrackUnpublished, (publication) => {
+      if (this.#room !== room) return
       if (publication.trackSid === this.#snapshot.screenTrackSid) {
         this.#setScreenTrack(null, null)
       }
     })
     room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
+      if (this.#room !== room) return
       const user = speakers.find((speaker) =>
         speaker.identity.startsWith('user:'),
       )
@@ -118,7 +141,16 @@ export class LiveKitFamilySupport implements FamilyLiveSupport {
 
     try {
       await room.connect(info.serverUrl, info.token)
+      if (this.#room !== room) {
+        await room.disconnect()
+        return
+      }
       await room.localParticipant.setMicrophoneEnabled(true)
+      if (this.#room !== room) {
+        await room.disconnect()
+        return
+      }
+      this.#startMeter(room)
       this.#update({
         connectionStatus: 'CONNECTED',
         microphoneEnabled: true,
@@ -141,9 +173,11 @@ export class LiveKitFamilySupport implements FamilyLiveSupport {
   async disconnect(): Promise<void> {
     const room = this.#room
     this.#room = null
+    this.#stopMeter?.()
+    this.#stopMeter = null
     this.#clearRemoteMedia()
     if (room) await room.disconnect()
-    this.#update(initialSnapshot())
+    if (this.#room === null) this.#update(initialSnapshot())
   }
 
   async setMicrophoneEnabled(enabled: boolean): Promise<void> {
@@ -153,6 +187,7 @@ export class LiveKitFamilySupport implements FamilyLiveSupport {
     }
     await room.localParticipant.setMicrophoneEnabled(enabled)
     this.#update({ microphoneEnabled: enabled })
+    this.#startMeter(room)
   }
 
   async startAudio(): Promise<void> {
@@ -210,6 +245,61 @@ export class LiveKitFamilySupport implements FamilyLiveSupport {
       reliable: true,
       topic: MITE_MARKING_TOPIC,
     })
+  }
+
+  async sendGuidance(state: GuidanceState | null): Promise<void> {
+    const room = this.#room
+    const trackSid = this.#snapshot.screenTrackSid
+    if (!room || !trackSid || this.#snapshot.connectionStatus !== 'CONNECTED')
+      return
+    const envelope = {
+      trackSid,
+      sequence: ++this.#guidanceSequence,
+      sentAt: new Date().toISOString(),
+    }
+    const payload = encodeGuidanceMessage(
+      state
+        ? {
+            ...envelope,
+            ...state,
+            type: 'guidance.set',
+            ttlMs: GUIDANCE_TTL_MS,
+          }
+        : { ...envelope, type: 'guidance.clear' },
+    )
+    await room.localParticipant.publishData(new Uint8Array(payload), {
+      reliable: true,
+      topic: MITE_GUIDANCE_TOPIC,
+    })
+  }
+
+  #startMeter(room: Room) {
+    this.#stopMeter?.()
+    this.#stopMeter = null
+    this.#update({ localAudioLevel: 0 })
+    const track = room.localParticipant.getTrackPublication(
+      Track.Source.Microphone,
+    )?.audioTrack
+    if (!track || track.isMuted) return
+    try {
+      const analyser = createAudioAnalyser(track, {
+        minDecibels: -70,
+        maxDecibels: -10,
+      })
+      const timer = setInterval(() => {
+        if (this.#room === room)
+          this.#update({
+            localAudioLevel: track.isMuted ? 0 : analyser.calculateVolume(),
+          })
+      }, 100)
+      this.#stopMeter = () => {
+        clearInterval(timer)
+        void analyser.cleanup().catch(() => {})
+        this.#update({ localAudioLevel: 0 })
+      }
+    } catch {
+      this.#update({ localAudioLevel: 0 })
+    }
   }
 
   #handleSubscribedTrack(

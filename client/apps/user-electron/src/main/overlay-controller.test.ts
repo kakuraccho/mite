@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { BrowserWindow, Display } from 'electron'
 import type { AppBarAdapter } from './appbar'
-import { UserOverlayController } from './overlay-controller'
+import {
+  UserOverlayController,
+  collapseOverlayOnBlur,
+} from './overlay-controller'
 
 const display = {
   bounds: { x: 0, y: 0, width: 1_920, height: 1_080 },
@@ -55,4 +58,32 @@ describe('UserOverlayController', () => {
     controller.dispose()
     expect(appBar.release).toHaveBeenCalledWith(window)
   })
+})
+
+it('collapses on external focus loss and notifies the renderer without releasing its AppBar', () => {
+  let blur!: () => void
+  const window = {
+    setBounds: vi.fn(),
+    on: vi.fn((_event, callback) => {
+      blur = callback
+    }),
+    webContents: { send: vi.fn() },
+  } as unknown as BrowserWindow
+  const appBar: AppBarAdapter = {
+    supported: false,
+    reserve: vi.fn(),
+    release: vi.fn(),
+  }
+  const controller = new UserOverlayController(window, () => display, appBar)
+  controller.initialize()
+  collapseOverlayOnBlur(window, controller)
+  controller.setMode('DETAIL')
+  blur()
+  expect(window.setBounds).toHaveBeenLastCalledWith(
+    expect.objectContaining({ width: 4 }),
+    false,
+  )
+  expect(window.webContents.send).toHaveBeenLastCalledWith('overlay:collapsed')
+  expect(appBar.release).not.toHaveBeenCalled()
+  expect(controller.setMode('DETAIL').bounds.width).toBe(1040)
 })

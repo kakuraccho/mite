@@ -82,3 +82,49 @@ describe('HttpMiteApi', () => {
     } satisfies Partial<MiteApiError>)
   })
 })
+
+it('支援の全下書き一覧と全件確定を正しいパス・本文・キーで送る', async () => {
+  const fetch = vi
+    .fn<typeof globalThis.fetch>()
+    .mockResolvedValueOnce(
+      jsonResponse({ data: { items: [{ id: 'draft_1' }, { id: 'draft_2' }] } }),
+    )
+    .mockResolvedValueOnce(
+      jsonResponse({
+        data: {
+          guides: [{ id: 'guide_1' }, { id: 'guide_2' }],
+          supportSession: { status: 'ENDED' },
+        },
+      }),
+    )
+  const api = new HttpMiteApi({
+    baseUrl: 'http://localhost:3000',
+    token: 'test-token',
+    fetch,
+  })
+  expect(await api.listSessionGuideDrafts('session/1')).toHaveLength(2)
+  expect(fetch.mock.calls[0]![0]).toBe(
+    'http://localhost:3000/v1/support-sessions/session%2F1/guide-drafts',
+  )
+  const input = {
+    expectedSessionRevision: 6,
+    drafts: [
+      { id: 'draft_1', expectedRevision: 2 },
+      { id: 'draft_2', expectedRevision: 3 },
+    ],
+  }
+  expect(
+    (
+      await api.completeGuideReview('session/1', input, {
+        idempotencyKey: 'review-key',
+      })
+    ).guides,
+  ).toHaveLength(2)
+  const [url, init] = fetch.mock.calls[1]!
+  expect(url).toBe(
+    'http://localhost:3000/v1/support-sessions/session%2F1/complete-guide-review',
+  )
+  expect(init?.method).toBe('POST')
+  expect(JSON.parse(init?.body as string)).toEqual(input)
+  expect(new Headers(init?.headers).get('Idempotency-Key')).toBe('review-key')
+})

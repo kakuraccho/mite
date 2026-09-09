@@ -282,7 +282,7 @@ func (tx *fakeGuideTx) PromoteArtifact(_ context.Context, id domain.ID, _ pgtype
 func (tx *fakeGuideTx) ListUnusedArtifacts(_ context.Context, _ domain.ID, _ []domain.ID) ([]repository.ArtifactReference, error) {
 	return append([]repository.ArtifactReference(nil), tx.unused...), nil
 }
-func (tx *fakeGuideTx) SaveDraft(_ context.Context, _ domain.ID, now pgtype.Timestamptz) (domain.GuideDraft, error) {
+func (tx *fakeGuideTx) SaveDraft(_ context.Context, _ domain.ID, _ domain.ID, now pgtype.Timestamptz) (domain.GuideDraft, error) {
 	tx.draft.Status = domain.GuideDraftSaved
 	tx.draft.Revision++
 	tx.draft.UpdatedAt = now.Time
@@ -296,6 +296,7 @@ func (tx *fakeGuideTx) FinishGuideSession(_ context.Context, _ domain.ID, guideI
 	reason := domain.EndReasonGuideSaved
 	tx.session.EndReason = &reason
 	tx.session.EndedAt = &now.Time
+	tx.session.UpdatedAt = now.Time
 	tx.session.Revision++
 	return tx.session, nil
 }
@@ -420,7 +421,7 @@ func guideFixture() (*fakeGuideTx, time.Time) {
 	now := time.Date(2026, 9, 4, 0, 0, 0, 0, time.UTC)
 	decision := domain.GuideDecisionCreate
 	batchID := domain.ID("batch_1")
-	tx := &fakeGuideTx{idempotency: map[string]domain.IdempotencyRecord{}, artifacts: map[domain.ID]domain.Artifact{}, session: domain.SupportSession{ID: "session_1", UserID: "user_demo", FamilyID: "family_demo", Status: domain.SupportSessionGeneratingGuide, GuideDecision: &decision, Revision: 3}, batch: domain.GuideMaterialBatch{ID: batchID, SupportSessionID: "session_1", Status: domain.GuideMaterialBatchUploading, CaptureIntervalSeconds: 5, ExpectedItemCount: 1, CapturedFrom: now, CapturedTo: now, CreatedAt: now, UpdatedAt: now, Revision: 1}}
+	tx := &fakeGuideTx{idempotency: map[string]domain.IdempotencyRecord{}, artifacts: map[domain.ID]domain.Artifact{}, session: domain.SupportSession{ID: "session_1", UserID: "user_demo", FamilyID: "family_demo", Status: domain.SupportSessionGeneratingGuide, GuideDecision: &decision, Revision: 3}, batch: domain.GuideMaterialBatch{ID: batchID, SupportSessionID: "session_1", Status: domain.GuideMaterialBatchUploading, CaptureIntervalSeconds: 10, ExpectedItemCount: 1, CapturedFrom: now, CapturedTo: now, CreatedAt: now, UpdatedAt: now, Revision: 1}}
 	tx.session.GuideMaterialBatchID = &batchID
 	return tx, now
 }
@@ -453,7 +454,7 @@ func TestCreateGuideMaterialBatchIdempotencyAndValidation(t *testing.T) {
 	tx.batch = domain.GuideMaterialBatch{}
 	tx.session.GuideMaterialBatchID = nil
 	service := newGuideServiceForTest(tx, &fakeGuideStorage{objects: map[string][]byte{}})
-	command := CreateGuideMaterialBatchCommand{Meta: userMeta("batch-key"), SupportSessionID: "session_1", ExpectedSessionRevision: 3, CaptureIntervalSeconds: 5, CapturedFrom: &now, CapturedTo: &now, ExpectedItemCount: 1}
+	command := CreateGuideMaterialBatchCommand{Meta: userMeta("batch-key"), SupportSessionID: "session_1", ExpectedSessionRevision: 3, CaptureIntervalSeconds: 10, CapturedFrom: &now, CapturedTo: &now, ExpectedItemCount: 1}
 	first, err := service.CreateGuideMaterialBatch(context.Background(), command)
 	if err != nil {
 		t.Fatal(err)
@@ -482,7 +483,7 @@ func TestCreateGuideMaterialBatchNoMaterialsAndRole(t *testing.T) {
 	tx.batch = domain.GuideMaterialBatch{}
 	tx.session.GuideMaterialBatchID = nil
 	service := newGuideServiceForTest(tx, nil)
-	command := CreateGuideMaterialBatchCommand{Meta: userMeta("empty"), SupportSessionID: "session_1", ExpectedSessionRevision: 3, CaptureIntervalSeconds: 5, ExpectedItemCount: 0}
+	command := CreateGuideMaterialBatchCommand{Meta: userMeta("empty"), SupportSessionID: "session_1", ExpectedSessionRevision: 3, CaptureIntervalSeconds: 10, ExpectedItemCount: 0}
 	_, err := service.CreateGuideMaterialBatch(context.Background(), command)
 	if code, ok := domain.ErrorCodeOf(err); !ok || code != domain.CodeInsufficientMaterials {
 		t.Fatalf("zero materials error = %v", err)
@@ -737,7 +738,7 @@ func TestUpdateAndSaveGuideDraftWithCleanup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if saved.Guide.Guide.Title != "新しいガイド" || saved.Guide.CurrentVersion.VersionNumber != 1 || saved.SupportSession.Status != domain.SupportSessionEnded || saved.SupportSession.Revision != 7 {
+	if saved.Guide.Guide.Title != "新しいガイド" || saved.Guide.CurrentVersion.VersionNumber != 1 || saved.SupportSession.Status != domain.SupportSessionEnded || saved.SupportSession.EndedAt == nil || saved.SupportSession.EndReason == nil || *saved.SupportSession.EndReason != domain.EndReasonGuideSaved || saved.SupportSession.Revision != 7 {
 		t.Fatalf("saved=%+v", saved)
 	}
 	if tx.artifacts["art_1"].Purpose != domain.ArtifactPurposeGuideStep || len(tx.deletions) != 1 || !tx.deletedJob || !tx.deletedMaterials || !tx.deletedBatch {
@@ -826,4 +827,8 @@ func TestDraftRejectsUnknownArtifactAndFamilyOnlyReads(t *testing.T) {
 	if _, err = service.GetGuideDraft(context.Background(), userMeta("x").Actor, draftID); err != nil {
 		t.Fatalf("user read failed: %v", err)
 	}
+}
+
+func (tx *fakeGuideTx) ListDrafts(_ context.Context, _ domain.ID, _ bool) ([]domain.GuideDraft, error) {
+	return []domain.GuideDraft{tx.draft}, nil
 }

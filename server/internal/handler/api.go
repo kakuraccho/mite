@@ -22,6 +22,7 @@ type SupportSessionAPI interface {
 	CallSupportRequest(context.Context, generated.CallSupportRequestRequestObject) (generated.CallSupportRequestResponseObject, error)
 	GetSupportSession(context.Context, generated.GetSupportSessionRequestObject) (generated.GetSupportSessionResponseObject, error)
 	AcceptSupportSession(context.Context, generated.AcceptSupportSessionRequestObject) (generated.AcceptSupportSessionResponseObject, error)
+	EndSupportSession(context.Context, generated.EndSupportSessionRequestObject) (generated.EndSupportSessionResponseObject, error)
 	EndSupportSessionWithoutGuide(context.Context, generated.EndSupportSessionWithoutGuideRequestObject) (generated.EndSupportSessionWithoutGuideResponseObject, error)
 	CreateLiveKitToken(context.Context, generated.CreateLiveKitTokenRequestObject) (generated.CreateLiveKitTokenResponseObject, error)
 	ResolveSupportSession(context.Context, generated.ResolveSupportSessionRequestObject) (generated.ResolveSupportSessionResponseObject, error)
@@ -30,6 +31,8 @@ type SupportSessionAPI interface {
 // GuideAPI is the HTTP boundary for material upload, generation, drafts,
 // guides, and guide runs.
 type GuideAPI interface {
+	ListSessionGuideDrafts(context.Context, generated.ListSessionGuideDraftsRequestObject) (generated.ListSessionGuideDraftsResponseObject, error)
+	CompleteGuideReview(context.Context, generated.CompleteGuideReviewRequestObject) (generated.CompleteGuideReviewResponseObject, error)
 	GetGuideDraft(context.Context, generated.GetGuideDraftRequestObject) (generated.GetGuideDraftResponseObject, error)
 	UpdateGuideDraft(context.Context, generated.UpdateGuideDraftRequestObject) (generated.UpdateGuideDraftResponseObject, error)
 	SaveGuideDraft(context.Context, generated.SaveGuideDraftRequestObject) (generated.SaveGuideDraftResponseObject, error)
