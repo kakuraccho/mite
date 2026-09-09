@@ -59,6 +59,7 @@ func TestLoadDotEnvFromWorkingDirectory(t *testing.T) {
 	}{
 		{name: "file with BOM and CRLF", file: "\uFEFF" + validDotEnv() + "PORT='4321'\r\n", wantPort: 4321},
 		{name: "environment wins", file: validDotEnv() + "PORT=4321", environment: map[string]string{"PORT": "5432", "DEMO_USER_TOKEN": "process-user"}, wantPort: 5432},
+		{name: "deployment prompt version overrides legacy dotenv", file: strings.ReplaceAll(validDotEnv(), "AI_PROMPT_VERSION=v2", "AI_PROMPT_VERSION=v1"), environment: map[string]string{"AI_PROMPT_VERSION": "v2"}, wantPort: 3000},
 		{name: "empty environment wins", file: validDotEnv(), environment: map[string]string{"DEMO_USER_TOKEN": ""}, wantError: "required environment variable is missing: DEMO_USER_TOKEN"},
 		{name: "no file", missingFile: true, environment: validEnvironment(), wantPort: 3000},
 		{name: "no file and missing configuration", missingFile: true, wantError: "required environment variable is missing: DATABASE_URL"},
@@ -103,6 +104,9 @@ func TestLoadDotEnvFromWorkingDirectory(t *testing.T) {
 			}
 			if cfg.Port != test.wantPort {
 				t.Fatalf("Port = %d, want %d", cfg.Port, test.wantPort)
+			}
+			if cfg.AIPromptVersion != "v2" {
+				t.Fatalf("AIPromptVersion = %q, want v2", cfg.AIPromptVersion)
 			}
 			wantToken := "user-token"
 			if value, ok := test.environment["DEMO_USER_TOKEN"]; ok {

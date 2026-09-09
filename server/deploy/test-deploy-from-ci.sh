@@ -42,12 +42,14 @@ case "${0##*/}" in
     [[ "$1" == -F && "$2" == /dev/null && "$3" == -i ]]
     [[ "$(stat -c %a "$4")" == 600 ]]
     case "${*: -1}" in
-      'test -x /usr/local/sbin/mite-deploy '* )
+      'sudo -n -l /usr/local/sbin/mite-deploy '* )
         printf 'preflight\n' >> "$scenario_root/calls"
+        [[ "${*: -1}" == *' v2 >/dev/null && sudo -n /usr/local/sbin/mite-deploy --check' ]]
         [[ "$scenario" != preflight-fails ]]
         ;;
       'sudo -n /usr/local/sbin/mite-deploy '* )
         printf 'deploy\n' >> "$scenario_root/calls"
+        [[ "${*: -1}" == *' v2' ]]
         cmp -s - "$scenario_root/binary"
         [[ "$scenario" != deploy-fails ]]
         ;;
@@ -113,3 +115,15 @@ for scenario in success missing-secret invalid-port stale-start github-fails pre
   [[ "${#leftovers[@]}" -eq 0 ]]
   printf 'PASS %s\n' "$scenario"
 done
+
+# Release metadata is parsed as data, and malformed values stop before external calls.
+mkdir "$test_root/release"
+cp "$script_directory/deploy-from-ci.sh" "$test_root/release/"
+for invalid in 'AI_PROMPT_VERSION=v2; false' 'AI_PROMPT_VERSION=v0' $'AI_PROMPT_VERSION=v2\nOTHER=value'; do
+  printf '%s\n' "$invalid" > "$test_root/release/mite-api.env"
+  if bash "$test_root/release/deploy-from-ci.sh" "$scenario_root/binary" > "$scenario_root/output" 2>&1; then
+    exit 1
+  fi
+  grep -q 'Expected exactly AI_PROMPT_VERSION=' "$scenario_root/output"
+done
+printf 'PASS invalid release metadata\n'
