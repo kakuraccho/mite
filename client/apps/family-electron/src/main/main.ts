@@ -78,6 +78,8 @@ const createWindow = () => {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      // Keep the guidance heartbeat running while the family window is inactive.
+      backgroundThrottling: false,
     },
   })
   rememberMaximizedState(

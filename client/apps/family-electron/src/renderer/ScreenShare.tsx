@@ -42,14 +42,35 @@ export function ScreenShare({
     void liveSupport.sendGuidance(null).catch(onError)
     void liveSupport.clearMarks().catch(onError)
   }, [liveSupport, onError])
+  const releaseInputs = useCallback(() => {
+    const state = current.current
+    if (state?.mode !== 'CURSOR_MOUSE') {
+      clear()
+      return
+    }
+    // Capture ends after every click. Keep the cursor and its heartbeat alive.
+    if (state.buttons === 0) return
+    current.current = { ...state, buttons: 0 }
+    void liveSupport.sendGuidance(current.current).catch(onError)
+  }, [clear, liveSupport, onError])
   useEffect(() => {
     liveSupport.attachScreen(videoRef.current)
     return () => liveSupport.attachScreen(null)
   }, [liveSupport])
   useEffect(() => {
-    const loseFocus = () => clear()
+    if (enabled && mode === 'CURSOR_MOUSE') {
+      current.current = {
+        mode,
+        x: 0.5,
+        y: 0.5,
+        buttons: 0,
+        keys: [],
+      }
+      void liveSupport.sendGuidance(current.current).catch(onError)
+    }
+    const loseFocus = () => releaseInputs()
     const visibility = () => {
-      if (document.hidden) clear()
+      if (document.hidden) releaseInputs()
     }
     window.addEventListener('blur', loseFocus)
     document.addEventListener('visibilitychange', visibility)
@@ -63,7 +84,15 @@ export function ScreenShare({
       window.removeEventListener('blur', loseFocus)
       document.removeEventListener('visibilitychange', visibility)
     }
-  }, [clear, enabled, live.screenTrackSid, mode, liveSupport, onError])
+  }, [
+    clear,
+    releaseInputs,
+    enabled,
+    live.screenTrackSid,
+    mode,
+    liveSupport,
+    onError,
+  ])
   useEffect(() => {
     if (!mark) return
     const timer = setTimeout(() => setMark(null), 2000)
@@ -111,7 +140,7 @@ export function ScreenShare({
     if (!enabled || mode !== 'CURSOR_MOUSE') return
     const point = pointAt(event.clientX, event.clientY)
     if (!point) {
-      clear()
+      releaseInputs()
       return
     }
     send({ mode, ...point, buttons: event.buttons & 7, keys: [] })
@@ -183,6 +212,10 @@ export function ScreenShare({
             variant={mode === value ? 'primary' : 'secondary'}
             aria-pressed={mode === value}
             onClick={() => {
+              if (mode === value) {
+                if (value === 'KEYBOARD') stageRef.current?.focus()
+                return
+              }
               clear()
               setMode(value)
               if (value === 'KEYBOARD') stageRef.current?.focus()
@@ -202,7 +235,7 @@ export function ScreenShare({
             ? '共有画面。選んだモードで操作を案内します'
             : '共有画面を待っています'
         }
-        onBlur={clear}
+        onBlur={releaseInputs}
         onKeyDown={(event) => key(event, true)}
         onKeyUp={(event) => key(event, false)}
         onPointerMove={pointer}
@@ -214,10 +247,11 @@ export function ScreenShare({
           pointer(event)
         }}
         onPointerUp={pointer}
-        onPointerCancel={clear}
-        onLostPointerCapture={clear}
+        onPointerCancel={releaseInputs}
+        onLostPointerCapture={releaseInputs}
         onPointerLeave={(event) => {
-          if (!event.currentTarget.hasPointerCapture(event.pointerId)) clear()
+          if (!event.currentTarget.hasPointerCapture(event.pointerId))
+            releaseInputs()
         }}
         onContextMenu={(event) => {
           if (mode === 'CURSOR_MOUSE') event.preventDefault()
@@ -249,7 +283,7 @@ export function ScreenShare({
           {mode === 'CIRCLE'
             ? 'クリックした場所に2秒間、丸を表示します。'
             : mode === 'CURSOR_MOUSE'
-              ? '共有画面でカーソルを動かし、クリックやドラッグを見せます。'
+              ? 'カーソルは表示したまま、クリックやドラッグを見せます。マウスの図は押している間だけ表示します。'
               : `共有画面にフォーカスしてキーを押すと案内します。Shift+Escで終了。${keys.length ? ` 表示中: ${keys.join(' + ')}` : ''}`}
         </span>
         <Button variant="quiet" disabled={!enabled} onClick={clear}>

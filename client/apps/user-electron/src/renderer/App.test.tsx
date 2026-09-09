@@ -406,6 +406,65 @@ describe('UserClient', () => {
     ).toHaveProperty('disabled', false)
   })
 
+  it('enlarges each guide step without moving or completing the guide', async () => {
+    const storage = new MemoryStorage()
+    storage.setItem('mite.user.guideRunId', guideRun.id)
+    const twoStepGuide: GuideDetail = {
+      ...guide,
+      currentVersion: {
+        ...guide.currentVersion,
+        steps: [
+          ...guide.currentVersion.steps,
+          {
+            position: 2,
+            artifactId: 'artifact_02',
+            instruction: '内容を確認します',
+          },
+        ],
+      },
+    }
+    const moveGuideRun = vi.fn().mockResolvedValue({
+      ...guideRun,
+      currentStepNumber: 2,
+      revision: 2,
+    })
+    const completeGuideRun = vi.fn()
+    const api = makeApi({
+      getGuideRun: vi.fn().mockResolvedValue(guideRun),
+      getGuide: vi.fn().mockResolvedValue(twoStepGuide),
+      getArtifactContent: vi.fn().mockResolvedValue(new Blob(['guide'])),
+      moveGuideRun,
+      completeGuideRun,
+    })
+    render(
+      <UserClient
+        api={api}
+        runtime={runtime}
+        desktop={makeDesktop()}
+        storage={storage}
+        createEventStream={eventStreamFactory}
+      />,
+    )
+    fireEvent.click(
+      await screen.findByRole('button', { name: '手順1の画面を拡大する' }),
+    )
+    fireEvent.keyDown(screen.getByRole('dialog', { name: '手順1の画面' }), {
+      key: 'Escape',
+    })
+    expect(screen.getByText('戻るボタンを押します')).toBeInTheDocument()
+    expect(moveGuideRun).not.toHaveBeenCalled()
+    expect(completeGuideRun).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '次へ' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: '手順2の画面を拡大する' }),
+    )
+    expect(screen.getByAltText('手順2の画面の拡大表示')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '閉じる' }))
+    expect(screen.getByText('内容を確認します')).toBeInTheDocument()
+    expect(moveGuideRun).toHaveBeenCalledOnce()
+    expect(completeGuideRun).not.toHaveBeenCalled()
+  })
+
   it('retakes the full screen from a guide and reuses that image if upload must be retried', async () => {
     const storage = new MemoryStorage()
     storage.setItem('mite.user.guideRunId', guideRun.id)

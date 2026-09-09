@@ -204,7 +204,7 @@ body {
   background: var(--mite-cream);
 }
 
-.user-guide-card > img,
+.user-guide-card > .user-guide-image,
 .user-guide-card > .user-image-fallback {
   width: 100%;
   aspect-ratio: 16 / 9;
@@ -359,7 +359,7 @@ body {
   margin-bottom: 28px;
 }
 
-.user-guide-step > img,
+.user-guide-step > .user-guide-image,
 .user-guide-step > .user-image-fallback {
   width: 100%;
   min-height: 400px;
@@ -440,7 +440,7 @@ body {
   gap: 16px;
   margin-bottom: 16px;
 }
-.user-guide-step > img,
+.user-guide-step > .user-guide-image,
 .user-guide-step > .user-image-fallback {
   min-height: 0;
   height: clamp(140px, 27dvh, 360px);
@@ -563,7 +563,33 @@ body {
   flex-shrink: 0;
   padding: 0;
 }
-.user-request-expanded-preview {
+.user-guide-image {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  border: 2px solid var(--mite-green-200);
+  border-radius: 18px;
+  cursor: zoom-in;
+}
+.user-guide-image > img {
+  display: block;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  object-fit: contain;
+}
+.user-guide-image > span {
+  flex-shrink: 0;
+  width: 100%;
+  padding: 8px;
+  background: var(--mite-green-50);
+  color: var(--mite-green-950);
+  font-size: 20px;
+  font-weight: 800;
+}
+.user-request-expanded-preview,
+.user-guide-expanded-image {
   width: 100%;
   max-height: 60dvh;
   object-fit: contain;

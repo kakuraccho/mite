@@ -21,6 +21,8 @@ export function MarkingOverlay({ bridge }: { bridge: MarkingOverlayBridge }) {
             style={{
               left: `${guidance.x * 100}%`,
               top: `${guidance.y * 100}%`,
+              transformOrigin: '3px 3px',
+              transform: `translate(-3px, -3px) scale(${guidance.x > 0.95 ? -1 : 1}, ${guidance.y > 0.9 ? -1 : 1})`,
             }}
             width="44"
             height="58"
