@@ -17,7 +17,7 @@ cd ..
 
 ## 検証
 
-Pull Requestと`dev`・`main`へのpushでは、GitHub Actionsがサーバーと共有APIを検証します。チェックの内容とVPSへのデプロイ設定は[サーバーのCI/CD](ci-cd.md)を参照してください。
+Pull Requestと`dev`・`main`へのpushでは、GitHub Actionsがサーバー・共有APIとclientの整形を検証します。チェックの内容とVPSへのデプロイ設定は[サーバーのCI/CD](ci-cd.md)を参照してください。
 
 ### API生成と共有APIクライアント
 
@@ -33,6 +33,8 @@ npm run build
 ### Electronクライアント
 
 `client/`で実行します。
+
+テキストファイルの改行はリポジトリルートの `.gitattributes` でLFに統一し、clientのPrettierも `endOfLine: lf` を使います。Windowsの `core.autocrlf=true` でも、新しくチェックアウトするファイルはLFになります。既存の作業コピーにCRLFが残って整形チェックに失敗する場合は、`client/` で `npm run format` を実行し、差分を確認してから再チェックしてください。Gitのグローバル設定を変更する必要はありません。
 
 ```bash
 npm run format:check
