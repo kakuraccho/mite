@@ -4,15 +4,18 @@
 
 ## CI
 
-GitHub Actionsの[Server CI/CD](../.github/workflows/server-ci.yml)で、すべてのPull Request、`dev`・`main`へのpush、手動実行時にサーバーと共有APIを検証する。
+GitHub Actionsの[Server CI/CD](../.github/workflows/server-ci.yml)で、すべてのPull Request、`dev`・`main`へのpush、手動実行時にサーバー・共有APIとclientの整形を検証する。
 
 | チェック名 | 内容 |
 | --- | --- |
+| Client formatting | `client/` の `npm run format:check`。LF改行を含むPrettierの整形規則を検証 |
 | Generated code and shared API | OpenAPI・sqlcの再生成、コミット済み生成物との一致、新規生成ファイルの追跡漏れ、共有APIの型チェック・Lint・ビルド |
 | Go tests and build | gofmt、race検査付きテスト、go vet、ビルド、DB適用とVPS更新の順序・失敗時の停止、VPSデプロイ・復元スクリプトのテスト |
 | Supabase integration and HTTP WebSocket E2E | 一時的なSupabaseへのmigration適用、DB・Storage統合テスト、HTTP/WebSocket E2E |
 
-Goは`server/go.mod`のバージョン、Node.jsは24を使う。npm依存関係はルートの`package-lock.json`、Goツールは`server/go.mod`・`server/go.sum`で固定する。ActionsもコミットSHAで固定する。
+Goは`server/go.mod`のバージョン、Node.jsは24を使う。npm依存関係はルートの`package-lock.json`と`client/package-lock.json`、Goツールは`server/go.mod`・`server/go.sum`で固定する。ActionsもコミットSHAで固定する。
+
+clientの整形ジョブは`client/`で`npm ci --ignore-scripts`を実行する。整形にはElectron本体やネイティブmoduleのインストール処理は不要なため、これらのスクリプトを省略する。clientのLint・型チェック・テスト・ビルドはこのジョブの対象に含まれず、[開発ガイド](development.md#electronクライアント)に従って別途実行する。整形ジョブもデプロイの成功条件に含める。
 
 CI用のSupabaseはGitHub runner内に新規作成する。リポジトリのmigrationには固定デモユーザーと非公開Storageバケットの作成が含まれる。接続先はこの一時環境から取得し、未設定ならテスト開始前に失敗させる。実行後は一時環境を破棄する。共有・VPS側のDB接続情報をCIへ設定する必要はない。
 
@@ -20,7 +23,7 @@ CI用のSupabaseはGitHub runner内に新規作成する。リポジトリのmig
 
 Supabase起動時の出力にはローカルAPIキーが含まれるため、起動出力はrunner内の一時ファイルへ保存し、ログや成果物として公開しない。起動に失敗した場合はコンテナの稼働状態だけを表示する。Dockerが使えるローカル環境で`npm ci`、`npx --no-install supabase start`を実行して原因を確認する。
 
-GitHubでマージ前にCI成功を必須にする場合は、`dev`・`main`のbranch rulesetに上記3つをrequired status checksとして登録する。ワークフローを追加するだけではマージ制限は有効にならない。
+GitHubでマージ前にCI成功を必須にする場合は、`dev`・`main`のbranch rulesetに上記4つをrequired status checksとして登録する。既存の3つを登録済みの場合も`Client formatting`の追加が必要になる。ワークフローを追加するだけではマージ制限は有効にならない。
 
 ## CD
 
