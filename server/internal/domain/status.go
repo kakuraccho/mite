@@ -24,7 +24,6 @@ const (
 	SupportSessionActive          SupportSessionStatus = "ACTIVE"
 	SupportSessionGeneratingGuide SupportSessionStatus = "GENERATING_GUIDE"
 	SupportSessionReviewingGuide  SupportSessionStatus = "REVIEWING_GUIDE"
-	SupportSessionGuideSaved      SupportSessionStatus = "GUIDE_SAVED"
 	SupportSessionEnded           SupportSessionStatus = "ENDED"
 )
 
@@ -34,7 +33,6 @@ func (s SupportSessionStatus) Valid() bool {
 		SupportSessionActive,
 		SupportSessionGeneratingGuide,
 		SupportSessionReviewingGuide,
-		SupportSessionGuideSaved,
 		SupportSessionEnded:
 		return true
 	default:
@@ -51,8 +49,6 @@ func (s SupportSessionStatus) CanTransitionTo(next SupportSessionStatus) bool {
 	case SupportSessionGeneratingGuide:
 		return next == SupportSessionReviewingGuide || next == SupportSessionEnded
 	case SupportSessionReviewingGuide:
-		return next == SupportSessionEnded
-	case SupportSessionGuideSaved:
 		return next == SupportSessionEnded
 	default:
 		return false
@@ -192,8 +188,6 @@ func CanEndSupportSession(status SupportSessionStatus, reason SupportSessionEndR
 		return reason == EndReasonGuideCancelled || reason == EndReasonNoMaterials
 	case SupportSessionReviewingGuide:
 		return reason == EndReasonGuideSaved || reason == EndReasonGuideCancelled
-	case SupportSessionGuideSaved:
-		return reason == EndReasonGuideSaved
 	default:
 		return false
 	}

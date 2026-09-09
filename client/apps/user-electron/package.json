@@ -11,7 +11,7 @@
   },
   "scripts": {
     "dev": "node ../../scripts/dev-electron.mjs . 5173",
-    "build:electron": "node ../../scripts/build-electron.mjs .",
+    "build:electron": "tsc -p tsconfig.electron.json",
     "build:renderer": "vite build --config vite.renderer.config.mts",
     "build": "npm run build:electron && npm run build:renderer",
     "typecheck": "tsc -p tsconfig.electron.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",

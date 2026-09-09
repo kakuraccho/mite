@@ -10,16 +10,6 @@ import {
 
 type PrimaryDisplayProvider = () => Pick<Display, 'bounds' | 'workArea'>
 
-export function collapseOverlayOnBlur(
-  window: Pick<BrowserWindow, 'on' | 'webContents'>,
-  controller: UserOverlayController,
-) {
-  window.on('blur', () => {
-    controller.setMode('COLLAPSED')
-    window.webContents.send('overlay:collapsed')
-  })
-}
-
 const rectangle = (value: OverlayRectangle): OverlayRectangle => ({
   x: Math.round(value.x),
   y: Math.round(value.y),

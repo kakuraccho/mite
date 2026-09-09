@@ -14,8 +14,6 @@ import (
 )
 
 type GuideUseCases interface {
-	ListSessionGuideDrafts(context.Context, domain.Actor, domain.ID) ([]domain.GuideDraft, error)
-	CompleteGuideReview(context.Context, service.CompleteGuideReviewCommand) (service.GuideReviewCompleted, error)
 	CreateGuideMaterialBatch(context.Context, service.CreateGuideMaterialBatchCommand) (service.GuideMaterialBatchCreated, error)
 	GetGuideMaterialBatch(context.Context, domain.Actor, domain.ID) (service.GuideMaterialBatchView, error)
 	CreateGuideMaterial(context.Context, service.CreateGuideMaterialCommand) (service.GuideMaterialCreated, int, error)

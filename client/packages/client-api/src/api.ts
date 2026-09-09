@@ -10,10 +10,8 @@ import type {
   CreateSupportRequestFromGuideRunInput,
   CreateSupportRequestInput,
   EndSupportSessionWithoutGuideInput,
-  EndSupportSessionInput,
   GuideDetail,
   GuideDraft,
-  CompleteGuideReviewInput,
   GuideGenerationJob,
   GuideMaterial,
   GuideMaterialBatch,
@@ -106,12 +104,6 @@ export interface MiteApi {
     input: RetryGuideGenerationJobInput,
     operation: IdempotentOperation,
   ): Promise<GuideGenerationJob>
-  listSessionGuideDrafts(sessionId: string): Promise<GuideDraft[]>
-  completeGuideReview(
-    sessionId: string,
-    input: CompleteGuideReviewInput,
-    operation: IdempotentOperation,
-  ): Promise<{ guides: GuideDetail[]; supportSession: SupportSession }>
   getGuideDraft(draftId: string): Promise<GuideDraft>
   updateGuideDraft(
     draftId: string,
@@ -143,11 +135,6 @@ export interface MiteApi {
     input: CreateSupportRequestFromGuideRunInput,
     operation: IdempotentOperation,
   ): Promise<{ guideRun: GuideRun; supportRequest: SupportRequest }>
-  endSupportSession(
-    supportSessionId: string,
-    input: EndSupportSessionInput,
-    operation: IdempotentOperation,
-  ): Promise<SupportSession>
   endSupportSessionWithoutGuide(
     supportSessionId: string,
     input: EndSupportSessionWithoutGuideInput,

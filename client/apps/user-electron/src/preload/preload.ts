@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { DesktopMark, DesktopGuidance } from '../shared/marking-overlay'
+import type { DesktopMark } from '../shared/marking-overlay'
 import type { RuntimeConfig } from '@mite/client-core'
 import type { UserOverlayLayout, UserOverlayMode } from '../shared/overlay'
 
@@ -23,15 +23,6 @@ interface CaptureManifest {
 }
 
 const bridge = Object.freeze({
-  prepareSpeakerVolume: () =>
-    ipcRenderer.invoke('audio:prepare-speaker') as Promise<void>,
-  onOverlayCollapsed: (listener: () => void) => {
-    const handler = () => listener()
-    ipcRenderer.on('overlay:collapsed', handler)
-    return () => ipcRenderer.removeListener('overlay:collapsed', handler)
-  },
-  setGuidance: (guidance: DesktopGuidance | null) =>
-    ipcRenderer.invoke('guidance:set', guidance) as Promise<void>,
   setMarkings: (marks: DesktopMark[]) =>
     ipcRenderer.invoke('marking:set', marks) as Promise<void>,
   getRuntimeConfig: () =>

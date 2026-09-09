@@ -12,23 +12,19 @@ import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, readFile, readdir, rm, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { CAPTURE_INTERVAL_MS, type RuntimeConfig } from '@mite/client-core'
+import type { RuntimeConfig } from '@mite/client-core'
 import {
   isTrustedRendererUrl,
   userProductionOrigin,
   userScheme,
 } from './security'
 import { createAppBarAdapter } from './appbar'
-import {
-  UserOverlayController,
-  collapseOverlayOnBlur,
-} from './overlay-controller'
+import { UserOverlayController } from './overlay-controller'
 import { writeAtomic } from './write-atomic'
 import { MarkingOverlay } from './marking-overlay'
 import { createCaptureSessionQueue } from './capture-session-queue'
 import { SupportScreenshotDraftStore } from './support-screenshot-draft'
 import { PrimaryScreenCapture } from './primary-screen-capture'
-import { prepareSpeakerVolume } from './speaker-volume'
 import {
   assertScreenCaptureAvailable,
   isWslCaptureEnvironment,
@@ -96,7 +92,7 @@ const runtimeConfig = (): RuntimeConfig => ({
   role: 'USER',
   apiBaseUrl: process.env.MITE_API_BASE_URL ?? 'http://localhost:3000',
   demoToken: process.env.MITE_DEMO_TOKEN ?? '',
-  captureIntervalMs: CAPTURE_INTERVAL_MS,
+  captureIntervalMs: parseInteger(process.env.CAPTURE_INTERVAL_MS, 5_000),
   captureMaxCount: Math.min(
     parseInteger(process.env.CAPTURE_MAX_COUNT, 360),
     360,
@@ -426,11 +422,6 @@ const registerDisplayMediaHandler = () => {
 }
 
 const registerIpc = () => {
-  ipcMain.handle('guidance:set', (event, guidance: unknown) => {
-    assertTrustedSender(event)
-    if (!markingOverlay) throw new Error('Guidance overlay is unavailable')
-    markingOverlay.setGuidance(guidance)
-  })
   ipcMain.handle('marking:set', (event, marks: unknown) => {
     assertTrustedSender(event)
     if (!markingOverlay) throw new Error('Marking overlay is unavailable')
@@ -445,13 +436,7 @@ const registerIpc = () => {
     assertTrustedSender(event)
     if (!isUserOverlayMode(mode)) throw new Error('overlay mode is invalid')
     if (!overlayController) throw new Error('overlay is unavailable')
-    const layout = overlayController.setMode(mode)
-    if (mode !== 'COLLAPSED') userWindow?.focus()
-    return layout
-  })
-  ipcMain.handle('audio:prepare-speaker', async (event) => {
-    assertTrustedSender(event)
-    await prepareSpeakerVolume()
+    return overlayController.setMode(mode)
   })
   ipcMain.handle('screen:prepare-share', async (event) => {
     assertTrustedSender(event)
@@ -590,7 +575,6 @@ const createWindow = () => {
   overlayController.initialize()
   window.setAlwaysOnTop(true, 'floating')
   window.setMenuBarVisibility(false)
-  collapseOverlayOnBlur(window, overlayController)
 
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   window.webContents.on('will-navigate', (event, url) => {
@@ -600,8 +584,10 @@ const createWindow = () => {
   window.once('close', () => {
     overlayController?.dispose()
   })
-  window.webContents.on('did-start-loading', () => markingOverlay?.clear())
-  window.webContents.on('render-process-gone', () => markingOverlay?.clear())
+  window.webContents.on('did-start-loading', () => markingOverlay?.setMarks([]))
+  window.webContents.on('render-process-gone', () =>
+    markingOverlay?.setMarks([]),
+  )
   window.once('closed', () => {
     overlayController = null
     userWindow = null

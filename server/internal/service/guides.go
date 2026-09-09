@@ -998,7 +998,7 @@ func (s *GuideService) UpdateGuideDraft(ctx context.Context, command UpdateGuide
 		if err := checkRevision(draft.Revision, command.ExpectedRevision); err != nil {
 			return err
 		}
-		if session.Status != domain.SupportSessionReviewingGuide || draft.SupportSessionID != session.ID || draft.Status != domain.GuideDraftEditing {
+		if session.Status != domain.SupportSessionReviewingGuide || session.GuideDraftID == nil || *session.GuideDraftID != draft.ID || draft.Status != domain.GuideDraftEditing {
 			return domain.NewError(domain.CodeInvalidState, "下書きを更新できない")
 		}
 		allowed, err := tx.ListAllowedDraftArtifacts(ctx, session.ID)
@@ -1047,18 +1047,15 @@ func (s *GuideService) SaveGuideDraft(ctx context.Context, command SaveGuideDraf
 		if err != nil {
 			return nil, err
 		}
-		if err := pairForSession(session).Authorize(command.Meta.Actor, domain.RoleFamily); err != nil {
+		if session.GuideMaterialBatchID == nil || session.GuideGenerationJobID == nil {
+			return nil, domain.NewError(domain.CodeInvalidState, "下書きを保存できない")
+		}
+		batchID, jobID := *session.GuideMaterialBatchID, *session.GuideGenerationJobID
+		if _, err := tx.GetBatch(ctx, batchID, true); err != nil {
 			return nil, err
 		}
-		if session.GuideMaterialBatchID != nil {
-			if _, err := tx.GetBatch(ctx, *session.GuideMaterialBatchID, true); err != nil {
-				return nil, err
-			}
-		}
-		if session.GuideGenerationJobID != nil {
-			if _, err := tx.GetJob(ctx, *session.GuideGenerationJobID, true); err != nil {
-				return nil, err
-			}
+		if _, err := tx.GetJob(ctx, jobID, true); err != nil {
+			return nil, err
 		}
 		draft, err := tx.GetDraft(ctx, command.DraftID, true)
 		if err != nil {
@@ -1070,22 +1067,71 @@ func (s *GuideService) SaveGuideDraft(ctx context.Context, command SaveGuideDraf
 		if err := checkRevision(draft.Revision, command.ExpectedRevision); err != nil {
 			return nil, err
 		}
-		if session.GuideMaterialBatchID == nil || session.GuideGenerationJobID == nil || session.Status != domain.SupportSessionReviewingGuide || draft.SupportSessionID != session.ID || draft.Status != domain.GuideDraftEditing {
+		if session.Status != domain.SupportSessionReviewingGuide || session.GuideDraftID == nil || *session.GuideDraftID != draft.ID || draft.Status != domain.GuideDraftEditing {
 			return nil, domain.NewError(domain.CodeInvalidState, "下書きを保存できない")
 		}
-		drafts, err := tx.ListDrafts(ctx, session.ID, true)
+		allowed, err := tx.ListAllowedDraftArtifacts(ctx, session.ID)
 		if err != nil {
 			return nil, err
 		}
-		if len(drafts) != 1 || drafts[0].ID != draft.ID {
-			return nil, domain.NewError(domain.CodeInvalidState, "複数のガイドはレビュー完了でまとめて保存する")
+		if err := domain.ValidateGuideDraftContent(draft.Title, draft.Steps, allowed); err != nil {
+			return nil, err
 		}
-		reviewed, events, err := s.persistReviewedDrafts(ctx, tx, command.Meta.Actor, session, drafts)
+		now := s.now()
+		guide := domain.Guide{ID: s.newID("guide_"), UserID: session.UserID, Title: draft.Title, CurrentVersionNumber: 1, CreatedAt: now, UpdatedAt: now, Revision: 1}
+		guide, err = tx.CreateGuide(ctx, guide)
 		if err != nil {
 			return nil, err
 		}
-		result.Data = GuideSaved{Guide: reviewed.Guides[0], SupportSession: reviewed.SupportSession}
-		return events, nil
+		version := domain.GuideVersion{GuideID: guide.ID, VersionNumber: 1, Title: guide.Title, CreatedBy: command.Meta.Actor.ID, CreatedAt: now, Steps: append([]domain.GuideStep(nil), draft.Steps...)}
+		if _, err := tx.CreateGuideVersion(ctx, version); err != nil {
+			return nil, err
+		}
+		used := make([]domain.ID, 0, len(draft.Steps))
+		seen := make(map[domain.ID]struct{})
+		for _, step := range draft.Steps {
+			if _, err := tx.CreateGuideVersionStep(ctx, guide.ID, step); err != nil {
+				return nil, err
+			}
+			if _, ok := seen[step.ArtifactID]; !ok {
+				seen[step.ArtifactID] = struct{}{}
+				used = append(used, step.ArtifactID)
+			}
+			if err := tx.PromoteArtifact(ctx, step.ArtifactID, timestamp(now)); err != nil {
+				return nil, err
+			}
+		}
+		unused, err := tx.ListUnusedArtifacts(ctx, session.ID, used)
+		if err != nil {
+			return nil, err
+		}
+		for _, artifact := range unused {
+			id := artifact.ID
+			if err := tx.CreateDeletionTask(ctx, domain.ArtifactDeletionTask{ID: s.newID("delete_"), ArtifactID: &id, StorageKey: artifact.StorageKey, Status: domain.ArtifactDeletionPending, NextAttemptAt: now, CreatedAt: now}); err != nil {
+				return nil, err
+			}
+		}
+		draft, err = tx.SaveDraft(ctx, draft.ID, timestamp(now))
+		if err != nil {
+			return nil, err
+		}
+		session, err = tx.FinishGuideSession(ctx, session.ID, guide.ID, timestamp(now))
+		if err != nil {
+			return nil, err
+		}
+		if err := tx.DeleteGenerationJob(ctx, jobID); err != nil {
+			return nil, err
+		}
+		if err := tx.DeleteMaterials(ctx, batchID); err != nil {
+			return nil, err
+		}
+		if err := tx.DeleteBatch(ctx, batchID); err != nil {
+			return nil, err
+		}
+		detail := domain.GuideDetail{Guide: guide, RepresentativeArtifactID: draft.Steps[0].ArtifactID, CurrentVersion: version}
+		result.Data = GuideSaved{Guide: detail, SupportSession: session}
+		pair := pairForSession(session)
+		return []domain.Event{s.event(domain.EventGuideDraftUpdated, draft.ID, draft.Revision, draft, pair), s.event(domain.EventGuideCreated, guide.ID, guide.Revision, detail, pair), s.event(domain.EventSupportSessionUpdated, session.ID, session.Revision, session, pair)}, nil
 	})
 	if err != nil {
 		return GuideSaved{}, err

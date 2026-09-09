@@ -1,41 +1,5 @@
 import { useEffect, useState } from 'react'
 import type { MiteApi } from '@mite/client-api'
-import { Modal } from '@mite/ui'
-
-function GuideImagePreview({
-  src,
-  alt,
-  className,
-}: {
-  src: string
-  alt: string
-  className?: string
-}) {
-  const [open, setOpen] = useState(false)
-  return (
-    <>
-      <button
-        type="button"
-        className="user-guide-image"
-        aria-label={`${alt}を拡大する`}
-        aria-haspopup="dialog"
-        onClick={() => setOpen(true)}
-      >
-        <img className={className} src={src} alt={alt} />
-        <span>画像を大きく見る</span>
-      </button>
-      {open ? (
-        <Modal title={alt} onClose={() => setOpen(false)}>
-          <img
-            className="user-guide-expanded-image"
-            src={src}
-            alt={`${alt}の拡大表示`}
-          />
-        </Modal>
-      ) : null}
-    </>
-  )
-}
 
 export function ArtifactImage({
   api,
@@ -78,12 +42,5 @@ export function ArtifactImage({
   }
   if (result?.artifactId !== artifactId || !result.url)
     return <div className="user-image-fallback">画像を読み込んでいます…</div>
-  return (
-    <GuideImagePreview
-      key={result.url}
-      src={result.url}
-      alt={alt}
-      className={className}
-    />
-  )
+  return <img className={className} src={result.url} alt={alt} />
 }

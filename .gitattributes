@@ -1,2 +1,0 @@
-# Keep text files LF on every platform, including Windows checkouts.
-* text=auto eol=lf

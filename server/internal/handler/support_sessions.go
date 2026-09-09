@@ -286,36 +286,3 @@ func handlerEndReasonPointer(value *domain.SupportSessionEndReason) *generated.S
 	converted := generated.SupportSessionEndReason(*value)
 	return &converted
 }
-
-func (h *SupportSessionHandler) EndSupportSession(ctx context.Context, request generated.EndSupportSessionRequestObject) (generated.EndSupportSessionResponseObject, error) {
-	actor, ok := ActorFromContext(ctx)
-	if !ok {
-		return endSavedSessionError(ctx, domain.NewError(domain.CodeUnauthenticated, "認証が必要")), nil
-	}
-	if request.Body == nil {
-		return endSavedSessionError(ctx, domain.NewError(domain.CodeValidationError, "リクエスト本文が必要")), nil
-	}
-	result, err := h.service.End(ctx, actor, request.Id, request.Body.ExpectedSessionRevision, request.Params.IdempotencyKey, RequestIDFromContext(ctx))
-	if err != nil {
-		return endSavedSessionError(ctx, err), nil
-	}
-	return generated.EndSupportSession200JSONResponse(generated.SupportSessionResponse{Data: generatedSupportSession(result)}), nil
-}
-
-func endSavedSessionError(ctx context.Context, err error) generated.EndSupportSessionResponseObject {
-	response := generatedErrorResponse(ctx, err)
-	switch statusForCode(responseCode(err)) {
-	case 400:
-		return generated.EndSupportSession400JSONResponse{BadRequestJSONResponse: generated.BadRequestJSONResponse(response)}
-	case 401:
-		return generated.EndSupportSession401JSONResponse{UnauthorizedJSONResponse: generated.UnauthorizedJSONResponse(response)}
-	case 403:
-		return generated.EndSupportSession403JSONResponse{ForbiddenJSONResponse: generated.ForbiddenJSONResponse(response)}
-	case 404:
-		return generated.EndSupportSession404JSONResponse{NotFoundJSONResponse: generated.NotFoundJSONResponse(response)}
-	case 409:
-		return generated.EndSupportSession409JSONResponse{ConflictJSONResponse: conflictResponse(ctx, err)}
-	default:
-		return generated.EndSupportSession500JSONResponse{InternalErrorJSONResponse: generated.InternalErrorJSONResponse(response)}
-	}
-}

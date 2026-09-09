@@ -5,7 +5,7 @@ const config: RuntimeConfig = {
   role: 'FAMILY',
   apiBaseUrl: 'http://127.0.0.1:3000',
   demoToken: 'family-token',
-  captureIntervalMs: 10_000,
+  captureIntervalMs: 5_000,
   captureMaxCount: 360,
   appVersion: '0.1.0',
 }
