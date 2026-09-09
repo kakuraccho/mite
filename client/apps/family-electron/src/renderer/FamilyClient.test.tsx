@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import { MiteApiError } from '@mite/client-api'
 import type {
   GuideDraft,
   GuideGenerationJob,
@@ -81,7 +82,7 @@ const activeSession = (): SupportSession => ({
     audio: true,
     screenShare: true,
     periodicCapture: true,
-    textVersion: 'v3',
+    textVersion: 'v4',
   },
   consentedAt: now,
   startedAt: now,
@@ -185,7 +186,7 @@ describe('FamilyClient', () => {
         audio: true,
         screenShare: true,
         periodicCapture: true,
-        textVersion: 'v3',
+        textVersion: 'v4',
       },
       consentedAt: now,
       startedAt: now,
@@ -429,7 +430,7 @@ describe('FamilyClient', () => {
   })
 })
 
-it('retries a failed save and manual end exactly, keeps the call/video attached through save, and restores a saved call', async () => {
+it('keeps audio during review and a failed save, then disconnects when saving succeeds', async () => {
   const request = { ...activeRequest(), status: 'RESOLVED' as const }
   let session: SupportSession = {
     ...activeSession(),
@@ -451,40 +452,30 @@ it('retries a failed save and manual end exactly, keeps the call/video attached 
     createdAt: now,
     updatedAt: now,
   }
-  const saveGuideDraft = vi
+  const completeGuideReview = vi
     .fn()
     .mockRejectedValueOnce(new TypeError('save response lost'))
-    .mockImplementationOnce(async () => {
-      session = {
-        ...session,
-        status: 'GUIDE_SAVED',
-        guideId: 'guide_1',
-        guideMaterialBatchId: null,
-        revision: 7,
-      }
-      return { supportSession: session, guide: { id: 'guide_1' } }
-    })
-  const endSupportSession = vi
-    .fn()
-    .mockRejectedValueOnce(new TypeError('end response lost'))
     .mockImplementationOnce(async () => {
       session = {
         ...session,
         status: 'ENDED',
         endedAt: now,
         endReason: 'GUIDE_SAVED',
-        revision: 8,
+        guideId: 'guide_1',
+        guideMaterialBatchId: null,
+        revision: 7,
       }
-      return session
+      return { supportSession: session, guides: [{ id: 'guide_1' }] }
     })
+  const endSupportSession = vi.fn()
   const api = {
     listSupportRequests: vi.fn().mockResolvedValue([request]),
     getSupportRequest: vi.fn().mockResolvedValue(request),
     getSupportSession: vi.fn(async () => session),
-    getGuideDraft: vi.fn().mockResolvedValue(draft),
+    listSessionGuideDrafts: vi.fn().mockResolvedValue([draft]),
     getArtifactContent: vi.fn().mockResolvedValue(new Blob(['jpeg'])),
     getLiveKitToken: vi.fn().mockResolvedValue({ token: 'token' }),
-    saveGuideDraft,
+    completeGuideReview,
     endSupportSession,
   } as unknown as MiteApi
   const media = quietLiveSupport({
@@ -494,7 +485,7 @@ it('retries a failed save and manual end exactly, keeps the call/video attached 
     localAudioLevel: 0.6,
   })
   const storage = new MemoryStorage()
-  const first = render(
+  render(
     <FamilyClient
       config={config}
       api={api}
@@ -504,7 +495,7 @@ it('retries a failed save and manual end exactly, keeps the call/video attached 
       pollIntervalMs={60000}
     />,
   )
-  const save = await screen.findByRole('button', { name: 'ガイドを保存' })
+  const save = await screen.findByRole('button', { name: 'レビュー完了' })
   await waitFor(() => expect(media.connect).toHaveBeenCalledOnce())
   expect(screen.queryByLabelText('支援依頼一覧')).toBeNull()
   expect(screen.getByLabelText('自分のマイクの大きさ')).toHaveAttribute(
@@ -513,50 +504,18 @@ it('retries a failed save and manual end exactly, keeps the call/video attached 
   )
   fireEvent.click(save)
   const retry = await screen.findByRole('button', {
-    name: '同じ内容で保存を確認する',
+    name: '同じ内容でレビュー完了を確認する',
   })
   expect(media.disconnect).not.toHaveBeenCalled()
   fireEvent.click(retry)
-  await screen.findByRole('dialog', { name: 'ガイドを保存しました' })
-  expect(saveGuideDraft.mock.calls[1]).toEqual(saveGuideDraft.mock.calls[0])
-  expect(media.disconnect).not.toHaveBeenCalled()
-  expect(media.attachScreen).not.toHaveBeenCalledWith(null)
+  await screen.findByRole('heading', { name: '支援が完了しました' })
+  expect(completeGuideReview.mock.calls[1]).toEqual(
+    completeGuideReview.mock.calls[0],
+  )
+  await waitFor(() => expect(media.disconnect).toHaveBeenCalledOnce())
   expect(media.connect).toHaveBeenCalledOnce()
-  fireEvent.click(screen.getByRole('button', { name: '閉じる' }))
   expect(endSupportSession).not.toHaveBeenCalled()
-  expect(screen.queryByRole('dialog')).toBeNull()
-  first.unmount()
-  const restored = quietLiveSupport({
-    connectionStatus: 'CONNECTED',
-    screenTrackSid: 'TR_new',
-  })
-  render(
-    <FamilyClient
-      config={config}
-      api={api}
-      storage={storage}
-      liveSupport={restored}
-      eventStreamFactory={noEvents}
-      pollIntervalMs={60000}
-    />,
-  )
-  await screen.findByRole('dialog', { name: 'ガイドを保存しました' })
-  await waitFor(() => expect(restored.connect).toHaveBeenCalledOnce())
-  fireEvent.click(screen.getByRole('button', { name: '閉じる' }))
-  fireEvent.click(screen.getByRole('button', { name: '通話を終了する' }))
-  const retryEnd = await screen.findByRole('button', {
-    name: '同じ内容で通話終了を確認する',
-  })
-  expect(restored.disconnect).not.toHaveBeenCalled()
-  fireEvent.click(retryEnd)
-  await screen.findByText('支援が完了しました')
-  expect(endSupportSession.mock.calls[1]).toEqual(
-    endSupportSession.mock.calls[0],
-  )
-  await waitFor(() => expect(restored.disconnect).toHaveBeenCalledOnce())
-  expect(
-    screen.queryByRole('dialog', { name: 'ガイドを作りますか？' }),
-  ).toBeNull()
+  expect(screen.queryByRole('button', { name: '通話を終了する' })).toBeNull()
   expect(screen.getByLabelText('支援依頼一覧')).toBeTruthy()
   expect(screen.getByText('現在、支援依頼はありません。')).toBeTruthy()
 })
@@ -631,3 +590,150 @@ it.each(['SKIP', 'CANCEL'] as const)(
     await waitFor(() => expect(media.disconnect).toHaveBeenCalled())
   },
 )
+const reviewDrafts: GuideDraft[] = ['ログインする', '住所を変更する'].map(
+  (title, index) => ({
+    id: `draft_${index + 1}`,
+    supportSessionId: 'session_01',
+    title,
+    steps: [
+      {
+        position: 1,
+        artifactId: `artifact_${index + 1}`,
+        instruction: `${title}ボタンを押す`,
+      },
+    ],
+    revision: index + 2,
+    status: 'EDITING',
+    createdAt: now,
+    updatedAt: now,
+  }),
+)
+
+function setupReviewFlow() {
+  let currentSession: SupportSession = {
+    ...activeSession(),
+    status: 'REVIEWING_GUIDE',
+    guideDecision: 'CREATE',
+    guideDraftId: reviewDrafts[0]!.id,
+    guideMaterialBatchId: 'batch_01',
+    guideGenerationJobId: 'job_01',
+    revision: 6,
+  }
+  const completeGuideReview = vi.fn<MiteApi['completeGuideReview']>(
+    async () => {
+      currentSession = {
+        ...currentSession,
+        status: 'ENDED',
+        guideId: 'guide_01',
+        endedAt: now,
+        endReason: 'GUIDE_SAVED',
+        revision: 7,
+      }
+      return { guides: [], supportSession: currentSession }
+    },
+  )
+  const api = {
+    listSupportRequests: vi
+      .fn()
+      .mockResolvedValue([{ ...activeRequest(), status: 'RESOLVED' }]),
+    getSupportRequest: vi
+      .fn()
+      .mockResolvedValue({ ...activeRequest(), status: 'RESOLVED' }),
+    getSupportSession: vi.fn(async () => currentSession),
+    listSessionGuideDrafts: vi.fn().mockResolvedValue(reviewDrafts),
+    getArtifactContent: vi.fn().mockResolvedValue(new Blob()),
+    completeGuideReview,
+  } as unknown as MiteApi
+  const storage = new MemoryStorage()
+  const props = {
+    config,
+    api,
+    storage,
+    liveSupport: quietLiveSupport(),
+    eventStreamFactory: noEvents,
+    pollIntervalMs: 60_000,
+  }
+  return {
+    ...render(<FamilyClient {...props} />),
+    props,
+    storage,
+    completeGuideReview,
+  }
+}
+
+describe('FamilyClient guide review', () => {
+  it('支援の全件を取得し、未展開のガイドも1回のAPIで確定する', async () => {
+    const { completeGuideReview } = setupReviewFlow()
+    await screen.findByRole('heading', {
+      name: '今回の支援から2件のガイドを作成しました',
+    })
+    expect(
+      screen.getByRole('button', { name: /住所を変更する.*1ステップ/ }),
+    ).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(screen.getByRole('button', { name: 'レビュー完了' }))
+    await screen.findByRole('heading', { name: '支援が完了しました' })
+    expect(completeGuideReview).toHaveBeenCalledExactlyOnceWith(
+      'session_01',
+      {
+        expectedSessionRevision: 6,
+        drafts: [
+          { id: 'draft_1', expectedRevision: 2 },
+          { id: 'draft_2', expectedRevision: 3 },
+        ],
+      },
+      { idempotencyKey: expect.any(String) },
+    )
+  })
+
+  it('応答不明でも完了表示に進めず、再起動後も同じ本文とキーで再送する', async () => {
+    const { completeGuideReview, unmount, props, storage } = setupReviewFlow()
+    completeGuideReview.mockRejectedValueOnce(new TypeError('offline'))
+    await screen.findByRole('button', { name: 'レビュー完了' })
+    fireEvent.click(screen.getByRole('button', { name: 'レビュー完了' }))
+    await screen.findByRole('button', {
+      name: '同じ内容でレビュー完了を確認する',
+    })
+    expect(
+      screen.queryByRole('heading', { name: '支援が完了しました' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'レビュー完了' })).toBeDisabled()
+    const originalCall = completeGuideReview.mock.calls[0]
+    unmount()
+    render(<FamilyClient {...props} />)
+    await screen.findByRole('button', { name: 'レビュー完了' })
+    expect(screen.getByRole('textbox', { name: /手順の名前/ })).toBeDisabled()
+    fireEvent.click(
+      screen.getByRole('button', { name: '同じ内容でレビュー完了を確認する' }),
+    )
+    await screen.findByRole('heading', { name: '支援が完了しました' })
+    expect(completeGuideReview).toHaveBeenCalledTimes(2)
+    expect(completeGuideReview.mock.calls[1]).toEqual(originalCall)
+    expect(storage.getItem('mite.family.pendingGuideReview')).toBeNull()
+  })
+
+  it('確定の競合を表示し、全ガイドをレビュー画面に残す', async () => {
+    const { completeGuideReview, storage } = setupReviewFlow()
+    completeGuideReview.mockRejectedValueOnce(
+      new MiteApiError(409, {
+        error: {
+          code: 'REVISION_CONFLICT',
+          message: 'conflict',
+          requestId: 'request_01',
+        },
+      }),
+    )
+    await screen.findByRole('button', { name: 'レビュー完了' })
+    fireEvent.click(screen.getByRole('button', { name: 'レビュー完了' }))
+    await waitFor(() => expect(completeGuideReview).toHaveBeenCalledOnce())
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'レビュー完了' }),
+      ).toBeEnabled(),
+    )
+    expect(screen.getAllByRole('article')).toHaveLength(2)
+    expect(
+      screen.queryByRole('heading', { name: '支援が完了しました' }),
+    ).not.toBeInTheDocument()
+    expect(storage.getItem('mite.family.pendingGuideReview')).toBeNull()
+  })
+})

@@ -8,8 +8,7 @@ import (
 	"github.com/kakuraccho/mite/server/internal/repository"
 )
 
-// End closes the call after a saved guide has been tried together. Guide
-// persistence and material cleanup already completed in SaveGuideDraft.
+// End closes legacy GUIDE_SAVED sessions. New guide saves end support directly.
 func (s *SupportSessionService) End(
 	ctx context.Context, actor domain.Actor, rawSessionID string, expectedRevision int64,
 	rawKey, requestID string,

@@ -87,3 +87,4 @@ export interface DataEnvelope<TData> {
 }
 
 export type EndSupportSessionInput = Schema<'EndSupportSessionRequest'>
+export type CompleteGuideReviewInput = Schema<'CompleteGuideReviewRequest'>

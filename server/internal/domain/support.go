@@ -34,7 +34,7 @@ type Consent struct {
 }
 
 func (c Consent) Accepted() bool {
-	return c.Audio && c.ScreenShare && c.PeriodicCapture && c.TextVersion == "v3"
+	return c.Audio && c.ScreenShare && c.PeriodicCapture && c.TextVersion == "v4"
 }
 
 type SupportSession struct {

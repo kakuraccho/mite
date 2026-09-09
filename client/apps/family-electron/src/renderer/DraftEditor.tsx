@@ -1,50 +1,18 @@
-import { useEffect, useRef, useState } from 'react'
-import type { GuideDraft, GuideStep, MiteApi } from '@mite/client-api'
-import {
-  Button,
-  Modal,
-  Notice,
-  ScreenHeading,
-  StatusBadge,
-  Surface,
-} from '@mite/ui'
+import { useState } from 'react'
+import type { GuideStep, MiteApi } from '@mite/client-api'
+import { Button, Modal, Notice, Surface } from '@mite/ui'
 import { ArtifactImage } from './ArtifactImage'
-import { DraftSaveQueue, type DraftSaveSnapshot } from './draft-save-queue'
+import type { DraftContent, DraftSaveSnapshot } from './draft-save-queue'
+import { isValidDraft } from './draft-validation'
 
 interface DraftEditorProps {
   api: MiteApi
-  draft: GuideDraft
+  snapshot: DraftSaveSnapshot
   busy: boolean
-  onSave(draft: GuideDraft): void
-  onCancel(): void
+  onEdit(content: DraftContent): void
 }
 
-const positionSteps = (steps: GuideStep[]): GuideStep[] =>
-  steps.map((step, index) => ({ ...step, position: index + 1 }))
-
-const isValidDraft = (draft: GuideDraft) => {
-  const titleLength = Array.from(draft.title.trim()).length
-  return (
-    titleLength >= 1 &&
-    titleLength <= 40 &&
-    draft.steps.length >= 1 &&
-    draft.steps.length <= 8 &&
-    draft.steps.every((step) => {
-      const length = Array.from(step.instruction.trim()).length
-      return length >= 1 && length <= 120
-    })
-  )
-}
-
-export function DraftEditor({
-  api,
-  draft,
-  busy,
-  onSave,
-  onCancel,
-}: DraftEditorProps) {
-  const initialDraftRef = useRef(draft)
-  const queueRef = useRef<DraftSaveQueue | null>(null)
+export function DraftEditor({ api, snapshot, busy, onEdit }: DraftEditorProps) {
   const [selectedStep, setSelectedStep] = useState(0)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [pickerPage, setPickerPage] = useState(0)
@@ -53,30 +21,12 @@ export function DraftEditor({
   const [availableImages, setAvailableImages] = useState<string[]>([])
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
   const [newInstruction, setNewInstruction] = useState('')
-  const [snapshot, setSnapshot] = useState<DraftSaveSnapshot>({
-    draft,
-    status: 'SAVED',
-    message: null,
-    hasPendingChanges: false,
-  })
-
-  useEffect(() => {
-    const queue = new DraftSaveQueue(api, initialDraftRef.current)
-    queueRef.current = queue
-    const unsubscribe = queue.subscribe(setSnapshot)
-    return () => {
-      unsubscribe()
-      queue.dispose()
-      queueRef.current = null
-    }
-  }, [api])
-
-  useEffect(() => {
-    queueRef.current?.replaceFromServer(draft)
-  }, [draft])
 
   const edit = (title: string, steps: GuideStep[]) => {
-    queueRef.current?.edit({ title, steps: positionSteps(steps) })
+    onEdit({
+      title,
+      steps: steps.map((step, index) => ({ ...step, position: index + 1 })),
+    })
   }
 
   const move = (index: number, direction: -1 | 1) => {
@@ -110,7 +60,9 @@ export function DraftEditor({
     setPickerPage(0)
     setNewInstruction('')
     try {
-      const session = await api.getSupportSession(draft.supportSessionId)
+      const session = await api.getSupportSession(
+        snapshot.draft.supportSessionId,
+      )
       if (
         session.status !== 'REVIEWING_GUIDE' ||
         !session.guideMaterialBatchId
@@ -158,47 +110,9 @@ export function DraftEditor({
   }
 
   const valid = isValidDraft(snapshot.draft)
-  const canSave =
-    valid &&
-    (snapshot.status === 'SAVED' || snapshot.status === 'CONFLICT') &&
-    !snapshot.hasPendingChanges &&
-    snapshot.draft.status === 'EDITING' &&
-    !busy
-
   return (
-    <div className="family-stack">
+    <fieldset className="family-draft-fields family-stack" disabled={busy}>
       <Surface elevated>
-        <ScreenHeading
-          eyebrow="手順の確認"
-          title="利用者に残す手順を整える"
-          description="変更は入力を止めてから自動で保存されます。画像と説明の順番を確認してください。"
-          aside={
-            <StatusBadge
-              tone={
-                snapshot.status === 'SAVED'
-                  ? 'success'
-                  : snapshot.status === 'ERROR'
-                    ? 'danger'
-                    : snapshot.status === 'CONFLICT'
-                      ? 'warning'
-                      : 'active'
-              }
-              role="status"
-              aria-live="polite"
-            >
-              {snapshot.status === 'SAVED'
-                ? '保存済み'
-                : snapshot.status === 'SAVING'
-                  ? '保存中'
-                  : snapshot.status === 'WAITING'
-                    ? '変更あり'
-                    : snapshot.status === 'CONFLICT'
-                      ? '最新内容を反映'
-                      : '保存できません'}
-            </StatusBadge>
-          }
-        />
-
         {snapshot.message ? (
           <Notice
             title={
@@ -209,14 +123,6 @@ export function DraftEditor({
             tone={snapshot.status === 'CONFLICT' ? 'warning' : 'danger'}
           >
             <p>{snapshot.message}</p>
-            {snapshot.status === 'ERROR' ? (
-              <Button
-                variant="secondary"
-                onClick={() => void queueRef.current?.flush()}
-              >
-                もう一度保存する
-              </Button>
-            ) : null}
           </Notice>
         ) : null}
 
@@ -329,25 +235,6 @@ export function DraftEditor({
           名前は1〜40文字、説明は各1〜120文字、手順は1〜8件必要です。
         </Notice>
       ) : null}
-
-      <Surface className="family-footer-actions">
-        <div>
-          <strong>内容を利用者のガイドへ保存しますか？</strong>
-          <p>「ガイドを保存」は、自動保存が完了すると選べます。</p>
-        </div>
-        <div className="family-action-row">
-          <Button variant="secondary" disabled={busy} onClick={onCancel}>
-            作成せず終了
-          </Button>
-          <Button
-            size="large"
-            disabled={!canSave}
-            onClick={() => onSave(snapshot.draft)}
-          >
-            ガイドを保存
-          </Button>
-        </div>
-      </Surface>
       {pickerOpen ? (
         <Modal
           title="撮影した画面から手順を追加"
@@ -459,6 +346,6 @@ export function DraftEditor({
           ) : null}
         </Modal>
       ) : null}
-    </div>
+    </fieldset>
   )
 }

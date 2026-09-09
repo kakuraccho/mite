@@ -14,6 +14,7 @@ const defaultPort = 3000
 
 type Config struct {
 	Port                  int
+	Environment           string
 	DatabaseURL           string
 	SupabaseURL           string
 	SupabaseSecretKey     string
@@ -53,6 +54,14 @@ func load(lookup lookupEnv) (Config, error) {
 		return Config{}, err
 	}
 
+	environment, _ := lookup("MITE_ENV")
+	if strings.TrimSpace(environment) == "" {
+		environment = "production"
+	}
+	if environment != "production" && environment != "development" {
+		return Config{}, errors.New("MITE_ENV must be production or development")
+	}
+
 	values := make(map[string]string)
 	for _, name := range []string{
 		"DATABASE_URL",
@@ -65,10 +74,6 @@ func load(lookup lookupEnv) (Config, error) {
 		"LIVEKIT_API_KEY",
 		"LIVEKIT_API_SECRET",
 		"AI_PROVIDER",
-		"AI_BASE_URL",
-		"GEMINI_API_KEY",
-		"AI_MODEL",
-		"AI_PROMPT_VERSION",
 		"CLIENT_ORIGINS",
 	} {
 		value, ok := lookup(name)
@@ -81,8 +86,24 @@ func load(lookup lookupEnv) (Config, error) {
 	if values["DEMO_USER_TOKEN"] == values["DEMO_FAMILY_TOKEN"] {
 		return Config{}, errors.New("DEMO_USER_TOKEN and DEMO_FAMILY_TOKEN must differ")
 	}
-	if values["AI_PROVIDER"] != "gemini" {
-		return Config{}, errors.New("AI_PROVIDER must be gemini")
+	switch values["AI_PROVIDER"] {
+	case "gemini":
+		for _, name := range []string{"AI_BASE_URL", "GEMINI_API_KEY", "AI_MODEL", "AI_PROMPT_VERSION"} {
+			value, ok := lookup(name)
+			if !ok || strings.TrimSpace(value) == "" {
+				return Config{}, fmt.Errorf("required environment variable is missing: %s", name)
+			}
+			values[name] = value
+		}
+		if err := validateURL("AI_BASE_URL", values["AI_BASE_URL"], "https"); err != nil {
+			return Config{}, err
+		}
+	case "mock":
+		if environment != "development" {
+			return Config{}, errors.New("AI_PROVIDER=mock requires MITE_ENV=development")
+		}
+	default:
+		return Config{}, errors.New("AI_PROVIDER must be gemini or mock")
 	}
 	if err := validateURL("DATABASE_URL", values["DATABASE_URL"], "postgres", "postgresql"); err != nil {
 		return Config{}, err
@@ -93,9 +114,6 @@ func load(lookup lookupEnv) (Config, error) {
 	if err := validateURL("LIVEKIT_URL", values["LIVEKIT_URL"], "wss"); err != nil {
 		return Config{}, err
 	}
-	if err := validateURL("AI_BASE_URL", values["AI_BASE_URL"], "https"); err != nil {
-		return Config{}, err
-	}
 
 	origins, err := parseOrigins(values["CLIENT_ORIGINS"])
 	if err != nil {
@@ -104,6 +122,7 @@ func load(lookup lookupEnv) (Config, error) {
 
 	return Config{
 		Port:                  port,
+		Environment:           environment,
 		DatabaseURL:           values["DATABASE_URL"],
 		SupabaseURL:           values["SUPABASE_URL"],
 		SupabaseSecretKey:     values["SUPABASE_SECRET_KEY"],

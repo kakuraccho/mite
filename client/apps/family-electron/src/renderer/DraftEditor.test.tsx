@@ -2,7 +2,7 @@ import '@testing-library/jest-dom/vitest'
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import type { GuideDraft, MiteApi } from '@mite/client-api'
-import { DraftEditor } from './DraftEditor'
+import { GuideReview } from './GuideReview'
 
 afterEach(() => vi.useRealTimers())
 const draft: GuideDraft = {
@@ -44,11 +44,12 @@ const makeApi = () =>
 it('adds an image omitted by AI, edits and reorders the new step using the existing revision PATCH', async () => {
   const api = makeApi()
   render(
-    <DraftEditor
+    <GuideReview
       api={api}
-      draft={draft}
+      supportSessionId={draft.supportSessionId}
+      drafts={[draft]}
       busy={false}
-      onSave={vi.fn()}
+      onComplete={vi.fn()}
       onCancel={vi.fn()}
     />,
   )
@@ -107,11 +108,12 @@ it('keeps the eight-step limit and permits adding again after removing a step', 
   }
   const api = makeApi()
   render(
-    <DraftEditor
+    <GuideReview
       api={api}
-      draft={full}
+      supportSessionId={full.supportSessionId}
+      drafts={[full]}
       busy={false}
-      onSave={vi.fn()}
+      onComplete={vi.fn()}
       onCancel={vi.fn()}
     />,
   )
@@ -129,11 +131,12 @@ it('reports stale/failed material loading without adding a step', async () => {
     status: 'GUIDE_SAVED',
   } as never)
   render(
-    <DraftEditor
+    <GuideReview
       api={api}
-      draft={draft}
+      supportSessionId={draft.supportSessionId}
+      drafts={[draft]}
       busy={false}
-      onSave={vi.fn()}
+      onComplete={vi.fn()}
       onCancel={vi.fn()}
     />,
   )
@@ -153,11 +156,12 @@ it('pages through every captured image while loading only the visible page', asy
     })),
   } as never)
   render(
-    <DraftEditor
+    <GuideReview
       api={api}
-      draft={draft}
+      supportSessionId={draft.supportSessionId}
+      drafts={[draft]}
       busy={false}
-      onSave={vi.fn()}
+      onComplete={vi.fn()}
       onCancel={vi.fn()}
     />,
   )

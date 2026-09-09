@@ -282,19 +282,20 @@ func (tx *fakeGuideTx) PromoteArtifact(_ context.Context, id domain.ID, _ pgtype
 func (tx *fakeGuideTx) ListUnusedArtifacts(_ context.Context, _ domain.ID, _ []domain.ID) ([]repository.ArtifactReference, error) {
 	return append([]repository.ArtifactReference(nil), tx.unused...), nil
 }
-func (tx *fakeGuideTx) SaveDraft(_ context.Context, _ domain.ID, now pgtype.Timestamptz) (domain.GuideDraft, error) {
+func (tx *fakeGuideTx) SaveDraft(_ context.Context, _ domain.ID, _ domain.ID, now pgtype.Timestamptz) (domain.GuideDraft, error) {
 	tx.draft.Status = domain.GuideDraftSaved
 	tx.draft.Revision++
 	tx.draft.UpdatedAt = now.Time
 	return tx.draft, nil
 }
-func (tx *fakeGuideTx) SaveGuideInSession(_ context.Context, _ domain.ID, guideID domain.ID, now pgtype.Timestamptz) (domain.SupportSession, error) {
-	tx.session.Status = domain.SupportSessionGuideSaved
+func (tx *fakeGuideTx) FinishGuideSession(_ context.Context, _ domain.ID, guideID domain.ID, now pgtype.Timestamptz) (domain.SupportSession, error) {
+	tx.session.Status = domain.SupportSessionEnded
 	tx.session.GuideMaterialBatchID = nil
 	tx.session.GuideGenerationJobID = nil
 	tx.session.GuideID = &guideID
-	tx.session.EndReason = nil
-	tx.session.EndedAt = nil
+	reason := domain.EndReasonGuideSaved
+	tx.session.EndReason = &reason
+	tx.session.EndedAt = &now.Time
 	tx.session.UpdatedAt = now.Time
 	tx.session.Revision++
 	return tx.session, nil
@@ -737,7 +738,7 @@ func TestUpdateAndSaveGuideDraftWithCleanup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if saved.Guide.Guide.Title != "新しいガイド" || saved.Guide.CurrentVersion.VersionNumber != 1 || saved.SupportSession.Status != domain.SupportSessionGuideSaved || saved.SupportSession.EndedAt != nil || saved.SupportSession.EndReason != nil || saved.SupportSession.Revision != 7 {
+	if saved.Guide.Guide.Title != "新しいガイド" || saved.Guide.CurrentVersion.VersionNumber != 1 || saved.SupportSession.Status != domain.SupportSessionEnded || saved.SupportSession.EndedAt == nil || saved.SupportSession.EndReason == nil || *saved.SupportSession.EndReason != domain.EndReasonGuideSaved || saved.SupportSession.Revision != 7 {
 		t.Fatalf("saved=%+v", saved)
 	}
 	if tx.artifacts["art_1"].Purpose != domain.ArtifactPurposeGuideStep || len(tx.deletions) != 1 || !tx.deletedJob || !tx.deletedMaterials || !tx.deletedBatch {
@@ -826,4 +827,8 @@ func TestDraftRejectsUnknownArtifactAndFamilyOnlyReads(t *testing.T) {
 	if _, err = service.GetGuideDraft(context.Background(), userMeta("x").Actor, draftID); err != nil {
 		t.Fatalf("user read failed: %v", err)
 	}
+}
+
+func (tx *fakeGuideTx) ListDrafts(_ context.Context, _ domain.ID, _ bool) ([]domain.GuideDraft, error) {
+	return []domain.GuideDraft{tx.draft}, nil
 }

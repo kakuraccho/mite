@@ -341,7 +341,7 @@ func (s *SupportSessionService) EndWithoutGuide(
 			}
 		}
 		if locked.GuideDraftID != nil {
-			if deleteErr := tx.DeleteGuideDraft(ctx, *locked.GuideDraftID); deleteErr != nil {
+			if deleteErr := tx.DeleteGuideDrafts(ctx, locked.ID); deleteErr != nil {
 				return deleteErr
 			}
 		}

@@ -26,7 +26,7 @@ const supportSession = (revision = 5): SupportSession => ({
     audio: true,
     screenShare: true,
     periodicCapture: true,
-    textVersion: 'v3',
+    textVersion: 'v4',
   },
   consentedAt: timestamp,
   startedAt: timestamp,

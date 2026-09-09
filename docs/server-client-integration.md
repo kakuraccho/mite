@@ -19,8 +19,8 @@
 
 - A: Artifact登録・取得、SupportRequest作成・一覧・取得、Supabase Storage、削除workerを実装済み
 - B: SupportSessionのcall・取得・accept・LiveKit token・resolve・end、WebSocketを実装済み
-- C: GuideMaterial、生成job、draft、Guide、GuideRunの16 operationと生成workerを実装済み
-- OpenAPIの28 operationはすべて実handlerへ配線済みで、`/v1/events` も利用できます。
+- C: GuideMaterial、生成job、draft、Guide、GuideRunと支援単位のレビューの18 operationと生成workerを実装済み
+- OpenAPIの30 operationはすべて実handlerへ配線済みで、`/v1/events` も利用できます。
 
 ## 3. 基本の操作順
 
@@ -35,14 +35,13 @@ REQUEST_SCREENSHOT登録
       └─ CREATE → GENERATING_GUIDE
                    → batch作成・material upload・complete
                    → job SUCCEEDED / FAILED
-                   → draft確認・編集・save
-                   → Guide保存・session GUIDE_SAVED（通話継続、作成前の共有を再開）
-                   → 手順を一緒に確認・家族がPOST end → ENDED
+                   → 全draft確認・編集・complete-guide-review
+                   → 全Guide保存・session ENDED（通話と支援を終了）
 ```
 
-保存後は利用者がGuideRunを作成し、`NEXT` / `PREVIOUS`、最終stepでcompleteを行います。今回の通話を手動終了した後、別の相談として途中で家族へ聞く場合は、現在画面を新しい `REQUEST_SCREENSHOT` Artifactとして登録してから `POST /v1/guide-runs/{id}/support-request` を呼びます。
+保存後は利用者がGuideRunを作成し、`NEXT` / `PREVIOUS`、最終stepでcompleteを行います。ガイド利用の途中で別の相談として家族へ聞く場合は、現在画面を新しい `REQUEST_SCREENSHOT` Artifactとして登録してから `POST /v1/guide-runs/{id}/support-request` を呼びます。
 
-応答は同意文v3を使い、音声と共有を自動開始します。定期撮影は共有開始直後と10秒ごと、ACTIVEかつ共有中だけ行います。CREATEで撮影と画面共有を止め、アップロード・生成・編集中は音声通話だけを保ちます。保存時には、作成前に共有していた場合だけ自動で共有を再開します。手動停止していた場合やアプリ再起動後は利用者の再開ボタンを使います。保存済み状態で家族が `POST /v1/support-sessions/{id}/end` に `expectedSessionRevision` とIdempotency-Keyを送ると終了します。
+応答は同意文v4を使い、音声と共有を自動開始します。定期撮影は共有開始直後と10秒ごと、ACTIVEかつ共有中だけ行います。CREATEで撮影と画面共有を止め、アップロード・生成・レビュー中は音声通話だけを保ちます。「レビュー完了」による全ガイドの保存が成功すると支援はENDEDとなり、通話も終了します。保存失敗や応答不明の間は終了を推測せず、REST応答またはGETで確定状態を確認します。旧版のGUIDE_SAVEDセッションに限り、手動終了APIを互換動作として保持します。
 
 ## 4. 再送と復旧
 
@@ -85,7 +84,7 @@ WebSocketは通知経路で、RESTが正本です。切断・再接続、古いr
 
 成功時は `{"type":"authenticated"}` が届きます。その後のeventは更新後エンティティ全体を `data` に持ちます。接続中は `eventId`、永続状態では `entityId` と `revision` で重複・順不同を処理してください。
 
-LiveKit tokenはSupportSessionが `ACTIVE`、`GENERATING_GUIDE`、`REVIEWING_GUIDE`、`GUIDE_SAVED` の間に取得できます。接続または再接続の直前に `POST /v1/support-sessions/{id}/livekit-token` を呼び、返された `serverUrl`、`token`、`roomName`、`participantIdentity` をSDKへ渡します。API keyとsecretをクライアントへ置かないでください。
+LiveKit tokenはSupportSessionが `ACTIVE`、`GENERATING_GUIDE`、`REVIEWING_GUIDE`（旧版のセッションに限り `GUIDE_SAVED`）の間に取得できます。接続または再接続の直前に `POST /v1/support-sessions/{id}/livekit-token` を呼び、返された `serverUrl`、`token`、`roomName`、`participantIdentity` をSDKへ渡します。API keyとsecretをクライアントへ置かないでください。
 
 ## 7. Guide素材manifestの復旧
 

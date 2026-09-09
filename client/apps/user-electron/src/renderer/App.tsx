@@ -70,7 +70,7 @@ const guideRunKey = 'mite.user.guideRunId'
 const supportDraftKey = 'mite.user.supportDraftId'
 const supportDraftPayloadKey = 'mite.user.supportDraftPayload'
 const consentText =
-  '応答すると、家族との音声通話とメインの画面全体の共有が始まります。共有の開始直後に1枚、その後10秒ごとに、この端末へ画像を一時保存します。家族が手順を作ることを選ぶと撮影を止め、画像をMiteサーバーへ送り、GoogleのGemini AIで下書きを作ります。手順の作成中は画面共有を止め、音声通話だけを続けます。保存すると、作成前に共有していた場合だけ画面共有を再開します。画面共有はいつでも止められます。画面に個人情報が映る可能性があります。音声通話・画面共有・画像の保存と送信に同意して応答しますか。'
+  '応答すると、家族との音声通話とメインの画面全体の共有が始まります。共有の開始直後に1枚、その後10秒ごとに、この端末へ画像を一時保存します。家族が手順を作ることを選ぶと撮影を止め、画像をMiteサーバーへ送り、GoogleのGemini AIで下書きを作ります。手順の作成中は画面共有を止め、音声通話だけを続けます。すべての手順を保存すると、家族との通話と支援を終了します。画面共有はいつでも止められます。画面に個人情報が映る可能性があります。音声通話・画面共有・画像の保存と送信に同意して応答しますか。'
 
 interface EventStreamController {
   start(): void
@@ -847,7 +847,7 @@ function DraftViewer({ api, draft }: { api: MiteApi; draft: GuideDraft }) {
       <ScreenHeading
         eyebrow="家族が確認中"
         title={draft.title}
-        description="家族が手順を整えています。内容は自動で新しくなります。"
+        description={`全${draft.steps.length}ステップ。家族が手順を整えています。内容は自動で新しくなります。`}
       />
       {step ? (
         <div className="user-guide-step">
@@ -1219,7 +1219,7 @@ export function UserClient({
   const [fatalConfiguration, setFatalConfiguration] = useState(false)
   const [request, setRequest] = useState<SupportRequest | null>(null)
   const [session, setSession] = useState<SupportSession | null>(null)
-  const [draft, setDraft] = useState<GuideDraft | null>(null)
+  const [drafts, setDrafts] = useState<GuideDraft[]>([])
   const [guides, setGuides] = useState<GuideSummary[]>([])
   const [guidesLoading, setGuidesLoading] = useState(false)
   const [guide, setGuide] = useState<GuideDetail | null>(null)
@@ -1444,8 +1444,20 @@ export function UserClient({
         effectiveSession.status === 'REVIEWING_GUIDE' &&
         effectiveSession.guideDraftId
       ) {
-        const nextDraft = await api.getGuideDraft(effectiveSession.guideDraftId)
-        setDraft((current) => selectNewestRevision(current, nextDraft))
+        const incoming = await api.listSessionGuideDrafts(effectiveSession.id)
+        if (
+          sessionRef.current?.id === effectiveSession.id &&
+          sessionRef.current.status === 'REVIEWING_GUIDE'
+        ) {
+          setDrafts((current) =>
+            incoming.map((draft) =>
+              selectNewestRevision(
+                current.find((item) => item.id === draft.id) ?? null,
+                draft,
+              ),
+            ),
+          )
+        }
       }
       if (!canContinueCall(effectiveSession)) await disconnectMedia()
       if (effectiveSession.status === 'ENDED') {
@@ -1704,7 +1716,7 @@ export function UserClient({
                 audio: true,
                 screenShare: true,
                 periodicCapture: true,
-                textVersion: 'v3',
+                textVersion: 'v4',
               },
             },
             { idempotencyKey },
@@ -2309,8 +2321,14 @@ export function UserClient({
         onRetry={() => setUploadRetry((value) => value + 1)}
       />
     )
-  } else if (supportScreen === 'GUIDE_DRAFT_REVIEW' && draft) {
-    content = <DraftViewer api={api} draft={draft} />
+  } else if (supportScreen === 'GUIDE_DRAFT_REVIEW' && drafts.length > 0) {
+    content = (
+      <div className="user-stack">
+        {drafts.map((draft) => (
+          <DraftViewer key={draft.id} api={api} draft={draft} />
+        ))}
+      </div>
+    )
   } else if (supportScreen === 'GUIDE_DRAFT_REVIEW') {
     content = <LoadingState>手順を読み込んでいます</LoadingState>
   } else if (
@@ -2339,7 +2357,7 @@ export function UserClient({
           sessionRef.current = null
           setRequest(null)
           setSession(null)
-          setDraft(null)
+          setDrafts([])
           setGuideRun(null)
           setGuide(null)
           setView('HOME')
