@@ -15,6 +15,7 @@
   "scripts": {
     "dev:user": "npm run dev -w @mite/user-electron",
     "dev:family": "npm run dev -w @mite/family-electron",
+    "dev:pwa": "npm run dev -w @mite/family-pwa",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "eslint . --max-warnings=0",

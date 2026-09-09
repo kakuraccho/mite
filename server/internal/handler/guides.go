@@ -668,7 +668,12 @@ func supportRequestToAPI(value domain.SupportRequest) generated.SupportRequest {
 	if value.GuideContext != nil {
 		guideContext = &generated.GuideContext{GuideRunId: string(value.GuideContext.GuideRunID), GuideId: string(value.GuideContext.GuideID), GuideVersionNumber: value.GuideContext.GuideVersionNumber, StepNumber: value.GuideContext.StepNumber, GuideTitle: value.GuideContext.GuideTitle, StepInstruction: value.GuideContext.StepInstruction, StepArtifactId: string(value.GuideContext.StepArtifactID)}
 	}
-	return generated.SupportRequest{Id: string(value.ID), UserId: string(value.UserID), FamilyId: string(value.FamilyID), InitialScreenshotArtifactId: string(value.InitialScreenshotArtifactID), Comment: value.Comment, Status: generated.SupportRequestStatus(value.Status), SupportSessionId: sessionID, GuideContext: guideContext, CreatedAt: value.CreatedAt, UpdatedAt: value.UpdatedAt, Revision: value.Revision}
+	result := generated.SupportRequest{Id: string(value.ID), UserId: string(value.UserID), FamilyId: string(value.FamilyID), InitialScreenshotArtifactId: string(value.InitialScreenshotArtifactID), Comment: value.Comment, Status: generated.SupportRequestStatus(value.Status), SupportSessionId: sessionID, GuideContext: guideContext, CreatedAt: value.CreatedAt, UpdatedAt: value.UpdatedAt, Revision: value.Revision, AcknowledgedAt: value.AcknowledgedAt, EstimatedSupportAt: value.EstimatedSupportAt}
+	if value.AcknowledgementKind != nil {
+		kind := generated.SupportAcknowledgementKind(*value.AcknowledgementKind)
+		result.AcknowledgementKind = &kind
+	}
+	return result
 }
 func supportSessionToAPI(value domain.SupportSession) generated.SupportSession {
 	var decision *generated.GuideDecision

@@ -48,6 +48,9 @@ type ArtifactSupportTx interface {
 	HasActiveSupportRequest(context.Context, domain.ID) (bool, error)
 	HasOpenSupportSession(context.Context, domain.ID) (bool, error)
 	CreateSupportRequest(context.Context, domain.SupportRequest) (domain.SupportRequest, error)
+	LockSupportRequest(context.Context, domain.ID) (domain.SupportRequest, bool, error)
+	UpdateSupportRequestAcknowledgement(context.Context, domain.SupportRequest) (domain.SupportRequest, error)
+	CancelSupportRequest(context.Context, domain.SupportRequest) (domain.SupportRequest, error)
 	ListStaleRequestArtifacts(context.Context, time.Time, int) ([]domain.Artifact, error)
 	ListExpiredIdempotency(context.Context, time.Time, int) ([]ExpiredIdempotencyRecord, error)
 	CreateArtifactDeletionTask(context.Context, domain.ArtifactDeletionTask) error
@@ -317,6 +320,42 @@ func (t *postgresArtifactSupportTx) CreateSupportRequest(
 	return artifactSupportRequestFromDB(row)
 }
 
+func (t *postgresArtifactSupportTx) LockSupportRequest(ctx context.Context, id domain.ID) (domain.SupportRequest, bool, error) {
+	row, err := t.queries.LockArtifactSupportRequestByID(ctx, string(id))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.SupportRequest{}, false, nil
+	}
+	if err != nil {
+		return domain.SupportRequest{}, false, fmt.Errorf("lock support request: %w", err)
+	}
+	request, err := artifactSupportRequestFromDB(row)
+	return request, true, err
+}
+
+func (t *postgresArtifactSupportTx) UpdateSupportRequestAcknowledgement(ctx context.Context, request domain.SupportRequest) (domain.SupportRequest, error) {
+	row, err := t.queries.UpdateSupportRequestAcknowledgement(ctx, dbgen.UpdateSupportRequestAcknowledgementParams{
+		AcknowledgedAt:      requiredTimestamptz(request.AcknowledgedAt),
+		AcknowledgementKind: acknowledgementKindPointerToString(request.AcknowledgementKind),
+		EstimatedSupportAt:  optionalTimestamptz(request.EstimatedSupportAt),
+		UpdatedAt:           pgTimestamp(request.UpdatedAt),
+		ID:                  string(request.ID),
+	})
+	if err != nil {
+		return domain.SupportRequest{}, fmt.Errorf("update support request acknowledgement: %w", err)
+	}
+	return artifactSupportRequestFromDB(row)
+}
+
+func (t *postgresArtifactSupportTx) CancelSupportRequest(ctx context.Context, request domain.SupportRequest) (domain.SupportRequest, error) {
+	row, err := t.queries.CancelPendingSupportRequest(ctx, dbgen.CancelPendingSupportRequestParams{
+		UpdatedAt: pgTimestamp(request.UpdatedAt), ID: string(request.ID),
+	})
+	if err != nil {
+		return domain.SupportRequest{}, fmt.Errorf("cancel support request: %w", err)
+	}
+	return artifactSupportRequestFromDB(row)
+}
+
 func (t *postgresArtifactSupportTx) ListStaleRequestArtifacts(
 	ctx context.Context,
 	createdBefore time.Time,
@@ -507,12 +546,38 @@ func artifactSupportRequestFromDB(row *dbgen.SupportRequest) (domain.SupportRequ
 		ID: domain.ID(row.ID), UserID: domain.ID(row.UserID), FamilyID: domain.ID(row.FamilyID),
 		InitialScreenshotArtifactID: domain.ID(row.InitialScreenshotArtifactID), Comment: row.Comment,
 		Status: domain.SupportRequestStatus(row.Status), SupportSessionID: stringPointerToID(row.SupportSessionID),
-		GuideContext: contextValue, CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time, Revision: row.Revision,
+		GuideContext: contextValue, AcknowledgedAt: optionalTime(row.AcknowledgedAt),
+		AcknowledgementKind: stringPointerToAcknowledgementKind(row.AcknowledgementKind),
+		EstimatedSupportAt:  optionalTime(row.EstimatedSupportAt),
+		CreatedAt:           row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time, Revision: row.Revision,
 	}
 	if !row.CreatedAt.Valid || !row.UpdatedAt.Valid {
 		return domain.SupportRequest{}, domain.NewError(domain.CodeInternalError, "SupportRequest日時が不正")
 	}
 	return request, request.Validate()
+}
+
+func optionalTimestamptz(value *time.Time) pgtype.Timestamptz {
+	if value == nil {
+		return pgtype.Timestamptz{}
+	}
+	return pgTimestamp(*value)
+}
+
+func acknowledgementKindPointerToString(value *domain.SupportAcknowledgementKind) *string {
+	if value == nil {
+		return nil
+	}
+	result := string(*value)
+	return &result
+}
+
+func stringPointerToAcknowledgementKind(value *string) *domain.SupportAcknowledgementKind {
+	if value == nil {
+		return nil
+	}
+	kind := domain.SupportAcknowledgementKind(*value)
+	return &kind
 }
 
 func deletionTaskFromDB(row *dbgen.ArtifactDeletionTask) (domain.ArtifactDeletionTask, error) {

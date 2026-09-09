@@ -95,24 +95,26 @@ go run ./cmd/api
 
 ### 4. クライアント環境変数を設定する
 
-別のターミナルで、利用者側と家族側それぞれの`.env.local`を作成します。既にファイルがある場合はコピーせず、必要な値を更新してください。
+別のターミナルで、利用者側・家族側と家族向けPWAの`.env.local`を作成します。既にファイルがある場合はコピーせず、必要な値を更新してください。
 
 ```bash
 # リポジトリルート
 cp client/apps/user-electron/.env.example client/apps/user-electron/.env.local
 cp client/apps/family-electron/.env.example client/apps/family-electron/.env.local
+cp client/apps/family-pwa/.env.example client/apps/family-pwa/.env.local
 ```
 
-各ファイルの`MITE_DEMO_TOKEN`を次のようにサーバーと一致させます。
+Electronの各ファイルでは`MITE_DEMO_TOKEN`を、PWAでは初回画面で入力する家族用トークンを、次のようにサーバーと一致させます。
 
 | クライアント | 対応するサーバー環境変数 |
 | ------------ | ------------------------ |
 | 利用者側     | `DEMO_USER_TOKEN`        |
 | 家族側       | `DEMO_FAMILY_TOKEN`      |
+| 家族向けPWA  | `DEMO_FAMILY_TOKEN`      |
 
-ローカルでは`MITE_API_BASE_URL=http://localhost:3000`を使用します。`.env.local`はGit管理されず、次の開発コマンドだけが読み込みます。Supabase、LiveKit、Geminiの秘密情報をクライアントへ設定しないでください。
+Electronでは`MITE_API_BASE_URL=http://localhost:3000`、PWAでは`VITE_API_BASE_URL=http://localhost:3000`を使用します。PWAの家族用トークンは初回画面で端末へ保存でき、`VITE_DEMO_FAMILY_TOKEN`はローカル開発用の任意の初期値です。`.env.local`はGit管理されません。Supabase、LiveKit、GeminiおよびVAPID秘密鍵をクライアントへ設定しないでください。
 
-### 5. 両クライアントを起動する
+### 5. クライアントとPWAを起動する
 
 利用者側と家族側を別々のターミナルで起動します。
 
@@ -128,7 +130,28 @@ cd client
 npm run dev:family
 ```
 
-利用者側は`http://127.0.0.1:5173`、家族側は`http://127.0.0.1:5174`のVite開発サーバーをElectronで表示します。
+```bash
+# ターミナル3
+cd client
+npm run dev:pwa
+```
+
+利用者側は`http://127.0.0.1:5173`、家族側は`http://127.0.0.1:5174`のVite開発サーバーをElectronで表示します。補助PWAは`http://localhost:5175`で開きます。Service WorkerとPushはlocalhost以外ではHTTPSが必要です。
+
+### Web Pushを有効にする
+
+`server/`で次を1回実行し、出力された2行を`server/.env`へ保存します。秘密鍵はサーバーだけに置き、Gitへ含めません。あわせて管理者の連絡先URIを設定してサーバーを再起動します。
+
+```bash
+cd server
+go run ./cmd/vapid-keygen
+```
+
+```dotenv
+WEB_PUSH_SUBJECT=mailto:admin@example.com
+```
+
+3項目をすべて未設定にするとPushだけが無効になり、状態確認と返答は利用できます。一部だけ設定した場合は設定漏れとしてサーバーが起動しません。
 
 利用者側は通常のメインウィンドウを持ちません。Windowsではプライマリ画面の左端をAppBarとして使用します。LinuxではOSの作業領域を予約せず、画面位置とサイズ変更だけを疑似動作させます。
 

@@ -8,28 +8,40 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
-const defaultPort = 3000
+const (
+	defaultPort                   = 3000
+	defaultPresenceOnlineAfter    = 60 * time.Second
+	defaultPresenceOfflineAfter   = 90 * time.Second
+	defaultPresenceReconnectAfter = 10 * time.Minute
+)
 
 type Config struct {
-	Port                  int
-	Environment           string
-	DatabaseURL           string
-	SupabaseURL           string
-	SupabaseSecretKey     string
-	SupabaseStorageBucket string
-	DemoUserToken         string
-	DemoFamilyToken       string
-	LiveKitURL            string
-	LiveKitAPIKey         string
-	LiveKitAPISecret      string
-	AIProvider            string
-	AIBaseURL             string
-	GeminiAPIKey          string
-	AIModel               string
-	AIPromptVersion       string
-	ClientOrigins         map[string]struct{}
+	Port                   int
+	Environment            string
+	DatabaseURL            string
+	SupabaseURL            string
+	SupabaseSecretKey      string
+	SupabaseStorageBucket  string
+	DemoUserToken          string
+	DemoFamilyToken        string
+	LiveKitURL             string
+	LiveKitAPIKey          string
+	LiveKitAPISecret       string
+	AIProvider             string
+	AIBaseURL              string
+	GeminiAPIKey           string
+	AIModel                string
+	AIPromptVersion        string
+	ClientOrigins          map[string]struct{}
+	PresenceOnlineAfter    time.Duration
+	PresenceOfflineAfter   time.Duration
+	PresenceReconnectAfter time.Duration
+	WebPushVAPIDPublicKey  string
+	WebPushVAPIDPrivateKey string
+	WebPushSubject         string
 }
 
 type lookupEnv func(string) (string, bool)
@@ -119,26 +131,83 @@ func load(lookup lookupEnv) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	presenceOnlineAfter, err := optionalPositiveSeconds(lookup, "PRESENCE_ONLINE_AFTER_SECONDS", defaultPresenceOnlineAfter)
+	if err != nil {
+		return Config{}, err
+	}
+	presenceOfflineAfter, err := optionalPositiveSeconds(lookup, "PRESENCE_OFFLINE_AFTER_SECONDS", defaultPresenceOfflineAfter)
+	if err != nil {
+		return Config{}, err
+	}
+	presenceReconnectAfter, err := optionalPositiveSeconds(lookup, "PRESENCE_RECONNECT_AFTER_SECONDS", defaultPresenceReconnectAfter)
+	if err != nil {
+		return Config{}, err
+	}
+	if presenceOnlineAfter >= presenceOfflineAfter || presenceOfflineAfter >= presenceReconnectAfter {
+		return Config{}, errors.New("presence durations must satisfy online < offline < reconnect")
+	}
+	webPushPublicKey, webPushPrivateKey, webPushSubject, err := optionalWebPush(lookup)
+	if err != nil {
+		return Config{}, err
+	}
 
 	return Config{
-		Port:                  port,
-		Environment:           environment,
-		DatabaseURL:           values["DATABASE_URL"],
-		SupabaseURL:           values["SUPABASE_URL"],
-		SupabaseSecretKey:     values["SUPABASE_SECRET_KEY"],
-		SupabaseStorageBucket: values["SUPABASE_STORAGE_BUCKET"],
-		DemoUserToken:         values["DEMO_USER_TOKEN"],
-		DemoFamilyToken:       values["DEMO_FAMILY_TOKEN"],
-		LiveKitURL:            values["LIVEKIT_URL"],
-		LiveKitAPIKey:         values["LIVEKIT_API_KEY"],
-		LiveKitAPISecret:      values["LIVEKIT_API_SECRET"],
-		AIProvider:            values["AI_PROVIDER"],
-		AIBaseURL:             values["AI_BASE_URL"],
-		GeminiAPIKey:          values["GEMINI_API_KEY"],
-		AIModel:               values["AI_MODEL"],
-		AIPromptVersion:       values["AI_PROMPT_VERSION"],
-		ClientOrigins:         origins,
+		Port:                   port,
+		Environment:            environment,
+		DatabaseURL:            values["DATABASE_URL"],
+		SupabaseURL:            values["SUPABASE_URL"],
+		SupabaseSecretKey:      values["SUPABASE_SECRET_KEY"],
+		SupabaseStorageBucket:  values["SUPABASE_STORAGE_BUCKET"],
+		DemoUserToken:          values["DEMO_USER_TOKEN"],
+		DemoFamilyToken:        values["DEMO_FAMILY_TOKEN"],
+		LiveKitURL:             values["LIVEKIT_URL"],
+		LiveKitAPIKey:          values["LIVEKIT_API_KEY"],
+		LiveKitAPISecret:       values["LIVEKIT_API_SECRET"],
+		AIProvider:             values["AI_PROVIDER"],
+		AIBaseURL:              values["AI_BASE_URL"],
+		GeminiAPIKey:           values["GEMINI_API_KEY"],
+		AIModel:                values["AI_MODEL"],
+		AIPromptVersion:        values["AI_PROMPT_VERSION"],
+		ClientOrigins:          origins,
+		PresenceOnlineAfter:    presenceOnlineAfter,
+		PresenceOfflineAfter:   presenceOfflineAfter,
+		PresenceReconnectAfter: presenceReconnectAfter,
+		WebPushVAPIDPublicKey:  webPushPublicKey,
+		WebPushVAPIDPrivateKey: webPushPrivateKey,
+		WebPushSubject:         webPushSubject,
 	}, nil
+}
+
+func optionalPositiveSeconds(lookup lookupEnv, name string, fallback time.Duration) (time.Duration, error) {
+	value, ok := lookup(name)
+	if !ok || strings.TrimSpace(value) == "" {
+		return fallback, nil
+	}
+	seconds, err := strconv.Atoi(value)
+	if err != nil || seconds < 1 {
+		return 0, fmt.Errorf("%s must be a positive integer", name)
+	}
+	return time.Duration(seconds) * time.Second, nil
+}
+
+func optionalWebPush(lookup lookupEnv) (string, string, string, error) {
+	publicKey, publicSet := lookup("WEB_PUSH_VAPID_PUBLIC_KEY")
+	privateKey, privateSet := lookup("WEB_PUSH_VAPID_PRIVATE_KEY")
+	subject, subjectSet := lookup("WEB_PUSH_SUBJECT")
+	publicSet = publicSet && strings.TrimSpace(publicKey) != ""
+	privateSet = privateSet && strings.TrimSpace(privateKey) != ""
+	subjectSet = subjectSet && strings.TrimSpace(subject) != ""
+	if !publicSet && !privateSet && !subjectSet {
+		return "", "", "", nil
+	}
+	if !publicSet || !privateSet || !subjectSet {
+		return "", "", "", errors.New("all WEB_PUSH settings must be provided together")
+	}
+	parsed, err := url.Parse(subject)
+	if err != nil || (parsed.Scheme != "mailto" && parsed.Scheme != "https") {
+		return "", "", "", errors.New("WEB_PUSH_SUBJECT must be a mailto or HTTPS URI")
+	}
+	return publicKey, privateKey, subject, nil
 }
 
 func optionalPort(lookup lookupEnv) (int, error) {

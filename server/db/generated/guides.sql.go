@@ -772,7 +772,7 @@ INSERT INTO support_requests (
     $7,
     1
 )
-RETURNING id, user_id, family_id, initial_screenshot_artifact_id, comment, status, support_session_id, guide_context, created_at, updated_at, revision
+RETURNING id, user_id, family_id, initial_screenshot_artifact_id, comment, status, support_session_id, guide_context, created_at, updated_at, revision, acknowledged_at, acknowledgement_kind, estimated_support_at
 `
 
 type CreateGuideSupportRequestParams struct {
@@ -808,6 +808,9 @@ func (q *Queries) CreateGuideSupportRequest(ctx context.Context, arg CreateGuide
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Revision,
+		&i.AcknowledgedAt,
+		&i.AcknowledgementKind,
+		&i.EstimatedSupportAt,
 	)
 	return &i, err
 }

@@ -77,6 +77,113 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/support-requests/{id}/acknowledgement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 家族が依頼を確認し対応目安を返す */
+        patch: operations["updateSupportRequestAcknowledgement"];
+        trace?: never;
+    };
+    "/v1/support-requests/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 利用者が未開始の支援依頼を取り消す */
+        post: operations["cancelSupportRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/presence/heartbeat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 利用者PCの接続heartbeatを記録する */
+        post: operations["recordPresenceHeartbeat"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/companion/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 家族向けに利用者PCの接続状況を返す */
+        get: operations["getCompanionStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/push-subscriptions/vapid-public-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Push購読用のVAPID公開鍵を返す */
+        get: operations["getVapidPublicKey"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/push-subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 家族端末のPush購読を登録または更新する */
+        put: operations["upsertPushSubscription"];
+        post?: never;
+        /** 家族端末のPush購読を解除する */
+        delete: operations["deletePushSubscription"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/support-requests/{id}/call": {
         parameters: {
             query?: never;
@@ -543,7 +650,11 @@ export interface components {
         /** @enum {string} */
         UserRole: "USER" | "FAMILY";
         /** @enum {string} */
-        SupportRequestStatus: "PENDING" | "IN_SUPPORT" | "RESOLVED";
+        SupportRequestStatus: "PENDING" | "IN_SUPPORT" | "RESOLVED" | "CANCELLED";
+        /** @enum {string} */
+        SupportAcknowledgementKind: "NOW" | "SCHEDULED" | "UNKNOWN";
+        /** @enum {string} */
+        PresenceStatus: "CONNECTING" | "ONLINE" | "OFFLINE";
         /** @enum {string} */
         SupportSessionStatus: "RINGING" | "ACTIVE" | "GENERATING_GUIDE" | "REVIEWING_GUIDE" | "GUIDE_SAVED" | "ENDED";
         /** @enum {string} */
@@ -609,9 +720,26 @@ export interface components {
             supportSessionId: string | null;
             guideContext: components["schemas"]["GuideContext"] | null;
             /** Format: date-time */
+            acknowledgedAt: string | null;
+            acknowledgementKind: components["schemas"]["SupportAcknowledgementKind"] | null;
+            /** Format: date-time */
+            estimatedSupportAt: string | null;
+            /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+            /** Format: int64 */
+            revision: number;
+        };
+        UserPresence: {
+            userId: string;
+            status: components["schemas"]["PresenceStatus"];
+            /** Format: date-time */
+            connectedSince: string | null;
+            /** Format: date-time */
+            lastSeenAt: string | null;
+            /** Format: date-time */
+            updatedAt: string | null;
             /** Format: int64 */
             revision: number;
         };
@@ -788,6 +916,27 @@ export interface components {
             /** @default  */
             comment?: string;
         };
+        UpdateSupportRequestAcknowledgementRequest: {
+            /** Format: int64 */
+            expectedRevision: number;
+            acknowledgementKind: components["schemas"]["SupportAcknowledgementKind"];
+            /** Format: date-time */
+            estimatedSupportAt: string | null;
+        };
+        CancelSupportRequestRequest: {
+            /** Format: int64 */
+            expectedRevision: number;
+        };
+        PushSubscriptionRequest: {
+            /** Format: uri */
+            endpoint: string;
+            p256dh: string;
+            auth: string;
+        };
+        DeletePushSubscriptionRequest: {
+            /** Format: uri */
+            endpoint: string;
+        };
         CallSupportRequestRequest: {
             /** Format: int64 */
             expectedRequestRevision: number;
@@ -892,6 +1041,26 @@ export interface components {
         SupportRequestListResponse: {
             data: {
                 items: components["schemas"]["SupportRequest"][];
+            };
+        };
+        UserPresenceResponse: {
+            data: components["schemas"]["UserPresence"];
+        };
+        CompanionStatusResponse: {
+            data: {
+                user: components["schemas"]["User"];
+                presence: components["schemas"]["UserPresence"];
+            };
+        };
+        VapidPublicKeyResponse: {
+            data: {
+                publicKey: string;
+            };
+        };
+        PushSubscriptionStateResponse: {
+            data: {
+                /** @enum {boolean} */
+                enabled: true;
             };
         };
         CallSupportRequestResponse: {
@@ -1225,6 +1394,204 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
+        };
+    };
+    updateSupportRequestAcknowledgement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSupportRequestAcknowledgementRequest"];
+            };
+        };
+        responses: {
+            /** @description 更新成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportRequestResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    cancelSupportRequest: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CancelSupportRequestRequest"];
+            };
+        };
+        responses: {
+            /** @description 取消成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportRequestResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    recordPresenceHeartbeat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmptyRequest"];
+            };
+        };
+        responses: {
+            /** @description 記録成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserPresenceResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getCompanionStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 取得成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanionStatusResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getVapidPublicKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 取得成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VapidPublicKeyResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    upsertPushSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PushSubscriptionRequest"];
+            };
+        };
+        responses: {
+            /** @description 登録成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PushSubscriptionStateResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    deletePushSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeletePushSubscriptionRequest"];
+            };
+        };
+        responses: {
+            /** @description 解除成功 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
         };
     };
     callSupportRequest: {

@@ -785,7 +785,7 @@ func guideSupportRequestFromDB(row *dbgen.SupportRequest) (domain.SupportRequest
 		}
 		guideContext = &value
 	}
-	return domain.SupportRequest{ID: domain.ID(row.ID), UserID: domain.ID(row.UserID), FamilyID: domain.ID(row.FamilyID), InitialScreenshotArtifactID: domain.ID(row.InitialScreenshotArtifactID), Comment: row.Comment, Status: domain.SupportRequestStatus(row.Status), SupportSessionID: stringPointerToID(row.SupportSessionID), GuideContext: guideContext, CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time, Revision: row.Revision}, nil
+	return domain.SupportRequest{ID: domain.ID(row.ID), UserID: domain.ID(row.UserID), FamilyID: domain.ID(row.FamilyID), InitialScreenshotArtifactID: domain.ID(row.InitialScreenshotArtifactID), Comment: row.Comment, Status: domain.SupportRequestStatus(row.Status), SupportSessionID: stringPointerToID(row.SupportSessionID), GuideContext: guideContext, AcknowledgedAt: optionalTime(row.AcknowledgedAt), AcknowledgementKind: stringPointerToAcknowledgementKind(row.AcknowledgementKind), EstimatedSupportAt: optionalTime(row.EstimatedSupportAt), CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time, Revision: row.Revision}, nil
 }
 
 func supportSessionFromDB(row *dbgen.SupportSession) (domain.SupportSession, error) {

@@ -37,6 +37,43 @@ func (q *Queries) ArtifactHasReferences(ctx context.Context, initialScreenshotAr
 	return has_references, err
 }
 
+const cancelPendingSupportRequest = `-- name: CancelPendingSupportRequest :one
+UPDATE support_requests
+SET
+    status = 'CANCELLED',
+    updated_at = $1,
+    revision = revision + 1
+WHERE id = $2
+RETURNING id, user_id, family_id, initial_screenshot_artifact_id, comment, status, support_session_id, guide_context, created_at, updated_at, revision, acknowledged_at, acknowledgement_kind, estimated_support_at
+`
+
+type CancelPendingSupportRequestParams struct {
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	ID        string             `json:"id"`
+}
+
+func (q *Queries) CancelPendingSupportRequest(ctx context.Context, arg CancelPendingSupportRequestParams) (*SupportRequest, error) {
+	row := q.db.QueryRow(ctx, cancelPendingSupportRequest, arg.UpdatedAt, arg.ID)
+	var i SupportRequest
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.FamilyID,
+		&i.InitialScreenshotArtifactID,
+		&i.Comment,
+		&i.Status,
+		&i.SupportSessionID,
+		&i.GuideContext,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Revision,
+		&i.AcknowledgedAt,
+		&i.AcknowledgementKind,
+		&i.EstimatedSupportAt,
+	)
+	return &i, err
+}
+
 const completeArtifactSupportIdempotencyRecord = `-- name: CompleteArtifactSupportIdempotencyRecord :one
 UPDATE idempotency_records
 SET
@@ -119,7 +156,7 @@ INSERT INTO support_requests (
     $7,
     1
 )
-RETURNING id, user_id, family_id, initial_screenshot_artifact_id, comment, status, support_session_id, guide_context, created_at, updated_at, revision
+RETURNING id, user_id, family_id, initial_screenshot_artifact_id, comment, status, support_session_id, guide_context, created_at, updated_at, revision, acknowledged_at, acknowledgement_kind, estimated_support_at
 `
 
 type CreateRegularSupportRequestParams struct {
@@ -155,6 +192,9 @@ func (q *Queries) CreateRegularSupportRequest(ctx context.Context, arg CreateReg
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Revision,
+		&i.AcknowledgedAt,
+		&i.AcknowledgementKind,
+		&i.EstimatedSupportAt,
 	)
 	return &i, err
 }
@@ -315,7 +355,7 @@ func (q *Queries) GetAvailableArtifactByID(ctx context.Context, id string) (*Art
 }
 
 const getSupportRequestByID = `-- name: GetSupportRequestByID :one
-SELECT id, user_id, family_id, initial_screenshot_artifact_id, comment, status, support_session_id, guide_context, created_at, updated_at, revision
+SELECT id, user_id, family_id, initial_screenshot_artifact_id, comment, status, support_session_id, guide_context, created_at, updated_at, revision, acknowledged_at, acknowledgement_kind, estimated_support_at
 FROM support_requests
 WHERE id = $1
 `
@@ -335,6 +375,9 @@ func (q *Queries) GetSupportRequestByID(ctx context.Context, id string) (*Suppor
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Revision,
+		&i.AcknowledgedAt,
+		&i.AcknowledgementKind,
+		&i.EstimatedSupportAt,
 	)
 	return &i, err
 }
@@ -556,7 +599,7 @@ func (q *Queries) ListStaleUnreferencedRequestArtifactsForUpdate(ctx context.Con
 }
 
 const listSupportRequestsForPair = `-- name: ListSupportRequestsForPair :many
-SELECT id, user_id, family_id, initial_screenshot_artifact_id, comment, status, support_session_id, guide_context, created_at, updated_at, revision
+SELECT id, user_id, family_id, initial_screenshot_artifact_id, comment, status, support_session_id, guide_context, created_at, updated_at, revision, acknowledged_at, acknowledgement_kind, estimated_support_at
 FROM support_requests
 WHERE user_id = $1
   AND family_id = $2
@@ -595,6 +638,9 @@ func (q *Queries) ListSupportRequestsForPair(ctx context.Context, arg ListSuppor
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Revision,
+			&i.AcknowledgedAt,
+			&i.AcknowledgementKind,
+			&i.EstimatedSupportAt,
 		); err != nil {
 			return nil, err
 		}
@@ -604,6 +650,35 @@ func (q *Queries) ListSupportRequestsForPair(ctx context.Context, arg ListSuppor
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockArtifactSupportRequestByID = `-- name: LockArtifactSupportRequestByID :one
+SELECT id, user_id, family_id, initial_screenshot_artifact_id, comment, status, support_session_id, guide_context, created_at, updated_at, revision, acknowledged_at, acknowledgement_kind, estimated_support_at
+FROM support_requests
+WHERE id = $1
+FOR UPDATE
+`
+
+func (q *Queries) LockArtifactSupportRequestByID(ctx context.Context, id string) (*SupportRequest, error) {
+	row := q.db.QueryRow(ctx, lockArtifactSupportRequestByID, id)
+	var i SupportRequest
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.FamilyID,
+		&i.InitialScreenshotArtifactID,
+		&i.Comment,
+		&i.Status,
+		&i.SupportSessionID,
+		&i.GuideContext,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Revision,
+		&i.AcknowledgedAt,
+		&i.AcknowledgementKind,
+		&i.EstimatedSupportAt,
+	)
+	return &i, err
 }
 
 const lockAvailableArtifactByID = `-- name: LockAvailableArtifactByID :one
@@ -630,6 +705,54 @@ func (q *Queries) LockAvailableArtifactByID(ctx context.Context, id string) (*Ar
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Revision,
+	)
+	return &i, err
+}
+
+const updateSupportRequestAcknowledgement = `-- name: UpdateSupportRequestAcknowledgement :one
+UPDATE support_requests
+SET
+    acknowledged_at = $1,
+    acknowledgement_kind = $2,
+    estimated_support_at = $3,
+    updated_at = $4,
+    revision = revision + 1
+WHERE id = $5
+RETURNING id, user_id, family_id, initial_screenshot_artifact_id, comment, status, support_session_id, guide_context, created_at, updated_at, revision, acknowledged_at, acknowledgement_kind, estimated_support_at
+`
+
+type UpdateSupportRequestAcknowledgementParams struct {
+	AcknowledgedAt      pgtype.Timestamptz `json:"acknowledged_at"`
+	AcknowledgementKind *string            `json:"acknowledgement_kind"`
+	EstimatedSupportAt  pgtype.Timestamptz `json:"estimated_support_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	ID                  string             `json:"id"`
+}
+
+func (q *Queries) UpdateSupportRequestAcknowledgement(ctx context.Context, arg UpdateSupportRequestAcknowledgementParams) (*SupportRequest, error) {
+	row := q.db.QueryRow(ctx, updateSupportRequestAcknowledgement,
+		arg.AcknowledgedAt,
+		arg.AcknowledgementKind,
+		arg.EstimatedSupportAt,
+		arg.UpdatedAt,
+		arg.ID,
+	)
+	var i SupportRequest
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.FamilyID,
+		&i.InitialScreenshotArtifactID,
+		&i.Comment,
+		&i.Status,
+		&i.SupportSessionID,
+		&i.GuideContext,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Revision,
+		&i.AcknowledgedAt,
+		&i.AcknowledgementKind,
+		&i.EstimatedSupportAt,
 	)
 	return &i, err
 }

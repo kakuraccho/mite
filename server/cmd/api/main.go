@@ -19,6 +19,7 @@ import (
 	"github.com/kakuraccho/mite/server/internal/livekit"
 	"github.com/kakuraccho/mite/server/internal/repository"
 	"github.com/kakuraccho/mite/server/internal/service"
+	"github.com/kakuraccho/mite/server/internal/webpush"
 	"github.com/kakuraccho/mite/server/internal/websocket"
 	"github.com/kakuraccho/mite/server/internal/worker"
 )
@@ -67,32 +68,42 @@ func newServerRuntime(
 
 	authenticator := handler.NewAuthenticator(cfg.DemoUserToken, cfg.DemoFamilyToken)
 	eventHub := websocket.NewHub(authenticator, cfg.ClientOrigins)
+	companionRepository := repository.NewCompanionRepository(pool)
+	pushSender, err := webpush.NewSender(companionRepository, cfg.WebPushVAPIDPublicKey, cfg.WebPushVAPIDPrivateKey, cfg.WebPushSubject, logger, nil)
+	if err != nil {
+		return serverRuntime{}, fmt.Errorf("configure Web Push: %w", err)
+	}
+	companionService := service.NewCompanionService(companionRepository, pushSender, logger, service.CompanionServiceOptions{
+		OnlineAfter: cfg.PresenceOnlineAfter, OfflineAfter: cfg.PresenceOfflineAfter, ReconnectAfter: cfg.PresenceReconnectAfter,
+	})
+	publisher := service.CompanionEventPublisher{Events: eventHub, Companion: companionService}
 	artifactService := service.NewArtifactSupportService(
 		repository.NewArtifactSupportRepository(pool),
 		storage,
-		eventHub,
+		publisher,
 		logger,
 		service.ArtifactSupportServiceOptions{},
 	)
 	supportSessionService := service.NewSupportSessionService(
 		repository.NewPostgresSupportSessionStore(pool),
-		eventHub,
+		publisher,
 		liveKitIssuer,
 		logger,
 	)
 	guideRepository := repository.NewGuideRepository(pool)
-	guideService := service.NewGuideService(guideRepository, storage, eventHub, logger)
+	guideService := service.NewGuideService(guideRepository, storage, publisher, logger)
 	api := handler.API{
 		ArtifactSupportAPI: handler.NewArtifactSupportHandler(artifactService),
 		SupportSessionAPI:  handler.NewSupportSessionHandler(supportSessionService),
 		GuideAPI:           handler.NewGuideHandler(guideService),
+		CompanionAPI:       handler.NewCompanionHandler(companionService, artifactService),
 	}
 
 	return serverRuntime{
 		handler: handler.NewRouterWithEvents(cfg, logger, api, eventHub.Handler()),
 		workers: []func(context.Context) error{
 			worker.NewArtifactDeletionWorker(artifactService, logger).Run,
-			service.NewGuideWorker(guideRepository, storage, guideGenerator, eventHub, logger).Run,
+			service.NewGuideWorker(guideRepository, storage, guideGenerator, publisher, logger).Run,
 		},
 	}, nil
 }

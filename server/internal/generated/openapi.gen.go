@@ -364,8 +364,66 @@ func (e GuideRunStatus) Valid() bool {
 	}
 }
 
+// Defines values for PresenceStatus.
+const (
+	CONNECTING PresenceStatus = "CONNECTING"
+	OFFLINE    PresenceStatus = "OFFLINE"
+	ONLINE     PresenceStatus = "ONLINE"
+)
+
+// Valid indicates whether the value is a known member of the PresenceStatus enum.
+func (e PresenceStatus) Valid() bool {
+	switch e {
+	case CONNECTING:
+		return true
+	case OFFLINE:
+		return true
+	case ONLINE:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PushSubscriptionStateResponseDataEnabled.
+const (
+	True PushSubscriptionStateResponseDataEnabled = true
+)
+
+// Valid indicates whether the value is a known member of the PushSubscriptionStateResponseDataEnabled enum.
+func (e PushSubscriptionStateResponseDataEnabled) Valid() bool {
+	switch e {
+	case True:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SupportAcknowledgementKind.
+const (
+	NOW       SupportAcknowledgementKind = "NOW"
+	SCHEDULED SupportAcknowledgementKind = "SCHEDULED"
+	UNKNOWN   SupportAcknowledgementKind = "UNKNOWN"
+)
+
+// Valid indicates whether the value is a known member of the SupportAcknowledgementKind enum.
+func (e SupportAcknowledgementKind) Valid() bool {
+	switch e {
+	case NOW:
+		return true
+	case SCHEDULED:
+		return true
+	case UNKNOWN:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SupportRequestStatus.
 const (
+	CANCELLED SupportRequestStatus = "CANCELLED"
 	INSUPPORT SupportRequestStatus = "IN_SUPPORT"
 	PENDING   SupportRequestStatus = "PENDING"
 	RESOLVED  SupportRequestStatus = "RESOLVED"
@@ -374,6 +432,8 @@ const (
 // Valid indicates whether the value is a known member of the SupportRequestStatus enum.
 func (e SupportRequestStatus) Valid() bool {
 	switch e {
+	case CANCELLED:
+		return true
 	case INSUPPORT:
 		return true
 	case PENDING:
@@ -512,6 +572,19 @@ type CallSupportRequestResponse struct {
 	} `json:"data"`
 }
 
+// CancelSupportRequestRequest defines model for CancelSupportRequestRequest.
+type CancelSupportRequestRequest struct {
+	ExpectedRevision int64 `json:"expectedRevision"`
+}
+
+// CompanionStatusResponse defines model for CompanionStatusResponse.
+type CompanionStatusResponse struct {
+	Data struct {
+		Presence UserPresence `json:"presence"`
+		User     User         `json:"user"`
+	} `json:"data"`
+}
+
 // CompleteGuideMaterialBatchRequest defines model for CompleteGuideMaterialBatchRequest.
 type CompleteGuideMaterialBatchRequest struct {
 	ExpectedBatchRevision int64 `json:"expectedBatchRevision"`
@@ -588,6 +661,11 @@ type CreateSupportRequestFromGuideRunRequest struct {
 type CreateSupportRequestRequest struct {
 	Comment                     *string `json:"comment,omitempty"`
 	InitialScreenshotArtifactId string  `json:"initialScreenshotArtifactId"`
+}
+
+// DeletePushSubscriptionRequest defines model for DeletePushSubscriptionRequest.
+type DeletePushSubscriptionRequest struct {
+	Endpoint string `json:"endpoint"`
 }
 
 // EmptyRequest defines model for EmptyRequest.
@@ -876,6 +954,26 @@ type LiveKitTokenResponse struct {
 	} `json:"data"`
 }
 
+// PresenceStatus defines model for PresenceStatus.
+type PresenceStatus string
+
+// PushSubscriptionRequest defines model for PushSubscriptionRequest.
+type PushSubscriptionRequest struct {
+	Auth     string `json:"auth"`
+	Endpoint string `json:"endpoint"`
+	P256dh   string `json:"p256dh"`
+}
+
+// PushSubscriptionStateResponse defines model for PushSubscriptionStateResponse.
+type PushSubscriptionStateResponse struct {
+	Data struct {
+		Enabled PushSubscriptionStateResponseDataEnabled `json:"enabled"`
+	} `json:"data"`
+}
+
+// PushSubscriptionStateResponseDataEnabled defines model for PushSubscriptionStateResponse.Data.Enabled.
+type PushSubscriptionStateResponseDataEnabled bool
+
 // ResolveSupportSessionRequest defines model for ResolveSupportSessionRequest.
 type ResolveSupportSessionRequest struct {
 	ExpectedSessionRevision int64         `json:"expectedSessionRevision"`
@@ -892,19 +990,25 @@ type SaveGuideDraftRequest struct {
 	ExpectedRevision int64 `json:"expectedRevision"`
 }
 
+// SupportAcknowledgementKind defines model for SupportAcknowledgementKind.
+type SupportAcknowledgementKind string
+
 // SupportRequest defines model for SupportRequest.
 type SupportRequest struct {
-	Comment                     string               `json:"comment"`
-	CreatedAt                   time.Time            `json:"createdAt"`
-	FamilyId                    string               `json:"familyId"`
-	GuideContext                *GuideContext        `json:"guideContext"`
-	Id                          string               `json:"id"`
-	InitialScreenshotArtifactId string               `json:"initialScreenshotArtifactId"`
-	Revision                    int64                `json:"revision"`
-	Status                      SupportRequestStatus `json:"status"`
-	SupportSessionId            *string              `json:"supportSessionId"`
-	UpdatedAt                   time.Time            `json:"updatedAt"`
-	UserId                      string               `json:"userId"`
+	AcknowledgedAt              *time.Time                  `json:"acknowledgedAt"`
+	AcknowledgementKind         *SupportAcknowledgementKind `json:"acknowledgementKind"`
+	Comment                     string                      `json:"comment"`
+	CreatedAt                   time.Time                   `json:"createdAt"`
+	EstimatedSupportAt          *time.Time                  `json:"estimatedSupportAt"`
+	FamilyId                    string                      `json:"familyId"`
+	GuideContext                *GuideContext               `json:"guideContext"`
+	Id                          string                      `json:"id"`
+	InitialScreenshotArtifactId string                      `json:"initialScreenshotArtifactId"`
+	Revision                    int64                       `json:"revision"`
+	Status                      SupportRequestStatus        `json:"status"`
+	SupportSessionId            *string                     `json:"supportSessionId"`
+	UpdatedAt                   time.Time                   `json:"updatedAt"`
+	UserId                      string                      `json:"userId"`
 }
 
 // SupportRequestAndSessionResponse defines model for SupportRequestAndSessionResponse.
@@ -981,6 +1085,13 @@ type UpdateGuideRunRequest struct {
 	ExpectedRevision int64          `json:"expectedRevision"`
 }
 
+// UpdateSupportRequestAcknowledgementRequest defines model for UpdateSupportRequestAcknowledgementRequest.
+type UpdateSupportRequestAcknowledgementRequest struct {
+	AcknowledgementKind SupportAcknowledgementKind `json:"acknowledgementKind"`
+	EstimatedSupportAt  *time.Time                 `json:"estimatedSupportAt"`
+	ExpectedRevision    int64                      `json:"expectedRevision"`
+}
+
 // User defines model for User.
 type User struct {
 	DisplayName string   `json:"displayName"`
@@ -988,8 +1099,30 @@ type User struct {
 	Role        UserRole `json:"role"`
 }
 
+// UserPresence defines model for UserPresence.
+type UserPresence struct {
+	ConnectedSince *time.Time     `json:"connectedSince"`
+	LastSeenAt     *time.Time     `json:"lastSeenAt"`
+	Revision       int64          `json:"revision"`
+	Status         PresenceStatus `json:"status"`
+	UpdatedAt      *time.Time     `json:"updatedAt"`
+	UserId         string         `json:"userId"`
+}
+
+// UserPresenceResponse defines model for UserPresenceResponse.
+type UserPresenceResponse struct {
+	Data UserPresence `json:"data"`
+}
+
 // UserRole defines model for UserRole.
 type UserRole string
+
+// VapidPublicKeyResponse defines model for VapidPublicKeyResponse.
+type VapidPublicKeyResponse struct {
+	Data struct {
+		PublicKey string `json:"publicKey"`
+	} `json:"data"`
+}
 
 // IdempotencyKey defines model for IdempotencyKey.
 type IdempotencyKey = string
@@ -1089,6 +1222,12 @@ type CallSupportRequestParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// CancelSupportRequestParams defines parameters for CancelSupportRequest.
+type CancelSupportRequestParams struct {
+	// IdempotencyKey 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // AcceptSupportSessionParams defines parameters for AcceptSupportSession.
 type AcceptSupportSessionParams struct {
 	// IdempotencyKey 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。
@@ -1157,11 +1296,26 @@ type CompleteGuideRunJSONRequestBody = CompleteGuideRunRequest
 // CreateSupportRequestFromGuideRunJSONRequestBody defines body for CreateSupportRequestFromGuideRun for application/json ContentType.
 type CreateSupportRequestFromGuideRunJSONRequestBody = CreateSupportRequestFromGuideRunRequest
 
+// RecordPresenceHeartbeatJSONRequestBody defines body for RecordPresenceHeartbeat for application/json ContentType.
+type RecordPresenceHeartbeatJSONRequestBody = EmptyRequest
+
+// DeletePushSubscriptionJSONRequestBody defines body for DeletePushSubscription for application/json ContentType.
+type DeletePushSubscriptionJSONRequestBody = DeletePushSubscriptionRequest
+
+// UpsertPushSubscriptionJSONRequestBody defines body for UpsertPushSubscription for application/json ContentType.
+type UpsertPushSubscriptionJSONRequestBody = PushSubscriptionRequest
+
 // CreateSupportRequestJSONRequestBody defines body for CreateSupportRequest for application/json ContentType.
 type CreateSupportRequestJSONRequestBody = CreateSupportRequestRequest
 
+// UpdateSupportRequestAcknowledgementJSONRequestBody defines body for UpdateSupportRequestAcknowledgement for application/json ContentType.
+type UpdateSupportRequestAcknowledgementJSONRequestBody = UpdateSupportRequestAcknowledgementRequest
+
 // CallSupportRequestJSONRequestBody defines body for CallSupportRequest for application/json ContentType.
 type CallSupportRequestJSONRequestBody = CallSupportRequestRequest
+
+// CancelSupportRequestJSONRequestBody defines body for CancelSupportRequest for application/json ContentType.
+type CancelSupportRequestJSONRequestBody = CancelSupportRequestRequest
 
 // AcceptSupportSessionJSONRequestBody defines body for AcceptSupportSession for application/json ContentType.
 type AcceptSupportSessionJSONRequestBody = AcceptSupportSessionRequest
@@ -1194,6 +1348,9 @@ type ServerInterface interface {
 	// GetArtifactContent 権限確認後に画像を返す
 	// (GET /v1/artifacts/{id}/content)
 	GetArtifactContent(w http.ResponseWriter, r *http.Request, id ResourceId)
+	// GetCompanionStatus 家族向けに利用者PCの接続状況を返す
+	// (GET /v1/companion/status)
+	GetCompanionStatus(w http.ResponseWriter, r *http.Request)
 	// GetGuideDraft ガイド下書きを取得する
 	// (GET /v1/guide-drafts/{id})
 	GetGuideDraft(w http.ResponseWriter, r *http.Request, id ResourceId)
@@ -1241,6 +1398,18 @@ type ServerInterface interface {
 	// GetGuide 現在版のガイドを取得する
 	// (GET /v1/guides/{id})
 	GetGuide(w http.ResponseWriter, r *http.Request, id ResourceId)
+	// RecordPresenceHeartbeat 利用者PCの接続heartbeatを記録する
+	// (POST /v1/presence/heartbeat)
+	RecordPresenceHeartbeat(w http.ResponseWriter, r *http.Request)
+	// DeletePushSubscription 家族端末のPush購読を解除する
+	// (DELETE /v1/push-subscriptions)
+	DeletePushSubscription(w http.ResponseWriter, r *http.Request)
+	// UpsertPushSubscription 家族端末のPush購読を登録または更新する
+	// (PUT /v1/push-subscriptions)
+	UpsertPushSubscription(w http.ResponseWriter, r *http.Request)
+	// GetVapidPublicKey Push購読用のVAPID公開鍵を返す
+	// (GET /v1/push-subscriptions/vapid-public-key)
+	GetVapidPublicKey(w http.ResponseWriter, r *http.Request)
 	// ListSupportRequests 自分のペアの支援依頼を新しい順に最大20件返す
 	// (GET /v1/support-requests)
 	ListSupportRequests(w http.ResponseWriter, r *http.Request, params ListSupportRequestsParams)
@@ -1250,9 +1419,15 @@ type ServerInterface interface {
 	// GetSupportRequest 支援依頼の詳細を取得する
 	// (GET /v1/support-requests/{id})
 	GetSupportRequest(w http.ResponseWriter, r *http.Request, id ResourceId)
+	// UpdateSupportRequestAcknowledgement 家族が依頼を確認し対応目安を返す
+	// (PATCH /v1/support-requests/{id}/acknowledgement)
+	UpdateSupportRequestAcknowledgement(w http.ResponseWriter, r *http.Request, id ResourceId)
 	// CallSupportRequest RINGINGの支援セッションを作る
 	// (POST /v1/support-requests/{id}/call)
 	CallSupportRequest(w http.ResponseWriter, r *http.Request, id ResourceId, params CallSupportRequestParams)
+	// CancelSupportRequest 利用者が未開始の支援依頼を取り消す
+	// (POST /v1/support-requests/{id}/cancel)
+	CancelSupportRequest(w http.ResponseWriter, r *http.Request, id ResourceId, params CancelSupportRequestParams)
 	// GetSupportSession 支援セッションを取得する
 	// (GET /v1/support-sessions/{id})
 	GetSupportSession(w http.ResponseWriter, r *http.Request, id ResourceId)
@@ -1297,6 +1472,12 @@ func (_ Unimplemented) CreateArtifact(w http.ResponseWriter, r *http.Request, pa
 // GetArtifactContent 権限確認後に画像を返す
 // (GET /v1/artifacts/{id}/content)
 func (_ Unimplemented) GetArtifactContent(w http.ResponseWriter, r *http.Request, id ResourceId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetCompanionStatus 家族向けに利用者PCの接続状況を返す
+// (GET /v1/companion/status)
+func (_ Unimplemented) GetCompanionStatus(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1392,6 +1573,30 @@ func (_ Unimplemented) GetGuide(w http.ResponseWriter, r *http.Request, id Resou
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// RecordPresenceHeartbeat 利用者PCの接続heartbeatを記録する
+// (POST /v1/presence/heartbeat)
+func (_ Unimplemented) RecordPresenceHeartbeat(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// DeletePushSubscription 家族端末のPush購読を解除する
+// (DELETE /v1/push-subscriptions)
+func (_ Unimplemented) DeletePushSubscription(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// UpsertPushSubscription 家族端末のPush購読を登録または更新する
+// (PUT /v1/push-subscriptions)
+func (_ Unimplemented) UpsertPushSubscription(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetVapidPublicKey Push購読用のVAPID公開鍵を返す
+// (GET /v1/push-subscriptions/vapid-public-key)
+func (_ Unimplemented) GetVapidPublicKey(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // ListSupportRequests 自分のペアの支援依頼を新しい順に最大20件返す
 // (GET /v1/support-requests)
 func (_ Unimplemented) ListSupportRequests(w http.ResponseWriter, r *http.Request, params ListSupportRequestsParams) {
@@ -1410,9 +1615,21 @@ func (_ Unimplemented) GetSupportRequest(w http.ResponseWriter, r *http.Request,
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// UpdateSupportRequestAcknowledgement 家族が依頼を確認し対応目安を返す
+// (PATCH /v1/support-requests/{id}/acknowledgement)
+func (_ Unimplemented) UpdateSupportRequestAcknowledgement(w http.ResponseWriter, r *http.Request, id ResourceId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // CallSupportRequest RINGINGの支援セッションを作る
 // (POST /v1/support-requests/{id}/call)
 func (_ Unimplemented) CallSupportRequest(w http.ResponseWriter, r *http.Request, id ResourceId, params CallSupportRequestParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// CancelSupportRequest 利用者が未開始の支援依頼を取り消す
+// (POST /v1/support-requests/{id}/cancel)
+func (_ Unimplemented) CancelSupportRequest(w http.ResponseWriter, r *http.Request, id ResourceId, params CancelSupportRequestParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1543,6 +1760,20 @@ func (siw *ServerInterfaceWrapper) GetArtifactContent(w http.ResponseWriter, r *
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetArtifactContent(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetCompanionStatus operation middleware
+func (siw *ServerInterfaceWrapper) GetCompanionStatus(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCompanionStatus(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2117,6 +2348,62 @@ func (siw *ServerInterfaceWrapper) GetGuide(w http.ResponseWriter, r *http.Reque
 	handler.ServeHTTP(w, r)
 }
 
+// RecordPresenceHeartbeat operation middleware
+func (siw *ServerInterfaceWrapper) RecordPresenceHeartbeat(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RecordPresenceHeartbeat(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeletePushSubscription operation middleware
+func (siw *ServerInterfaceWrapper) DeletePushSubscription(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeletePushSubscription(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpsertPushSubscription operation middleware
+func (siw *ServerInterfaceWrapper) UpsertPushSubscription(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpsertPushSubscription(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetVapidPublicKey operation middleware
+func (siw *ServerInterfaceWrapper) GetVapidPublicKey(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetVapidPublicKey(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListSupportRequests operation middleware
 func (siw *ServerInterfaceWrapper) ListSupportRequests(w http.ResponseWriter, r *http.Request) {
 
@@ -2221,6 +2508,32 @@ func (siw *ServerInterfaceWrapper) GetSupportRequest(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
+// UpdateSupportRequestAcknowledgement operation middleware
+func (siw *ServerInterfaceWrapper) UpdateSupportRequestAcknowledgement(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ResourceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateSupportRequestAcknowledgement(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // CallSupportRequest operation middleware
 func (siw *ServerInterfaceWrapper) CallSupportRequest(w http.ResponseWriter, r *http.Request) {
 
@@ -2266,6 +2579,60 @@ func (siw *ServerInterfaceWrapper) CallSupportRequest(w http.ResponseWriter, r *
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CallSupportRequest(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CancelSupportRequest operation middleware
+func (siw *ServerInterfaceWrapper) CancelSupportRequest(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ResourceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CancelSupportRequestParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CancelSupportRequest(w, r, id, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2806,6 +3173,27 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/v1/support-requests/{id}", wrapper.GetSupportRequest)
 	})
 	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/v1/support-requests/{id}/acknowledgement", wrapper.UpdateSupportRequestAcknowledgement)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/v1/support-requests/{id}/cancel", wrapper.CancelSupportRequest)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/v1/presence/heartbeat", wrapper.RecordPresenceHeartbeat)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/v1/companion/status", wrapper.GetCompanionStatus)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/v1/push-subscriptions/vapid-public-key", wrapper.GetVapidPublicKey)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/v1/push-subscriptions", wrapper.DeletePushSubscription)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/v1/push-subscriptions", wrapper.UpsertPushSubscription)
+	})
+	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/v1/support-requests/{id}/call", wrapper.CallSupportRequest)
 	})
 	r.Group(func(r chi.Router) {
@@ -3133,6 +3521,69 @@ func (response GetArtifactContent503JSONResponse) VisitGetArtifactContentRespons
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCompanionStatusRequestObject struct {
+}
+
+type GetCompanionStatusResponseObject interface {
+	VisitGetCompanionStatusResponse(w http.ResponseWriter) error
+}
+
+type GetCompanionStatus200JSONResponse CompanionStatusResponse
+
+func (response GetCompanionStatus200JSONResponse) VisitGetCompanionStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCompanionStatus401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response GetCompanionStatus401JSONResponse) VisitGetCompanionStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCompanionStatus403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response GetCompanionStatus403JSONResponse) VisitGetCompanionStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCompanionStatus500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response GetCompanionStatus500JSONResponse) VisitGetCompanionStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -4628,6 +5079,339 @@ func (response GetGuide500JSONResponse) VisitGetGuideResponse(w http.ResponseWri
 	return err
 }
 
+type RecordPresenceHeartbeatRequestObject struct {
+	Body *RecordPresenceHeartbeatJSONRequestBody
+}
+
+type RecordPresenceHeartbeatResponseObject interface {
+	VisitRecordPresenceHeartbeatResponse(w http.ResponseWriter) error
+}
+
+type RecordPresenceHeartbeat200JSONResponse UserPresenceResponse
+
+func (response RecordPresenceHeartbeat200JSONResponse) VisitRecordPresenceHeartbeatResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RecordPresenceHeartbeat400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response RecordPresenceHeartbeat400JSONResponse) VisitRecordPresenceHeartbeatResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RecordPresenceHeartbeat401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response RecordPresenceHeartbeat401JSONResponse) VisitRecordPresenceHeartbeatResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RecordPresenceHeartbeat403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response RecordPresenceHeartbeat403JSONResponse) VisitRecordPresenceHeartbeatResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RecordPresenceHeartbeat500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response RecordPresenceHeartbeat500JSONResponse) VisitRecordPresenceHeartbeatResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeletePushSubscriptionRequestObject struct {
+	Body *DeletePushSubscriptionJSONRequestBody
+}
+
+type DeletePushSubscriptionResponseObject interface {
+	VisitDeletePushSubscriptionResponse(w http.ResponseWriter) error
+}
+
+type DeletePushSubscription204Response struct {
+}
+
+func (response DeletePushSubscription204Response) VisitDeletePushSubscriptionResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeletePushSubscription400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response DeletePushSubscription400JSONResponse) VisitDeletePushSubscriptionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeletePushSubscription401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response DeletePushSubscription401JSONResponse) VisitDeletePushSubscriptionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeletePushSubscription403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response DeletePushSubscription403JSONResponse) VisitDeletePushSubscriptionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeletePushSubscription500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response DeletePushSubscription500JSONResponse) VisitDeletePushSubscriptionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeletePushSubscription503JSONResponse struct{ ServiceUnavailableJSONResponse }
+
+func (response DeletePushSubscription503JSONResponse) VisitDeletePushSubscriptionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpsertPushSubscriptionRequestObject struct {
+	Body *UpsertPushSubscriptionJSONRequestBody
+}
+
+type UpsertPushSubscriptionResponseObject interface {
+	VisitUpsertPushSubscriptionResponse(w http.ResponseWriter) error
+}
+
+type UpsertPushSubscription200JSONResponse PushSubscriptionStateResponse
+
+func (response UpsertPushSubscription200JSONResponse) VisitUpsertPushSubscriptionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpsertPushSubscription400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response UpsertPushSubscription400JSONResponse) VisitUpsertPushSubscriptionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpsertPushSubscription401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response UpsertPushSubscription401JSONResponse) VisitUpsertPushSubscriptionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpsertPushSubscription403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response UpsertPushSubscription403JSONResponse) VisitUpsertPushSubscriptionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpsertPushSubscription500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response UpsertPushSubscription500JSONResponse) VisitUpsertPushSubscriptionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpsertPushSubscription503JSONResponse struct{ ServiceUnavailableJSONResponse }
+
+func (response UpsertPushSubscription503JSONResponse) VisitUpsertPushSubscriptionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetVapidPublicKeyRequestObject struct {
+}
+
+type GetVapidPublicKeyResponseObject interface {
+	VisitGetVapidPublicKeyResponse(w http.ResponseWriter) error
+}
+
+type GetVapidPublicKey200JSONResponse VapidPublicKeyResponse
+
+func (response GetVapidPublicKey200JSONResponse) VisitGetVapidPublicKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetVapidPublicKey401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response GetVapidPublicKey401JSONResponse) VisitGetVapidPublicKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetVapidPublicKey403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response GetVapidPublicKey403JSONResponse) VisitGetVapidPublicKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetVapidPublicKey500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response GetVapidPublicKey500JSONResponse) VisitGetVapidPublicKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetVapidPublicKey503JSONResponse struct{ ServiceUnavailableJSONResponse }
+
+func (response GetVapidPublicKey503JSONResponse) VisitGetVapidPublicKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListSupportRequestsRequestObject struct {
 	Params ListSupportRequestsParams
 }
@@ -4880,6 +5664,116 @@ func (response GetSupportRequest500JSONResponse) VisitGetSupportRequestResponse(
 	return err
 }
 
+type UpdateSupportRequestAcknowledgementRequestObject struct {
+	Id   ResourceId `json:"id"`
+	Body *UpdateSupportRequestAcknowledgementJSONRequestBody
+}
+
+type UpdateSupportRequestAcknowledgementResponseObject interface {
+	VisitUpdateSupportRequestAcknowledgementResponse(w http.ResponseWriter) error
+}
+
+type UpdateSupportRequestAcknowledgement200JSONResponse SupportRequestResponse
+
+func (response UpdateSupportRequestAcknowledgement200JSONResponse) VisitUpdateSupportRequestAcknowledgementResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSupportRequestAcknowledgement400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response UpdateSupportRequestAcknowledgement400JSONResponse) VisitUpdateSupportRequestAcknowledgementResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSupportRequestAcknowledgement401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response UpdateSupportRequestAcknowledgement401JSONResponse) VisitUpdateSupportRequestAcknowledgementResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSupportRequestAcknowledgement403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response UpdateSupportRequestAcknowledgement403JSONResponse) VisitUpdateSupportRequestAcknowledgementResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSupportRequestAcknowledgement404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response UpdateSupportRequestAcknowledgement404JSONResponse) VisitUpdateSupportRequestAcknowledgementResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSupportRequestAcknowledgement409JSONResponse struct{ ConflictJSONResponse }
+
+func (response UpdateSupportRequestAcknowledgement409JSONResponse) VisitUpdateSupportRequestAcknowledgementResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSupportRequestAcknowledgement500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response UpdateSupportRequestAcknowledgement500JSONResponse) VisitUpdateSupportRequestAcknowledgementResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type CallSupportRequestRequestObject struct {
 	Id     ResourceId `json:"id"`
 	Params CallSupportRequestParams
@@ -4980,6 +5874,117 @@ func (response CallSupportRequest409JSONResponse) VisitCallSupportRequestRespons
 type CallSupportRequest500JSONResponse struct{ InternalErrorJSONResponse }
 
 func (response CallSupportRequest500JSONResponse) VisitCallSupportRequestResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelSupportRequestRequestObject struct {
+	Id     ResourceId `json:"id"`
+	Params CancelSupportRequestParams
+	Body   *CancelSupportRequestJSONRequestBody
+}
+
+type CancelSupportRequestResponseObject interface {
+	VisitCancelSupportRequestResponse(w http.ResponseWriter) error
+}
+
+type CancelSupportRequest200JSONResponse SupportRequestResponse
+
+func (response CancelSupportRequest200JSONResponse) VisitCancelSupportRequestResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelSupportRequest400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response CancelSupportRequest400JSONResponse) VisitCancelSupportRequestResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelSupportRequest401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response CancelSupportRequest401JSONResponse) VisitCancelSupportRequestResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelSupportRequest403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CancelSupportRequest403JSONResponse) VisitCancelSupportRequestResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelSupportRequest404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response CancelSupportRequest404JSONResponse) VisitCancelSupportRequestResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelSupportRequest409JSONResponse struct{ ConflictJSONResponse }
+
+func (response CancelSupportRequest409JSONResponse) VisitCancelSupportRequestResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelSupportRequest500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response CancelSupportRequest500JSONResponse) VisitCancelSupportRequestResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -5961,6 +6966,9 @@ type StrictServerInterface interface {
 	// GetArtifactContent 権限確認後に画像を返す
 	// (GET /v1/artifacts/{id}/content)
 	GetArtifactContent(ctx context.Context, request GetArtifactContentRequestObject) (GetArtifactContentResponseObject, error)
+	// GetCompanionStatus 家族向けに利用者PCの接続状況を返す
+	// (GET /v1/companion/status)
+	GetCompanionStatus(ctx context.Context, request GetCompanionStatusRequestObject) (GetCompanionStatusResponseObject, error)
 	// GetGuideDraft ガイド下書きを取得する
 	// (GET /v1/guide-drafts/{id})
 	GetGuideDraft(ctx context.Context, request GetGuideDraftRequestObject) (GetGuideDraftResponseObject, error)
@@ -6008,6 +7016,18 @@ type StrictServerInterface interface {
 	// GetGuide 現在版のガイドを取得する
 	// (GET /v1/guides/{id})
 	GetGuide(ctx context.Context, request GetGuideRequestObject) (GetGuideResponseObject, error)
+	// RecordPresenceHeartbeat 利用者PCの接続heartbeatを記録する
+	// (POST /v1/presence/heartbeat)
+	RecordPresenceHeartbeat(ctx context.Context, request RecordPresenceHeartbeatRequestObject) (RecordPresenceHeartbeatResponseObject, error)
+	// DeletePushSubscription 家族端末のPush購読を解除する
+	// (DELETE /v1/push-subscriptions)
+	DeletePushSubscription(ctx context.Context, request DeletePushSubscriptionRequestObject) (DeletePushSubscriptionResponseObject, error)
+	// UpsertPushSubscription 家族端末のPush購読を登録または更新する
+	// (PUT /v1/push-subscriptions)
+	UpsertPushSubscription(ctx context.Context, request UpsertPushSubscriptionRequestObject) (UpsertPushSubscriptionResponseObject, error)
+	// GetVapidPublicKey Push購読用のVAPID公開鍵を返す
+	// (GET /v1/push-subscriptions/vapid-public-key)
+	GetVapidPublicKey(ctx context.Context, request GetVapidPublicKeyRequestObject) (GetVapidPublicKeyResponseObject, error)
 	// ListSupportRequests 自分のペアの支援依頼を新しい順に最大20件返す
 	// (GET /v1/support-requests)
 	ListSupportRequests(ctx context.Context, request ListSupportRequestsRequestObject) (ListSupportRequestsResponseObject, error)
@@ -6017,9 +7037,15 @@ type StrictServerInterface interface {
 	// GetSupportRequest 支援依頼の詳細を取得する
 	// (GET /v1/support-requests/{id})
 	GetSupportRequest(ctx context.Context, request GetSupportRequestRequestObject) (GetSupportRequestResponseObject, error)
+	// UpdateSupportRequestAcknowledgement 家族が依頼を確認し対応目安を返す
+	// (PATCH /v1/support-requests/{id}/acknowledgement)
+	UpdateSupportRequestAcknowledgement(ctx context.Context, request UpdateSupportRequestAcknowledgementRequestObject) (UpdateSupportRequestAcknowledgementResponseObject, error)
 	// CallSupportRequest RINGINGの支援セッションを作る
 	// (POST /v1/support-requests/{id}/call)
 	CallSupportRequest(ctx context.Context, request CallSupportRequestRequestObject) (CallSupportRequestResponseObject, error)
+	// CancelSupportRequest 利用者が未開始の支援依頼を取り消す
+	// (POST /v1/support-requests/{id}/cancel)
+	CancelSupportRequest(ctx context.Context, request CancelSupportRequestRequestObject) (CancelSupportRequestResponseObject, error)
 	// GetSupportSession 支援セッションを取得する
 	// (GET /v1/support-sessions/{id})
 	GetSupportSession(ctx context.Context, request GetSupportSessionRequestObject) (GetSupportSessionResponseObject, error)
@@ -6142,6 +7168,30 @@ func (sh *strictHandler) GetArtifactContent(w http.ResponseWriter, r *http.Reque
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetArtifactContentResponseObject); ok {
 		if err := validResponse.VisitGetArtifactContentResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetCompanionStatus operation middleware
+func (sh *strictHandler) GetCompanionStatus(w http.ResponseWriter, r *http.Request) {
+	var request GetCompanionStatusRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetCompanionStatus(ctx, request.(GetCompanionStatusRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetCompanionStatus")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetCompanionStatusResponseObject); ok {
+		if err := validResponse.VisitGetCompanionStatusResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -6606,6 +7656,123 @@ func (sh *strictHandler) GetGuide(w http.ResponseWriter, r *http.Request, id Res
 	}
 }
 
+// RecordPresenceHeartbeat operation middleware
+func (sh *strictHandler) RecordPresenceHeartbeat(w http.ResponseWriter, r *http.Request) {
+	var request RecordPresenceHeartbeatRequestObject
+
+	var body RecordPresenceHeartbeatJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RecordPresenceHeartbeat(ctx, request.(RecordPresenceHeartbeatRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RecordPresenceHeartbeat")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RecordPresenceHeartbeatResponseObject); ok {
+		if err := validResponse.VisitRecordPresenceHeartbeatResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeletePushSubscription operation middleware
+func (sh *strictHandler) DeletePushSubscription(w http.ResponseWriter, r *http.Request) {
+	var request DeletePushSubscriptionRequestObject
+
+	var body DeletePushSubscriptionJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeletePushSubscription(ctx, request.(DeletePushSubscriptionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeletePushSubscription")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeletePushSubscriptionResponseObject); ok {
+		if err := validResponse.VisitDeletePushSubscriptionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpsertPushSubscription operation middleware
+func (sh *strictHandler) UpsertPushSubscription(w http.ResponseWriter, r *http.Request) {
+	var request UpsertPushSubscriptionRequestObject
+
+	var body UpsertPushSubscriptionJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpsertPushSubscription(ctx, request.(UpsertPushSubscriptionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpsertPushSubscription")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpsertPushSubscriptionResponseObject); ok {
+		if err := validResponse.VisitUpsertPushSubscriptionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetVapidPublicKey operation middleware
+func (sh *strictHandler) GetVapidPublicKey(w http.ResponseWriter, r *http.Request) {
+	var request GetVapidPublicKeyRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetVapidPublicKey(ctx, request.(GetVapidPublicKeyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetVapidPublicKey")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetVapidPublicKeyResponseObject); ok {
+		if err := validResponse.VisitGetVapidPublicKeyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ListSupportRequests operation middleware
 func (sh *strictHandler) ListSupportRequests(w http.ResponseWriter, r *http.Request, params ListSupportRequestsParams) {
 	var request ListSupportRequestsRequestObject
@@ -6691,6 +7858,39 @@ func (sh *strictHandler) GetSupportRequest(w http.ResponseWriter, r *http.Reques
 	}
 }
 
+// UpdateSupportRequestAcknowledgement operation middleware
+func (sh *strictHandler) UpdateSupportRequestAcknowledgement(w http.ResponseWriter, r *http.Request, id ResourceId) {
+	var request UpdateSupportRequestAcknowledgementRequestObject
+
+	request.Id = id
+
+	var body UpdateSupportRequestAcknowledgementJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateSupportRequestAcknowledgement(ctx, request.(UpdateSupportRequestAcknowledgementRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateSupportRequestAcknowledgement")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateSupportRequestAcknowledgementResponseObject); ok {
+		if err := validResponse.VisitUpdateSupportRequestAcknowledgementResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // CallSupportRequest operation middleware
 func (sh *strictHandler) CallSupportRequest(w http.ResponseWriter, r *http.Request, id ResourceId, params CallSupportRequestParams) {
 	var request CallSupportRequestRequestObject
@@ -6718,6 +7918,40 @@ func (sh *strictHandler) CallSupportRequest(w http.ResponseWriter, r *http.Reque
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(CallSupportRequestResponseObject); ok {
 		if err := validResponse.VisitCallSupportRequestResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CancelSupportRequest operation middleware
+func (sh *strictHandler) CancelSupportRequest(w http.ResponseWriter, r *http.Request, id ResourceId, params CancelSupportRequestParams) {
+	var request CancelSupportRequestRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	var body CancelSupportRequestJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CancelSupportRequest(ctx, request.(CancelSupportRequestRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CancelSupportRequest")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CancelSupportRequestResponseObject); ok {
+		if err := validResponse.VisitCancelSupportRequestResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

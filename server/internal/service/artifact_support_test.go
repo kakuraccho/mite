@@ -69,6 +69,48 @@ func TestCreateArtifactValidatesPersistsAndReplays(t *testing.T) {
 	}
 }
 
+func TestUpdateSupportRequestAcknowledgementKeepsRequestPending(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 9, 10, 10, 0, 0, 0, time.UTC)
+	store := newFakeArtifactSupportStore()
+	request := validTestSupportRequest("request_ack", store.pair, "artifact_ack", now.Add(-time.Hour))
+	store.requests[request.ID] = request
+	service := newTestArtifactSupportService(store, newFakeArtifactSupportStorage(), nil, func() time.Time { return now })
+	estimate := now.Add(2 * time.Hour)
+
+	updated, err := service.UpdateSupportRequestAcknowledgement(context.Background(), domain.Actor{ID: store.pair.FamilyID, Role: domain.RoleFamily}, request.ID, UpdateSupportRequestAcknowledgementInput{Kind: domain.SupportAcknowledgementScheduled, EstimatedSupportAt: &estimate, ExpectedRevision: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Status != domain.SupportRequestPending || updated.Revision != 2 || updated.AcknowledgementKind == nil || *updated.AcknowledgementKind != domain.SupportAcknowledgementScheduled || updated.EstimatedSupportAt == nil || !updated.EstimatedSupportAt.Equal(estimate) {
+		t.Fatalf("updated request = %#v", updated)
+	}
+	_, err = service.UpdateSupportRequestAcknowledgement(context.Background(), domain.Actor{ID: store.pair.FamilyID, Role: domain.RoleFamily}, request.ID, UpdateSupportRequestAcknowledgementInput{Kind: domain.SupportAcknowledgementScheduled, EstimatedSupportAt: &now, ExpectedRevision: 2})
+	assertDomainCode(t, err, domain.CodeValidationError)
+}
+
+func TestCancelSupportRequestIsIdempotent(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 9, 10, 10, 0, 0, 0, time.UTC)
+	store := newFakeArtifactSupportStore()
+	request := validTestSupportRequest("request_cancel", store.pair, "artifact_cancel", now.Add(-time.Hour))
+	store.requests[request.ID] = request
+	store.activeRequest = true
+	service := newTestArtifactSupportService(store, newFakeArtifactSupportStorage(), nil, func() time.Time { return now })
+
+	first, err := service.CancelSupportRequest(context.Background(), testUserActor(), "cancel-key", request.ID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := service.CancelSupportRequest(context.Background(), testUserActor(), "cancel-key", request.ID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.SupportRequest == nil || first.SupportRequest.Status != domain.SupportRequestCancelled || first.SupportRequest.Revision != 2 || !second.Replayed || !bytes.Equal(first.ResponseBody, second.ResponseBody) {
+		t.Fatalf("first=%#v second=%#v", first, second)
+	}
+}
+
 func TestCreateArtifactIdempotencyConflicts(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 9, 4, 10, 0, 0, 0, time.UTC)
@@ -734,6 +776,24 @@ func (t *fakeArtifactSupportTx) CreateSupportRequest(_ context.Context, request 
 	}
 	t.requests[request.ID] = request
 	t.activeRequest = true
+	return request, nil
+}
+
+func (t *fakeArtifactSupportTx) LockSupportRequest(_ context.Context, id domain.ID) (domain.SupportRequest, bool, error) {
+	request, ok := t.requests[id]
+	return request, ok, nil
+}
+
+func (t *fakeArtifactSupportTx) UpdateSupportRequestAcknowledgement(_ context.Context, request domain.SupportRequest) (domain.SupportRequest, error) {
+	request.Revision++
+	t.requests[request.ID] = request
+	return request, nil
+}
+
+func (t *fakeArtifactSupportTx) CancelSupportRequest(_ context.Context, request domain.SupportRequest) (domain.SupportRequest, error) {
+	request.Revision++
+	t.requests[request.ID] = request
+	t.activeRequest = false
 	return request, nil
 }
 

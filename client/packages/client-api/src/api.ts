@@ -28,6 +28,10 @@ import type {
   SupportSession,
   UpdateGuideDraftInput,
   UpdateGuideRunInput,
+  UserPresence,
+  CompanionStatus,
+  UpdateSupportRequestAcknowledgementInput,
+  PushSubscriptionInput,
 } from './types'
 
 export interface IdempotentOperation {
@@ -50,6 +54,20 @@ export interface GuideMaterialUploadInput {
 }
 
 export interface MiteApi {
+  recordPresenceHeartbeat(): Promise<UserPresence>
+  getCompanionStatus(): Promise<CompanionStatus>
+  updateSupportRequestAcknowledgement(
+    supportRequestId: string,
+    input: UpdateSupportRequestAcknowledgementInput,
+  ): Promise<SupportRequest>
+  cancelSupportRequest(
+    supportRequestId: string,
+    expectedRevision: number,
+    operation: IdempotentOperation,
+  ): Promise<SupportRequest>
+  getVapidPublicKey(): Promise<string>
+  upsertPushSubscription(input: PushSubscriptionInput): Promise<boolean>
+  deletePushSubscription(endpoint: string): Promise<void>
   uploadArtifact(
     input: ArtifactUploadInput,
     operation: IdempotentOperation,

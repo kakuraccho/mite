@@ -15,6 +15,8 @@ tags:
   - name: Artifacts
   - name: SupportRequests
   - name: SupportSessions
+  - name: Companion
+  - name: PushSubscriptions
   - name: GuideMaterials
   - name: GuideGeneration
   - name: GuideDrafts
@@ -141,6 +143,160 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/support-requests/{id}/acknowledgement:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    patch:
+      tags: [SupportRequests, Companion]
+      operationId: updateSupportRequestAcknowledgement
+      summary: 家族が依頼を確認し対応目安を返す
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSupportRequestAcknowledgementRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportRequestResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/support-requests/{id}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      tags: [SupportRequests, Companion]
+      operationId: cancelSupportRequest
+      summary: 利用者が未開始の支援依頼を取り消す
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelSupportRequestRequest'
+      responses:
+        '200':
+          description: 取消成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportRequestResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/presence/heartbeat:
+    post:
+      tags: [Companion]
+      operationId: recordPresenceHeartbeat
+      summary: 利用者PCの接続heartbeatを記録する
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmptyRequest'
+      responses:
+        '200':
+          description: 記録成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserPresenceResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/companion/status:
+    get:
+      tags: [Companion]
+      operationId: getCompanionStatus
+      summary: 家族向けに利用者PCの接続状況を返す
+      responses:
+        '200':
+          description: 取得成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompanionStatusResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/push-subscriptions/vapid-public-key:
+    get:
+      tags: [PushSubscriptions]
+      operationId: getVapidPublicKey
+      summary: Push購読用のVAPID公開鍵を返す
+      responses:
+        '200':
+          description: 取得成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VapidPublicKeyResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/push-subscriptions:
+    put:
+      tags: [PushSubscriptions]
+      operationId: upsertPushSubscription
+      summary: 家族端末のPush購読を登録または更新する
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PushSubscriptionRequest'
+      responses:
+        '200':
+          description: 登録成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PushSubscriptionStateResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    delete:
+      tags: [PushSubscriptions]
+      operationId: deletePushSubscription
+      summary: 家族端末のPush購読を解除する
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeletePushSubscriptionRequest'
+      responses:
+        '204':
+          description: 解除成功
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
         '500': { $ref: '#/components/responses/InternalError' }
 
   /v1/support-requests/{id}/call:
@@ -907,7 +1063,13 @@ components:
       enum: [USER, FAMILY]
     SupportRequestStatus:
       type: string
-      enum: [PENDING, IN_SUPPORT, RESOLVED]
+      enum: [PENDING, IN_SUPPORT, RESOLVED, CANCELLED]
+    SupportAcknowledgementKind:
+      type: string
+      enum: [NOW, SCHEDULED, UNKNOWN]
+    PresenceStatus:
+      type: string
+      enum: [CONNECTING, ONLINE, OFFLINE]
     SupportSessionStatus:
       type: string
       enum: [RINGING, ACTIVE, GENERATING_GUIDE, REVIEWING_GUIDE, GUIDE_SAVED, ENDED]
@@ -1037,6 +1199,9 @@ components:
         - status
         - supportSessionId
         - guideContext
+        - acknowledgedAt
+        - acknowledgementKind
+        - estimatedSupportAt
         - createdAt
         - updatedAt
         - revision
@@ -1054,9 +1219,33 @@ components:
           allOf:
             - $ref: '#/components/schemas/GuideContext'
           nullable: true
+        acknowledgedAt: { type: string, format: date-time, nullable: true }
+        acknowledgementKind:
+          allOf:
+            - $ref: '#/components/schemas/SupportAcknowledgementKind'
+          nullable: true
+        estimatedSupportAt: { type: string, format: date-time, nullable: true }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
         revision: { type: integer, format: int64, minimum: 1 }
+
+    UserPresence:
+      type: object
+      additionalProperties: false
+      required:
+        - userId
+        - status
+        - connectedSince
+        - lastSeenAt
+        - updatedAt
+        - revision
+      properties:
+        userId: { type: string }
+        status: { $ref: '#/components/schemas/PresenceStatus' }
+        connectedSince: { type: string, format: date-time, nullable: true }
+        lastSeenAt: { type: string, format: date-time, nullable: true }
+        updatedAt: { type: string, format: date-time, nullable: true }
+        revision: { type: integer, format: int64, minimum: 0 }
 
     Consent:
       type: object
@@ -1327,6 +1516,38 @@ components:
           type: string
           maxLength: 500
           default: ''
+    UpdateSupportRequestAcknowledgementRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedRevision, acknowledgementKind, estimatedSupportAt]
+      properties:
+        expectedRevision: { type: integer, format: int64, minimum: 1 }
+        acknowledgementKind:
+          $ref: '#/components/schemas/SupportAcknowledgementKind'
+        estimatedSupportAt:
+          type: string
+          format: date-time
+          nullable: true
+    CancelSupportRequestRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedRevision]
+      properties:
+        expectedRevision: { type: integer, format: int64, minimum: 1 }
+    PushSubscriptionRequest:
+      type: object
+      additionalProperties: false
+      required: [endpoint, p256dh, auth]
+      properties:
+        endpoint: { type: string, format: uri, maxLength: 2048 }
+        p256dh: { type: string, minLength: 1, maxLength: 256 }
+        auth: { type: string, minLength: 1, maxLength: 256 }
+    DeletePushSubscriptionRequest:
+      type: object
+      additionalProperties: false
+      required: [endpoint]
+      properties:
+        endpoint: { type: string, format: uri, maxLength: 2048 }
     CallSupportRequestRequest:
       type: object
       additionalProperties: false
@@ -1497,6 +1718,46 @@ components:
               type: array
               maxItems: 20
               items: { $ref: '#/components/schemas/SupportRequest' }
+    UserPresenceResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/UserPresence' }
+    CompanionStatusResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [user, presence]
+          properties:
+            user: { $ref: '#/components/schemas/User' }
+            presence: { $ref: '#/components/schemas/UserPresence' }
+    VapidPublicKeyResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [publicKey]
+          properties:
+            publicKey: { type: string, minLength: 1 }
+    PushSubscriptionStateResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [enabled]
+          properties:
+            enabled: { type: boolean, enum: [true] }
     CallSupportRequestResponse:
       type: object
       additionalProperties: false

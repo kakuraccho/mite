@@ -650,18 +650,62 @@ function GuideList({
   )
 }
 
-function WaitingScreen({ request }: { request: SupportRequest }) {
+function WaitingScreen({
+  request,
+  busy,
+  error,
+  onCancel,
+}: {
+  request: SupportRequest
+  busy: boolean
+  error: string | null
+  onCancel(): void
+}) {
+  const [currentTime, setCurrentTime] = useState(0)
+  useEffect(() => {
+    const initial = window.setTimeout(() => setCurrentTime(Date.now()), 0)
+    const timer = window.setInterval(() => setCurrentTime(Date.now()), 30_000)
+    return () => {
+      window.clearTimeout(initial)
+      window.clearInterval(timer)
+    }
+  }, [])
+  const scheduledTime = request.estimatedSupportAt
+    ? new Date(request.estimatedSupportAt)
+    : null
+  const scheduledLabel = scheduledTime
+    ? new Intl.DateTimeFormat('ja-JP', {
+        dateStyle: 'short',
+        timeStyle: 'short',
+      }).format(scheduledTime)
+    : null
+  const acknowledgement =
+    request.acknowledgementKind === 'NOW'
+      ? '家族が「今から確認する」と返答しました。'
+      : request.acknowledgementKind === 'SCHEDULED' && scheduledTime
+        ? currentTime > scheduledTime.getTime()
+          ? `家族が伝えた予定時刻（${scheduledLabel}）を過ぎています。連絡をお待ちください。`
+          : `家族は ${scheduledLabel} ごろ対応できそうです。`
+        : request.acknowledgementKind === 'UNKNOWN'
+          ? '家族が依頼を確認しました。'
+          : null
   return (
     <Surface elevated>
       <EmptyState
         symbol="✓"
         title="家族に知らせました"
-        description="家族から連絡が来るまで、このままお待ちください。"
+        description={
+          acknowledgement ?? '家族から連絡が来るまで、このままお待ちください。'
+        }
       />
       <div className="user-request-summary">
         <strong>相談したこと</strong>
         <p>{request.comment || '画面を見て相談したい'}</p>
       </div>
+      {error ? <ErrorNotice message={error} /> : null}
+      <Button disabled={busy} variant="quiet" onClick={onCancel}>
+        {busy ? '取り消しています…' : 'この相談を取り消す'}
+      </Button>
     </Surface>
   )
 }
@@ -1374,6 +1418,15 @@ export function UserClient({
         previousRequest,
         nextRequest,
       )
+      if (effectiveRequest.status === 'CANCELLED') {
+        storage.removeItem(lastRequestKey)
+        requestRef.current = null
+        sessionRef.current = null
+        setRequest(null)
+        setSession(null)
+        setView('HOME')
+        return
+      }
       mergeRequest(effectiveRequest)
       if (!nextSession) {
         if (!previousRequest && effectiveRequest.status !== 'RESOLVED') {
@@ -1473,6 +1526,7 @@ export function UserClient({
       mergeSession,
       stopCapturing,
       loadGuides,
+      storage,
     ],
   )
 
@@ -1486,6 +1540,38 @@ export function UserClient({
       : null
     await applySupportState(nextRequest, nextSession)
   }, [api, applySupportState, storage])
+
+  const cancelPendingRequest = useCallback(async () => {
+    const current = requestRef.current
+    if (!current || current.status !== 'PENDING' || current.supportSessionId)
+      return
+    if (!window.confirm('この相談を取り消しますか？')) return
+    setActionBusy(true)
+    setError(null)
+    try {
+      const cancelled = await runIdempotent(
+        keys,
+        `cancel-request:${current.id}`,
+        (idempotencyKey) =>
+          api.cancelSupportRequest(current.id, current.revision, {
+            idempotencyKey,
+          }),
+      )
+      storage.removeItem(lastRequestKey)
+      requestRef.current = null
+      sessionRef.current = null
+      setRequest(null)
+      setSession(null)
+      setView('HOME')
+      setOverlayCollapsed(true)
+      if (cancelled.status !== 'CANCELLED') await refreshSupport()
+    } catch (caught) {
+      reportError(caught)
+      await refreshSupport().catch(() => {})
+    } finally {
+      setActionBusy(false)
+    }
+  }, [api, keys, refreshSupport, reportError, storage])
   useEffect(() => {
     refreshRef.current = refreshSupport
   }, [refreshSupport])
@@ -1619,6 +1705,24 @@ export function UserClient({
     stream.start()
     return () => stream.stop()
   }, [createEventStream, reportError, runtime.apiBaseUrl, runtime.demoToken])
+
+  useEffect(() => {
+    const heartbeat = startPolling(
+      async () => {
+        await api.recordPresenceHeartbeat()
+      },
+      {
+        immediate: true,
+        intervalMs: 15_000,
+        onError: (caught) => {
+          if (caught instanceof MiteApiError && caught.status === 401) {
+            reportError(caught)
+          }
+        },
+      },
+    )
+    return () => heartbeat.stop()
+  }, [api, reportError])
 
   useEffect(() => {
     if (
@@ -2284,7 +2388,14 @@ export function UserClient({
 
   let content: ReactNode
   if (supportScreen === 'WAITING_FOR_FAMILY' && request) {
-    content = <WaitingScreen request={request} />
+    content = (
+      <WaitingScreen
+        request={request}
+        busy={actionBusy}
+        error={error}
+        onCancel={() => void cancelPendingRequest()}
+      />
+    )
   } else if (supportScreen === 'INCOMING_CALL' && session) {
     content = (
       <IncomingCallScreen
