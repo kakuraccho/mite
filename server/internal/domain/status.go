@@ -51,7 +51,7 @@ func (s SupportSessionStatus) CanTransitionTo(next SupportSessionStatus) bool {
 	case SupportSessionGeneratingGuide:
 		return next == SupportSessionReviewingGuide || next == SupportSessionEnded
 	case SupportSessionReviewingGuide:
-		return next == SupportSessionGuideSaved || next == SupportSessionEnded
+		return next == SupportSessionEnded
 	case SupportSessionGuideSaved:
 		return next == SupportSessionEnded
 	default:
@@ -191,7 +191,7 @@ func CanEndSupportSession(status SupportSessionStatus, reason SupportSessionEndR
 	case SupportSessionGeneratingGuide:
 		return reason == EndReasonGuideCancelled || reason == EndReasonNoMaterials
 	case SupportSessionReviewingGuide:
-		return reason == EndReasonGuideCancelled
+		return reason == EndReasonGuideSaved || reason == EndReasonGuideCancelled
 	case SupportSessionGuideSaved:
 		return reason == EndReasonGuideSaved
 	default:

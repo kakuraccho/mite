@@ -140,7 +140,7 @@ func (w *GuideWorker) RunOnce(ctx context.Context) (bool, error) {
 		return true, w.finishFailure(ctx, job, generationContext, domain.GuideGenerationAIInputUnavailable)
 	}
 	input, loadErr := w.loadInput(attemptCtx, generationContext)
-	var output domain.GeneratedGuide
+	var output []domain.GeneratedGuide
 	if loadErr == nil {
 		if w.generator == nil {
 			loadErr = &GuideGenerationFailure{Code: domain.GuideGenerationAIUnavailable, Cause: errors.New("guide generator is not configured")}
@@ -153,7 +153,7 @@ func (w *GuideWorker) RunOnce(ctx context.Context) (bool, error) {
 		for _, inputImage := range input.Images {
 			allowed[inputImage.ArtifactID] = struct{}{}
 		}
-		if err := domain.ValidateGeneratedGuide(output, allowed); err != nil {
+		if err := domain.ValidateGeneratedGuides(output, allowed); err != nil {
 			loadErr = &GuideGenerationFailure{Code: domain.GuideGenerationAIInvalidOutput, Cause: err}
 		}
 	}
@@ -307,7 +307,7 @@ func (w *GuideWorker) finishFailure(ctx context.Context, claimed domain.GuideGen
 	return nil
 }
 
-func (w *GuideWorker) finishSuccess(ctx context.Context, claimed domain.GuideGenerationJob, generationContext repository.GenerationContext, output domain.GeneratedGuide) error {
+func (w *GuideWorker) finishSuccess(ctx context.Context, claimed domain.GuideGenerationJob, generationContext repository.GenerationContext, outputs []domain.GeneratedGuide) error {
 	var events []domain.Event
 	err := w.store.WithinTx(ctx, pgx.TxOptions{}, func(tx repository.GuideTx) error {
 		session, err := tx.GetSession(ctx, generationContext.SupportSessionID, true)
@@ -322,15 +322,20 @@ func (w *GuideWorker) finishSuccess(ctx context.Context, claimed domain.GuideGen
 			return nil
 		}
 		now := w.now()
-		steps := make([]domain.GuideStep, len(output.Steps))
-		for index, step := range output.Steps {
-			steps[index] = domain.GuideStep{Position: index + 1, ArtifactID: step.SourceArtifactID, Instruction: step.Instruction}
+		drafts := make([]domain.GuideDraft, 0, len(outputs))
+		for guideIndex, output := range outputs {
+			steps := make([]domain.GuideStep, len(output.Steps))
+			for index, step := range output.Steps {
+				steps[index] = domain.GuideStep{Position: index + 1, ArtifactID: step.SourceArtifactID, Instruction: step.Instruction}
+			}
+			draft := domain.GuideDraft{ID: w.newID("draft_"), SupportSessionID: session.ID, Position: guideIndex + 1, Title: output.Title, Steps: steps, Status: domain.GuideDraftEditing, Revision: 1, CreatedAt: now, UpdatedAt: now}
+			draft, err = tx.CreateDraft(ctx, draft)
+			if err != nil {
+				return err
+			}
+			drafts = append(drafts, draft)
 		}
-		draft := domain.GuideDraft{ID: w.newID("draft_"), SupportSessionID: session.ID, Title: output.Title, Steps: steps, Status: domain.GuideDraftEditing, Revision: 1, CreatedAt: now, UpdatedAt: now}
-		draft, err = tx.CreateDraft(ctx, draft)
-		if err != nil {
-			return err
-		}
+		draft := drafts[0]
 		job, err = tx.SucceedJob(ctx, job.ID, claimed.Revision, draft.ID, timestamp(now))
 		if err != nil {
 			return err
@@ -340,7 +345,10 @@ func (w *GuideWorker) finishSuccess(ctx context.Context, claimed domain.GuideGen
 			return err
 		}
 		pair := pairForSession(session)
-		events = []domain.Event{workerEvent(w, domain.EventGuideDraftCreated, draft.ID, draft.Revision, draft, pair), workerEvent(w, domain.EventGuideGenerationJobUpdated, job.ID, job.Revision, job, pair), workerEvent(w, domain.EventSupportSessionUpdated, session.ID, session.Revision, session, pair)}
+		for _, created := range drafts {
+			events = append(events, workerEvent(w, domain.EventGuideDraftCreated, created.ID, created.Revision, created, pair))
+		}
+		events = append(events, workerEvent(w, domain.EventGuideGenerationJobUpdated, job.ID, job.Revision, job, pair), workerEvent(w, domain.EventSupportSessionUpdated, session.ID, session.Revision, session, pair))
 		return nil
 	})
 	if err != nil {

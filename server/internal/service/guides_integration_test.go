@@ -146,7 +146,7 @@ func TestGuideFlowPostgresIntegration(t *testing.T) {
 	worker := NewGuideWorker(store, storage, generator, nil, nil)
 	clock = now.Add(2 * time.Second)
 	worker.now = func() time.Time { return clock }
-	worker.newID = func(prefix string) domain.ID { return domain.ID(prefix + "guide_integration") }
+	worker.newID = guideService.newID
 	if err := store.WithinTx(ctx, pgx.TxOptions{}, func(tx repository.GuideTx) error {
 		_, claimErr := tx.ClaimJob(ctx, timestamp(clock))
 		return claimErr
@@ -170,7 +170,12 @@ func TestGuideFlowPostgresIntegration(t *testing.T) {
 	}
 	generator.err = nil
 	clock = now.Add(3 * time.Second)
-	generator.output = domain.GeneratedGuide{Title: "設定を確認する", Steps: []domain.GeneratedGuideStep{{SourceArtifactID: guideIntegrationInitial, Instruction: "設定画面を確認する"}}}
+	generator.output = domain.GeneratedGuide{Title: "設定を確認する", Steps: []domain.GeneratedGuideStep{{SourceArtifactID: guideIntegrationInitial, Instruction: "設定画面を確認する"}, {SourceArtifactID: materialCreated.Material.ArtifactID, Instruction: "保存ボタンを押す"}}}
+	// The material used only by the second guide must survive group cleanup.
+	generator.outputs = []domain.GeneratedGuide{
+		{Title: "設定を確認する", Steps: []domain.GeneratedGuideStep{{SourceArtifactID: guideIntegrationInitial, Instruction: "設定画面を確認する"}}},
+		{Title: "変更を保存する", Steps: []domain.GeneratedGuideStep{{SourceArtifactID: materialCreated.Material.ArtifactID, Instruction: "保存ボタンを押す"}}},
+	}
 	if processed, err := worker.RunOnce(ctx); err != nil || !processed {
 		t.Fatalf("run successful attempt: processed=%v err=%v", processed, err)
 	}
@@ -234,13 +239,81 @@ func TestGuideFlowPostgresIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("update draft: %v", err)
 	}
-	saveCommand := SaveGuideDraftCommand{Meta: familyCommandMeta("draft-save"), DraftID: draft.ID, ExpectedRevision: draft.Revision}
-	saved, err := guideService.SaveGuideDraft(ctx, saveCommand)
-	if err != nil {
-		t.Fatalf("save draft: %v", err)
+	group, err := guideService.ListSessionGuideDrafts(ctx, family, guideIntegrationSession)
+	if err != nil || len(group) != 2 || group[0].ID != draft.ID || group[1].Title != "変更を保存する" {
+		t.Fatalf("grouped drafts = %+v, err=%v", group, err)
 	}
-	if replayed, err := guideService.SaveGuideDraft(ctx, saveCommand); err != nil || replayed.Guide.Guide.ID != saved.Guide.Guide.ID {
-		t.Fatalf("replay saved draft: result=%+v err=%v", replayed, err)
+	second, err := guideService.UpdateGuideDraft(ctx, UpdateGuideDraftCommand{Actor: family, DraftID: group[1].ID, ExpectedRevision: group[1].Revision, Title: "変更内容を保存する", Steps: group[1].Steps})
+	if err != nil {
+		t.Fatalf("edit second draft: %v", err)
+	}
+	group[1] = second
+	var sessionRevision int64
+	if err := pool.QueryRow(ctx, "SELECT revision FROM support_sessions WHERE id=$1", guideIntegrationSession).Scan(&sessionRevision); err != nil {
+		t.Fatal(err)
+	}
+	saveCommand := CompleteGuideReviewCommand{Meta: familyCommandMeta("review-complete"), SupportSessionID: guideIntegrationSession, ExpectedSessionRevision: sessionRevision, Drafts: []GuideDraftRevision{{ID: draft.ID, ExpectedRevision: draft.Revision}, {ID: second.ID, ExpectedRevision: second.Revision}}}
+	for _, test := range []struct {
+		name   string
+		change func(*CompleteGuideReviewCommand)
+		code   domain.ErrorCode
+	}{
+		{"missing draft", func(c *CompleteGuideReviewCommand) { c.Drafts = c.Drafts[:1] }, domain.CodeInvalidState},
+		{"stale second draft", func(c *CompleteGuideReviewCommand) { c.Drafts[1].ExpectedRevision-- }, domain.CodeRevisionConflict},
+		{"stale session", func(c *CompleteGuideReviewCommand) { c.ExpectedSessionRevision-- }, domain.CodeRevisionConflict},
+		{"duplicate draft", func(c *CompleteGuideReviewCommand) { c.Drafts[1] = c.Drafts[0] }, domain.CodeValidationError},
+		{"foreign draft", func(c *CompleteGuideReviewCommand) { c.Drafts[1].ID = "another_draft" }, domain.CodeInvalidState},
+		{"user cannot complete", func(c *CompleteGuideReviewCommand) { c.Meta.Actor = user }, domain.CodeForbidden},
+		{"other family", func(c *CompleteGuideReviewCommand) {
+			c.Meta.Actor = domain.Actor{ID: "family_demo", Role: domain.RoleFamily}
+		}, domain.CodeForbidden},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			command := saveCommand
+			command.Meta.Key = "reject-" + test.name
+			command.Drafts = append([]GuideDraftRevision(nil), saveCommand.Drafts...)
+			test.change(&command)
+			_, err := guideService.CompleteGuideReview(ctx, command)
+			if code, _ := domain.ErrorCodeOf(err); code != test.code {
+				t.Fatalf("error=%v, want %s", err, test.code)
+			}
+		})
+	}
+	if _, err := guideService.SaveGuideDraft(ctx, SaveGuideDraftCommand{Meta: familyCommandMeta("legacy-save"), DraftID: draft.ID, ExpectedRevision: draft.Revision}); err == nil {
+		t.Fatal("legacy save partially approved multiple guides")
+	}
+	if _, err := guideService.ListSessionGuideDrafts(ctx, domain.Actor{ID: "family_demo", Role: domain.RoleFamily}, guideIntegrationSession); err == nil {
+		t.Fatal("another family read the group")
+	}
+	failing := NewGuideService(failSecondGuideStore{store}, storage, nil, nil)
+	failing.now = guideService.now
+	if _, err := failing.CompleteGuideReview(ctx, saveCommand); err == nil {
+		t.Fatal("injected second guide failure was ignored")
+	}
+	var count int
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM guides WHERE user_id=$1", user.ID).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("partial guides persisted: %d, %v", count, err)
+	}
+	unchanged, err := guideService.ListSessionGuideDrafts(ctx, user, guideIntegrationSession)
+	if err != nil || len(unchanged) != 2 || unchanged[0].Status != domain.GuideDraftEditing || unchanged[1].Revision != second.Revision {
+		t.Fatalf("rollback changed drafts: %+v, %v", unchanged, err)
+	}
+	saved, err := guideService.CompleteGuideReview(ctx, saveCommand)
+	if err != nil || len(saved.Guides) != 2 || saved.SupportSession.Status != domain.SupportSessionEnded {
+		t.Fatalf("complete group: %+v, %v", saved, err)
+	}
+	if replayed, err := guideService.CompleteGuideReview(ctx, saveCommand); err != nil || len(replayed.Guides) != 2 || replayed.Guides[1].Guide.ID != saved.Guides[1].Guide.ID {
+		t.Fatalf("replay group: %+v, %v", replayed, err)
+	}
+	var materialPurpose string
+	if err := pool.QueryRow(ctx, "SELECT purpose FROM artifacts WHERE id=$1", materialCreated.Material.ArtifactID).Scan(&materialPurpose); err != nil || materialPurpose != "GUIDE_STEP" {
+		t.Fatalf("second guide image lost: %s, %v", materialPurpose, err)
+	}
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM artifact_deletion_tasks WHERE artifact_id=$1", materialCreated.Material.ArtifactID).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("second guide image scheduled for deletion: %d, %v", count, err)
+	}
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM guide_drafts WHERE support_session_id=$1 AND status='SAVED' AND guide_id IS NOT NULL", guideIntegrationSession).Scan(&count); err != nil || count != 2 {
+		t.Fatalf("saved guide links: %d, %v", count, err)
 	}
 	if replayed, status, err := guideService.CreateGuideMaterial(ctx, materialCommand); err != nil || status != 201 || replayed.Material.ID != materialCreated.Material.ID || storage.puts != 2 {
 		t.Fatalf("replay material after cleanup: result=%+v status=%d puts=%d err=%v", replayed, status, storage.puts, err)
@@ -252,10 +325,10 @@ func TestGuideFlowPostgresIntegration(t *testing.T) {
 		t.Fatalf("replay retry after cleanup: result=%+v err=%v", replayed, err)
 	}
 	guides, err := guideService.ListGuides(ctx, user)
-	if err != nil || len(guides) != 1 || guides[0].ID != saved.Guide.Guide.ID {
+	if err != nil || len(guides) != 2 {
 		t.Fatalf("list guides: guides=%+v err=%v", guides, err)
 	}
-	guide, err := guideService.GetGuide(ctx, user, saved.Guide.Guide.ID)
+	guide, err := guideService.GetGuide(ctx, user, saved.Guides[0].Guide.ID)
 	if err != nil || len(guide.CurrentVersion.Steps) != 2 {
 		t.Fatalf("get guide: guide=%+v err=%v", guide, err)
 	}
@@ -284,16 +357,14 @@ func TestGuideFlowPostgresIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create help run: %v", err)
 	}
-	if saved.SupportSession.Status != domain.SupportSessionGuideSaved || saved.SupportSession.EndedAt != nil || saved.SupportSession.EndReason != nil {
-		t.Fatalf("save ended call: %+v", saved.SupportSession)
+	if saved.SupportSession.EndedAt == nil || saved.SupportSession.EndReason == nil || *saved.SupportSession.EndReason != domain.EndReasonGuideSaved {
+		t.Fatalf("save did not end support: %+v", saved.SupportSession)
 	}
 	sessions := NewSupportSessionService(repository.NewPostgresSupportSessionStore(pool), nil, &fakeTokenIssuer{}, nil)
-	if _, err := sessions.CreateLiveKitToken(ctx, family, string(saved.SupportSession.ID)); err != nil {
-		t.Fatalf("saved call reconnect: %v", err)
-	}
-	ended, err := sessions.End(ctx, family, string(saved.SupportSession.ID), saved.SupportSession.Revision, "guide-integration-end", "guide-integration-end")
-	if err != nil || ended.Status != domain.SupportSessionEnded {
-		t.Fatalf("manual end: %+v %v", ended, err)
+	for _, actor := range []domain.Actor{user, family} {
+		if _, err := sessions.CreateLiveKitToken(ctx, actor, string(saved.SupportSession.ID)); errorCodeOf(err) != domain.CodeInvalidState {
+			t.Fatalf("saved support still permits calls: %v", err)
+		}
 	}
 	helpCommand := CreateSupportRequestFromGuideRunCommand{Meta: userCommandMeta("help-request"), RunID: helpRun.ID, ExpectedRevision: helpRun.Revision, InitialScreenshotArtifactID: guideIntegrationHelp, Comment: "保存ボタンが見つからない"}
 	help, err := guideService.CreateSupportRequestFromGuideRun(ctx, helpCommand)
@@ -324,7 +395,7 @@ func createGuideIntegrationFixture(ctx context.Context, pool *pgxpool.Pool, now 
 		{`INSERT INTO user_pairs (user_id, family_id) VALUES ($1, $2)`, []any{guideIntegrationUser, guideIntegrationFamily}},
 		{`INSERT INTO artifacts (id, owner_user_id, purpose, mime_type, storage_key, sha256, byte_size, width, height, captured_at, created_at, updated_at, revision) VALUES ($1,$3,'REQUEST_SCREENSHOT','image/jpeg',$3||'/'||$1||'.jpg',$4,10,2,2,$5,$5,$5,1), ($2,$3,'REQUEST_SCREENSHOT','image/jpeg',$3||'/'||$2||'.jpg',$4,10,2,2,$5,$5,$5,1)`, []any{guideIntegrationInitial, guideIntegrationHelp, guideIntegrationUser, strings.Repeat("a", 64), now.Add(-time.Minute)}},
 		{`INSERT INTO support_requests (id,user_id,family_id,initial_screenshot_artifact_id,comment,status,support_session_id,guide_context,created_at,updated_at,revision) VALUES ($1,$2,$3,$4,'設定を保存したい','RESOLVED',NULL,NULL,$5,$5,3)`, []any{guideIntegrationRequest, guideIntegrationUser, guideIntegrationFamily, guideIntegrationInitial, now.Add(-time.Minute)}},
-		{`INSERT INTO support_sessions (id,support_request_id,user_id,family_id,livekit_room_name,status,guide_decision,guide_material_batch_id,guide_generation_job_id,guide_draft_id,guide_id,consent,consented_at,started_at,ended_at,end_reason,created_at,updated_at,revision) VALUES ($1,$2,$3,$4,'mite-'||$1,'GENERATING_GUIDE','CREATE',NULL,NULL,NULL,NULL,'{"audio":true,"screenShare":true,"periodicCapture":true,"textVersion":"v3"}'::jsonb,$5,$5,NULL,NULL,$5,$5,3)`, []any{guideIntegrationSession, guideIntegrationRequest, guideIntegrationUser, guideIntegrationFamily, now.Add(-time.Minute)}},
+		{`INSERT INTO support_sessions (id,support_request_id,user_id,family_id,livekit_room_name,status,guide_decision,guide_material_batch_id,guide_generation_job_id,guide_draft_id,guide_id,consent,consented_at,started_at,ended_at,end_reason,created_at,updated_at,revision) VALUES ($1,$2,$3,$4,'mite-'||$1,'GENERATING_GUIDE','CREATE',NULL,NULL,NULL,NULL,'{"audio":true,"screenShare":true,"periodicCapture":true,"textVersion":"v4"}'::jsonb,$5,$5,NULL,NULL,$5,$5,3)`, []any{guideIntegrationSession, guideIntegrationRequest, guideIntegrationUser, guideIntegrationFamily, now.Add(-time.Minute)}},
 		{`UPDATE support_requests SET support_session_id=$1 WHERE id=$2`, []any{guideIntegrationSession, guideIntegrationRequest}},
 	} {
 		if _, err := transaction.Exec(ctx, statement.query, statement.args...); err != nil {
@@ -365,4 +436,24 @@ func cleanupGuideIntegrationFixture(ctx context.Context, pool *pgxpool.Pool) err
 		}
 	}
 	return transaction.Commit(ctx)
+}
+
+// Inject a failure after the first guide has been written inside the real DB transaction.
+type failSecondGuideStore struct{ repository.GuideStore }
+
+func (s failSecondGuideStore) WithinTx(ctx context.Context, options pgx.TxOptions, work func(repository.GuideTx) error) error {
+	return s.GuideStore.WithinTx(ctx, options, func(tx repository.GuideTx) error { return work(&failSecondGuideTx{GuideTx: tx}) })
+}
+
+type failSecondGuideTx struct {
+	repository.GuideTx
+	writes int
+}
+
+func (tx *failSecondGuideTx) CreateGuide(ctx context.Context, guide domain.Guide) (domain.Guide, error) {
+	tx.writes++
+	if tx.writes == 2 {
+		return domain.Guide{}, errors.New("injected second guide failure")
+	}
+	return tx.GuideTx.CreateGuide(ctx, guide)
 }

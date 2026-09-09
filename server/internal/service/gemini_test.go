@@ -34,7 +34,7 @@ func TestGeminiGuideGeneratorRequestAndResponse(t *testing.T) {
 			t.Fatal("API key header is missing")
 		}
 		captured, _ = io.ReadAll(request.Body)
-		body := `{"status":"completed","steps":[{"type":"model_output","content":[{"type":"text","text":"{\"title\":\"設定\",\"steps\":[{\"sourceArtifactId\":\"art_1\",\"instruction\":\"設定を押す\"}]}"}]}]}`
+		body := `{"status":"completed","steps":[{"type":"model_output","content":[{"type":"text","text":"{\"guides\":[{\"title\":\"設定\",\"steps\":[{\"sourceArtifactId\":\"art_1\",\"instruction\":\"設定を押す\"}]}]}"}]}]}`
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
 	})}
 	generator, err := NewGeminiGuideGenerator("https://generativelanguage.googleapis.com/v1beta", "secret", GeminiModel, GeminiPromptVersion, client)
@@ -45,7 +45,7 @@ func TestGeminiGuideGeneratorRequestAndResponse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if output.Title != "設定" || len(output.Steps) != 1 || output.Steps[0].SourceArtifactID != "art_1" {
+	if len(output) != 1 || output[0].Title != "設定" || len(output[0].Steps) != 1 || output[0].Steps[0].SourceArtifactID != "art_1" {
 		t.Fatalf("output = %+v", output)
 	}
 	var request map[string]any
@@ -59,7 +59,7 @@ func TestGeminiGuideGeneratorRequestAndResponse(t *testing.T) {
 		t.Fatal("API key leaked into request body")
 	}
 	configuration := request["generation_config"].(map[string]any)
-	if configuration["thinking_level"] != "low" || configuration["max_output_tokens"] != float64(2048) {
+	if configuration["thinking_level"] != "low" || configuration["max_output_tokens"] != float64(8192) {
 		t.Fatalf("generation config = %#v", configuration)
 	}
 	responseFormat, ok := request["response_format"].(map[string]any)
@@ -140,5 +140,17 @@ func TestPrepareGuideImageResizesAndCompresses(t *testing.T) {
 	}
 	if config.Width > 1920 || config.Height > 1080 {
 		t.Fatalf("dimensions = %dx%d", config.Width, config.Height)
+	}
+}
+
+func TestParseGeminiResponseWithMultipleGuides(t *testing.T) {
+	output := `{"guides":[{"title":"ログインする","steps":[{"sourceArtifactId":"art_1","instruction":"ログインを押す"}]},{"title":"住所を変更する","steps":[{"sourceArtifactId":"art_2","instruction":"住所を入力する"}]}]}`
+	response, err := json.Marshal(map[string]any{"status": "completed", "steps": []any{map[string]any{"type": "model_output", "content": []any{map[string]any{"type": "text", "text": output}}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	guides, err := parseGeminiResponse(response)
+	if err != nil || len(guides) != 2 || guides[0].Title != "ログインする" || guides[1].Title != "住所を変更する" || guides[1].Steps[0].SourceArtifactID != "art_2" {
+		t.Fatalf("guides=%+v, err=%v", guides, err)
 	}
 }

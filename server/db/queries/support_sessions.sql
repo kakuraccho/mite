@@ -146,9 +146,9 @@ WHERE batch_id = $1;
 DELETE FROM guide_material_batches
 WHERE id = $1;
 
--- name: SessionDeleteGuideDraft :exec
+-- name: SessionDeleteGuideDrafts :exec
 DELETE FROM guide_drafts
-WHERE id = $1;
+WHERE support_session_id = $1;
 
 -- name: SessionCreateIdempotencyRecord :execrows
 INSERT INTO idempotency_records (

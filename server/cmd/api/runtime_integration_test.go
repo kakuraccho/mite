@@ -36,17 +36,20 @@ const (
 
 type e2eGuideGenerator struct{}
 
-func (*e2eGuideGenerator) Generate(_ context.Context, input domain.GuideGenerationInput) (domain.GeneratedGuide, error) {
+func (*e2eGuideGenerator) Generate(_ context.Context, input domain.GuideGenerationInput) ([]domain.GeneratedGuide, error) {
 	if len(input.Images) < 3 {
-		return domain.GeneratedGuide{}, errors.New("E2E generator requires the initial image and two materials")
+		return nil, errors.New("E2E generator requires the initial image and two materials")
 	}
-	return domain.GeneratedGuide{
+	return []domain.GeneratedGuide{{
 		Title: "接続確認ガイド",
 		Steps: []domain.GeneratedGuideStep{
 			{SourceArtifactID: input.Images[0].ArtifactID, Instruction: "最初の画面を確認する"},
 			{SourceArtifactID: input.Images[1].ArtifactID, Instruction: "青いボタンを押す"},
 		},
-	}, nil
+	}, {
+		Title: "別の接続確認ガイド",
+		Steps: []domain.GeneratedGuideStep{{SourceArtifactID: input.Images[1].ArtifactID, Instruction: "画面のボタンを確認する"}},
+	}}, nil
 }
 
 func startE2ERuntime(t *testing.T) (*httptest.Server, *pgxpool.Pool) {
@@ -82,7 +85,7 @@ func startE2ERuntime(t *testing.T) (*httptest.Server, *pgxpool.Pool) {
 		AIBaseURL:             "https://generativelanguage.googleapis.com/v1beta",
 		GeminiAPIKey:          "unused-e2e-key",
 		AIModel:               "gemini-3.8-flash",
-		AIPromptVersion:       "v1",
+		AIPromptVersion:       "v2",
 		ClientOrigins:         map[string]struct{}{e2eOrigin: {}},
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -221,7 +224,7 @@ func TestServerRuntimeE2E(t *testing.T) {
 	client.json(t, http.MethodGet, "/v1/support-sessions/"+sessionID, e2eUserToken, "", nil, http.StatusOK)
 	client.json(t, http.MethodPost, "/v1/support-sessions/"+sessionID+"/accept", e2eUserToken, keyPrefix+"accept", map[string]any{
 		"expectedSessionRevision": 1,
-		"consent":                 map[string]any{"audio": true, "screenShare": true, "periodicCapture": true, "textVersion": "v3"},
+		"consent":                 map[string]any{"audio": true, "screenShare": true, "periodicCapture": true, "textVersion": "v4"},
 	}, http.StatusOK)
 	client.json(t, http.MethodPost, "/v1/support-sessions/"+sessionID+"/livekit-token", e2eFamilyToken, "", map[string]any{}, http.StatusOK)
 	conflict := client.json(t, http.MethodPost, "/v1/support-sessions/"+sessionID+"/resolve", e2eFamilyToken, keyPrefix+"conflict", map[string]any{
@@ -290,23 +293,43 @@ func TestServerRuntimeE2E(t *testing.T) {
 		"title":            draftData["title"],
 		"steps":            draftData["steps"],
 	}, http.StatusOK)
-	saved := client.json(t, http.MethodPost, "/v1/guide-drafts/"+draftID+"/save", e2eFamilyToken, keyPrefix+"save", map[string]any{
-		"expectedRevision": jsonNumber(t, updatedDraft.body, "data", "revision"),
-	}, http.StatusCreated)
-	replayedSave := client.json(t, http.MethodPost, "/v1/guide-drafts/"+draftID+"/save", e2eFamilyToken, keyPrefix+"save", map[string]any{
-		"expectedRevision": jsonNumber(t, updatedDraft.body, "data", "revision"),
-	}, http.StatusCreated)
+	reviewing := client.json(t, http.MethodGet, "/v1/support-sessions/"+sessionID, e2eFamilyToken, "", nil, http.StatusOK)
+	group := client.json(t, http.MethodGet, "/v1/support-sessions/"+sessionID+"/guide-drafts", e2eFamilyToken, "", nil, http.StatusOK)
+	items, ok := jsonMap(t, group.body, "data")["items"].([]any)
+	if !ok || len(items) != 2 {
+		t.Fatalf("expected two guide drafts, got %#v", group.body)
+	}
+	var revisions []map[string]any
+	for _, item := range items {
+		draft := item.(map[string]any)
+		revisions = append(revisions, map[string]any{"id": draft["id"], "expectedRevision": draft["revision"]})
+	}
+	if revisions[0]["expectedRevision"] != jsonMap(t, updatedDraft.body, "data")["revision"] {
+		t.Fatal("group list lost the edited draft revision")
+	}
+	for _, token := range []string{e2eUserToken, e2eFamilyToken} {
+		client.json(t, http.MethodPost, "/v1/support-sessions/"+sessionID+"/livekit-token", token, "", map[string]any{}, http.StatusOK)
+	}
+	reviewBody := map[string]any{"expectedSessionRevision": jsonNumber(t, reviewing.body, "data", "revision"), "drafts": revisions}
+	saved := client.json(t, http.MethodPost, "/v1/support-sessions/"+sessionID+"/complete-guide-review", e2eFamilyToken, keyPrefix+"save", reviewBody, http.StatusCreated)
+	replayedSave := client.json(t, http.MethodPost, "/v1/support-sessions/"+sessionID+"/complete-guide-review", e2eFamilyToken, keyPrefix+"save", reviewBody, http.StatusCreated)
 	assertIdempotentReplay(t, saved, replayedSave)
-	if jsonString(t, saved.body, "data", "supportSession", "status") != "GUIDE_SAVED" {
-		t.Fatal("save ended call")
+	if jsonString(t, saved.body, "data", "supportSession", "status") != "ENDED" {
+		t.Fatal("save did not end support")
 	}
 	sessionData := jsonMap(t, saved.body, "data", "supportSession")
-	if sessionData["endedAt"] != nil || sessionData["endReason"] != nil {
-		t.Fatal("save set terminal fields")
+	if sessionData["endedAt"] == nil || sessionData["endReason"] != "GUIDE_SAVED" {
+		t.Fatal("save did not set terminal fields")
 	}
-	client.json(t, http.MethodPost, "/v1/support-sessions/"+sessionID+"/livekit-token", e2eUserToken, "", map[string]any{}, http.StatusOK)
-	client.json(t, http.MethodPost, "/v1/support-sessions/"+sessionID+"/livekit-token", e2eFamilyToken, "", map[string]any{}, http.StatusOK)
-	guideID := jsonString(t, saved.body, "data", "guide", "id")
+	for _, token := range []string{e2eUserToken, e2eFamilyToken} {
+		client.json(t, http.MethodPost, "/v1/support-sessions/"+sessionID+"/livekit-token", token, "", map[string]any{}, http.StatusConflict)
+	}
+	savedGuides, ok := jsonMap(t, saved.body, "data")["guides"].([]any)
+	if !ok || len(savedGuides) != 2 {
+		t.Fatal("save did not return both guides")
+	}
+	guideID := jsonString(t, savedGuides[0].(map[string]any), "id")
+	client.json(t, http.MethodGet, "/v1/guides/"+jsonString(t, savedGuides[1].(map[string]any), "id"), e2eUserToken, "", nil, http.StatusOK)
 	client.json(t, http.MethodGet, "/v1/guides", e2eUserToken, "", nil, http.StatusOK)
 	client.json(t, http.MethodGet, "/v1/guides/"+guideID, e2eUserToken, "", nil, http.StatusOK)
 	client.json(t, http.MethodGet, "/v1/artifacts/"+unusedArtifactID+"/content", e2eFamilyToken, "", nil, http.StatusNotFound)
@@ -340,15 +363,6 @@ func TestServerRuntimeE2E(t *testing.T) {
 		"expectedRevision": jsonNumber(t, moved.body, "data", "revision"),
 	}, http.StatusOK)
 
-	endBody := map[string]any{"expectedSessionRevision": jsonNumber(t, saved.body, "data", "supportSession", "revision")}
-	client.json(t, http.MethodPost, "/v1/support-sessions/"+sessionID+"/end", e2eUserToken, keyPrefix+"forbidden-end", endBody, http.StatusForbidden)
-	ended := client.json(t, http.MethodPost, "/v1/support-sessions/"+sessionID+"/end", e2eFamilyToken, keyPrefix+"end", endBody, http.StatusOK)
-	if jsonString(t, ended.body, "data", "status") != "ENDED" {
-		t.Fatal("call did not end")
-	}
-	endedReplay := client.json(t, http.MethodPost, "/v1/support-sessions/"+sessionID+"/end", e2eFamilyToken, keyPrefix+"end", endBody, http.StatusOK)
-	assertIdempotentReplay(t, ended, endedReplay)
-	client.json(t, http.MethodPost, "/v1/support-sessions/"+sessionID+"/livekit-token", e2eFamilyToken, "", map[string]any{}, http.StatusConflict)
 	secondRun := client.json(t, http.MethodPost, "/v1/guide-runs", e2eUserToken, keyPrefix+"run-support", map[string]any{"guideId": guideID}, http.StatusCreated)
 	secondRunID := jsonString(t, secondRun.body, "data", "id")
 	secondScreenshot := client.multipart(t, "/v1/artifacts", e2eUserToken, keyPrefix+"second-screenshot", map[string]string{

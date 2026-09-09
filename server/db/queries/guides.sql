@@ -360,6 +360,7 @@ ORDER BY material.captured_at, material.sequence;
 INSERT INTO guide_drafts (
     id,
     support_session_id,
+    position,
     title,
     steps,
     status,
@@ -369,6 +370,7 @@ INSERT INTO guide_drafts (
 ) VALUES (
     sqlc.arg(id),
     sqlc.arg(support_session_id),
+    sqlc.arg(position),
     sqlc.arg(title),
     sqlc.arg(steps),
     'EDITING',
@@ -429,9 +431,10 @@ WHERE id = $1
 FOR UPDATE;
 
 -- name: GetGuideSessionByDraftID :one
-SELECT *
-FROM support_sessions
-WHERE guide_draft_id = $1;
+SELECT session.*
+FROM support_sessions session
+JOIN guide_drafts draft ON draft.support_session_id = session.id
+WHERE draft.id = $1;
 
 -- name: ListAllowedGuideDraftArtifacts :many
 SELECT a.id
@@ -541,15 +544,18 @@ WHERE batch.support_session_id = sqlc.arg(session_id)
 UPDATE guide_drafts
 SET
     status = 'SAVED',
+    guide_id = sqlc.arg(guide_id),
     updated_at = sqlc.arg(updated_at),
     revision = revision + 1
 WHERE id = sqlc.arg(id)
 RETURNING *;
 
--- name: SaveGuideInSession :one
+-- name: FinishGuideSession :one
 UPDATE support_sessions
 SET
-    status = 'GUIDE_SAVED',
+    status = 'ENDED',
+    ended_at = sqlc.arg(updated_at),
+    end_reason = 'GUIDE_SAVED',
     guide_material_batch_id = NULL,
     guide_generation_job_id = NULL,
     guide_id = sqlc.arg(guide_id),
@@ -742,3 +748,14 @@ SET
     revision = revision + 1
 WHERE id = sqlc.arg(id)
 RETURNING *;
+
+-- name: ListSessionGuideDraftRows :many
+SELECT * FROM guide_drafts
+WHERE support_session_id = $1
+ORDER BY position;
+
+-- name: LockSessionGuideDraftRows :many
+SELECT * FROM guide_drafts
+WHERE support_session_id = $1
+ORDER BY position
+FOR UPDATE;

@@ -21,6 +21,7 @@ import type {
   EndSupportSessionInput,
   GuideDetail,
   GuideDraft,
+  CompleteGuideReviewInput,
   GuideGenerationJob,
   GuideMaterial,
   GuideMaterialBatch,
@@ -282,6 +283,25 @@ export class HttpMiteApi implements MiteApi {
   ): Promise<GuideGenerationJob> {
     return this.#request(
       `/v1/guide-generation-jobs/${encodeId(jobId)}/retry`,
+      { method: 'POST', body: JSON.stringify(input) },
+      operation,
+    )
+  }
+
+  async listSessionGuideDrafts(sessionId: string): Promise<GuideDraft[]> {
+    const data = await this.#request<{ items: GuideDraft[] }>(
+      `/v1/support-sessions/${encodeId(sessionId)}/guide-drafts`,
+    )
+    return data.items
+  }
+
+  completeGuideReview(
+    sessionId: string,
+    input: CompleteGuideReviewInput,
+    operation: IdempotentOperation,
+  ): Promise<{ guides: GuideDetail[]; supportSession: SupportSession }> {
+    return this.#request(
+      `/v1/support-sessions/${encodeId(sessionId)}/complete-guide-review`,
       { method: 'POST', body: JSON.stringify(input) },
       operation,
     )

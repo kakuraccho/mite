@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
   Artifact,
   GuideDetail,
+  GuideDraft,
   GuideRun,
   MiteApi,
   SupportRequest,
@@ -57,7 +58,7 @@ const activeSession: SupportSession = {
     audio: true,
     screenShare: true,
     periodicCapture: true,
-    textVersion: 'v3',
+    textVersion: 'v4',
   },
   consentedAt: timestamp,
   startedAt: timestamp,
@@ -1001,7 +1002,7 @@ describe('UserClient', () => {
         audio: true,
         screenShare: true,
         periodicCapture: true,
-        textVersion: 'v3',
+        textVersion: 'v4',
       },
     })
     expect(acceptSupportSession.mock.calls[0]?.[2]).toEqual({
@@ -1265,7 +1266,7 @@ describe('UserClient', () => {
 })
 
 it.each([true, false])(
-  'pauses only video through guide creation and restores prior sharing (%s), preserving the hidden call',
+  'keeps audio through generation and review, then ends support on save (previous sharing: %s)',
   async (sharedBeforeCreation) => {
     let serverSession = activeSession
     const request = supportRequest(activeSession.id)
@@ -1316,12 +1317,14 @@ it.each([true, false])(
       getGuideMaterialBatch: vi
         .fn()
         .mockResolvedValue({ batch: { status: 'COMPLETED' }, materials: [] }),
-      getGuideDraft: vi.fn().mockResolvedValue({
-        id: 'draft_1',
-        title: '確認する手順',
-        steps: guide.currentVersion.steps,
-        revision: 1,
-      }),
+      listSessionGuideDrafts: vi.fn().mockResolvedValue([
+        {
+          id: 'draft_1',
+          title: '確認する手順',
+          steps: guide.currentVersion.steps,
+          revision: 1,
+        },
+      ]),
       listGuides: vi.fn().mockResolvedValue([guide]),
       getGuide: vi.fn().mockResolvedValue(guide),
       createGuideRun: vi.fn().mockResolvedValue(guideRun),
@@ -1379,74 +1382,55 @@ it.each([true, false])(
     }
     await act(async () => collapse())
     expect(desktop.setOverlayMode).toHaveBeenLastCalledWith('COLLAPSED')
-    for (const status of [
-      'GENERATING_GUIDE',
-      'REVIEWING_GUIDE',
-      'GUIDE_SAVED',
-    ] as const) {
+    for (const status of ['GENERATING_GUIDE', 'REVIEWING_GUIDE'] as const) {
       serverSession = {
         ...serverSession,
         status,
         guideDecision: 'CREATE',
-        guideMaterialBatchId: status === 'GUIDE_SAVED' ? null : 'batch_1',
+        guideMaterialBatchId: 'batch_1',
         guideDraftId: status !== 'GENERATING_GUIDE' ? 'draft_1' : null,
-        guideId: status === 'GUIDE_SAVED' ? guide.id : null,
+        guideId: null,
         revision: serverSession.revision + 1,
       }
       await act(async () => refresh())
-      // LiveKit can acknowledge an earlier unpublish after the guide is saved.
-      if (status === 'GUIDE_SAVED' && sharedBeforeCreation)
+      // The pending video unpublish can finish while review is loading.
+      if (status === 'REVIEWING_GUIDE' && sharedBeforeCreation)
         await act(async () => finishPause())
       await act(async () => vi.advanceTimersByTimeAsync(10000))
       expect(media.disconnect).not.toHaveBeenCalled()
       expect(media.stopScreenShare).toHaveBeenCalledTimes(
         sharedBeforeCreation ? 1 : 2,
       )
-      expect(media.startScreenShare).toHaveBeenCalledTimes(
-        status === 'GUIDE_SAVED' && sharedBeforeCreation ? 2 : 1,
-      )
+      expect(media.startScreenShare).toHaveBeenCalledTimes(1)
       expect(desktop.saveCapture).toHaveBeenCalledTimes(2)
       expect(desktop.setOverlayMode).toHaveBeenLastCalledWith('COLLAPSED')
     }
-    fireEvent.focus(
-      screen.getByRole('button', { name: '家族に相談するメニューを開く' }),
-    )
-    expect(
-      screen.getByRole('dialog', { name: '手順を保存しました' }),
-    ).toBeTruthy()
-    await act(async () =>
-      fireEvent.click(screen.getByRole('button', { name: '閉じる' })),
-    )
-    expect(media.disconnect).not.toHaveBeenCalled()
-    await act(async () =>
-      fireEvent.click(screen.getByRole('button', { name: 'この手順を始める' })),
-    )
-    expect(screen.getByText('戻るボタンを押します')).toBeTruthy()
-    expect(
-      screen.getByRole('button', { name: '通話中の家族に聞けます' }),
-    ).toBeDisabled()
-    await act(async () => callbacks.onStateChange('RECONNECTING'))
-    await act(async () => callbacks.onStateChange('CONNECTED'))
-    await act(async () =>
-      fireEvent.click(
-        screen.getByRole('button', { name: '画面全体の共有を再開する' }),
-      ),
-    )
-    expect(media.startScreenShare).toHaveBeenCalledTimes(
-      sharedBeforeCreation ? 3 : 2,
-    )
-    expect(desktop.prepareSpeakerVolume).toHaveBeenCalledOnce()
-    await act(async () => vi.advanceTimersByTimeAsync(10000))
-    expect(desktop.saveCapture).toHaveBeenCalledTimes(2)
     serverSession = {
       ...serverSession,
       status: 'ENDED',
+      guideId: guide.id,
+      guideMaterialBatchId: null,
       endReason: 'GUIDE_SAVED',
       endedAt: timestamp,
       revision: serverSession.revision + 1,
     }
     await act(async () => refresh())
     expect(media.disconnect).toHaveBeenCalledOnce()
+    expect(media.startScreenShare).toHaveBeenCalledTimes(1)
+    expect(desktop.saveCapture).toHaveBeenCalledTimes(2)
+    fireEvent.focus(
+      screen.getByRole('button', { name: '家族に相談するメニューを開く' }),
+    )
+    expect(
+      screen.getByRole('heading', { name: '相談が終わりました' }),
+    ).toBeTruthy()
+    expect(
+      screen.queryByRole('button', { name: '画面全体の共有を再開する' }),
+    ).toBeNull()
+    await act(async () =>
+      fireEvent.click(screen.getByRole('button', { name: '閉じる' })),
+    )
+    expect(api.listGuides).toHaveBeenCalled()
   },
 )
 
@@ -1493,12 +1477,14 @@ it.each(['GENERATING_GUIDE', 'REVIEWING_GUIDE'] as const)(
             materials: [],
           }),
           getArtifactContent: vi.fn().mockResolvedValue(new Blob(['jpeg'])),
-          getGuideDraft: vi.fn().mockResolvedValue({
-            id: 'draft_1',
-            title: '確認する手順',
-            steps: guide.currentVersion.steps,
-            revision: 1,
-          }),
+          listSessionGuideDrafts: vi.fn().mockResolvedValue([
+            {
+              id: 'draft_1',
+              title: '確認する手順',
+              steps: guide.currentVersion.steps,
+              revision: 1,
+            },
+          ]),
         })}
       />,
     )
@@ -1652,4 +1638,59 @@ it('restores a saved call and an in-progress guide after restart without schedul
   expect(screen.getByLabelText('通話の経過時間').textContent).not.toBe(
     '通話 0:00',
   )
+})
+
+it('利用者も同じ支援の全ガイドのタイトル・ステップ数・内容を閲覧できる', async () => {
+  const drafts: GuideDraft[] = ['ログインする', '住所を変更する'].map(
+    (title, index) => ({
+      id: `draft_${index}`,
+      supportSessionId: activeSession.id,
+      title,
+      steps: [
+        {
+          position: 1,
+          artifactId: `artifact_${index}`,
+          instruction: `${title}ボタンを押す`,
+        },
+      ],
+      status: 'EDITING',
+      revision: 1,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }),
+  )
+  const session = {
+    ...activeSession,
+    status: 'REVIEWING_GUIDE',
+    guideDecision: 'CREATE',
+    guideDraftId: drafts[0]!.id,
+  }
+  const api = makeApi({
+    listSupportRequests: vi
+      .fn()
+      .mockResolvedValue([supportRequest(session.id)]),
+    getSupportRequest: vi.fn().mockResolvedValue(supportRequest(session.id)),
+    getSupportSession: vi.fn().mockResolvedValue(session),
+    listSessionGuideDrafts: vi.fn().mockResolvedValue(drafts),
+    getArtifactContent: vi.fn().mockResolvedValue(new Blob()),
+  })
+  render(
+    <UserClient
+      api={api}
+      runtime={runtime}
+      desktop={makeDesktop()}
+      storage={new MemoryStorage()}
+      createEventStream={eventStreamFactory}
+    />,
+  )
+  for (const draft of drafts) {
+    expect(
+      await screen.findByRole('heading', { name: draft.title }),
+    ).toBeVisible()
+    expect(screen.getByText(draft.steps[0]!.instruction)).toBeVisible()
+  }
+  expect(api.listSessionGuideDrafts).toHaveBeenCalledWith(session.id)
+  expect(
+    screen.queryByRole('button', { name: 'レビュー完了' }),
+  ).not.toBeInTheDocument()
 })
