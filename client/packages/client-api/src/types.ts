@@ -48,6 +48,7 @@ export type SaveGuideDraftInput = Schema<'SaveGuideDraftRequest'>
 export type CreateGuideRunInput = Schema<'CreateGuideRunRequest'>
 export type UpdateGuideRunInput = Schema<'UpdateGuideRunRequest'>
 export type CompleteGuideRunInput = Schema<'CompleteGuideRunRequest'>
+export type CancelGuideRunInput = Schema<'CancelGuideRunRequest'>
 export type CreateSupportRequestFromGuideRunInput =
   Schema<'CreateSupportRequestFromGuideRunRequest'>
 export type EndSupportSessionWithoutGuideInput =

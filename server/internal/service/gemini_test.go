@@ -154,3 +154,59 @@ func TestParseGeminiResponseWithMultipleGuides(t *testing.T) {
 		t.Fatalf("guides=%+v, err=%v", guides, err)
 	}
 }
+
+func TestPrepareGuideImageKeepsValidCaptureBytes(t *testing.T) {
+	raw := jpegFixture(t, 42)
+	prepared, err := prepareGuideImage(raw)
+	if err != nil || !bytes.Equal(raw, prepared) {
+		t.Fatalf("valid capture was reencoded: %v", err)
+	}
+	if _, err := prepareGuideImage(raw[:len(raw)/2]); err == nil {
+		t.Fatal("truncated JPEG accepted")
+	}
+}
+
+type failedGeminiBody struct{}
+
+func (failedGeminiBody) Read([]byte) (int, error) { return 0, context.DeadlineExceeded }
+func (failedGeminiBody) Close() error             { return nil }
+
+func TestGeminiTimeoutWhileReadingBody(t *testing.T) {
+	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Body: failedGeminiBody{}, Header: make(http.Header)}, nil
+	})}
+	generator, err := NewGeminiGuideGenerator("https://example.test/v1beta", "secret", GeminiModel, GeminiPromptVersion, client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = generator.Generate(context.Background(), domain.GuideGenerationInput{Images: []domain.GuideGenerationInputImage{{JPEG: []byte{1}}}})
+	var failure *GuideGenerationFailure
+	if !errors.As(err, &failure) || failure.Code != domain.GuideGenerationAITimeout {
+		t.Fatalf("error=%v", err)
+	}
+}
+
+func TestGeminiHas150SecondBudgetAndRespectsShorterParentDeadline(t *testing.T) {
+	for _, budget := range []time.Duration{180 * time.Second, 20 * time.Second} {
+		ctx, cancel := context.WithTimeout(context.Background(), budget)
+		client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			deadline, ok := request.Context().Deadline()
+			remaining := time.Until(deadline)
+			want := min(budget, 150*time.Second)
+			if !ok || remaining > want || remaining < want-time.Second {
+				t.Errorf("HTTP budget=%v, want %v", remaining, want)
+			}
+			return nil, context.DeadlineExceeded
+		})}
+		generator, err := NewGeminiGuideGenerator("https://example.test/v1beta", "secret", GeminiModel, GeminiPromptVersion, client)
+		if err != nil {
+			cancel()
+			t.Fatal(err)
+		}
+		_, err = generator.Generate(ctx, domain.GuideGenerationInput{Images: []domain.GuideGenerationInputImage{{JPEG: []byte{1}}}})
+		if generationErrorCode(ctx, err) != domain.GuideGenerationAITimeout {
+			t.Errorf("error=%v", err)
+		}
+		cancel()
+	}
+}

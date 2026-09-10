@@ -143,7 +143,7 @@ AI_PROVIDER=mock
 
 `AI_BASE_URL`、`GEMINI_API_KEY`、`AI_MODEL`、`AI_PROMPT_VERSION` は、このモードでは未設定・空欄でも起動できます。既存値が残っていても使いません。プロセスの環境変数が `.env` より優先されるため、以前に `AI_PROVIDER` や `MITE_ENV` を設定していた場合はそちらも更新してください。
 
-Goサーバーを停止して、第3項の `go run ./cmd/api` で再起動します。起動ログに `using mock guide generator for development` が表示されます。DBには `20260909000400_update_support_consent_v4.sql` までのmigrationを適用しておきます。
+Goサーバーを停止して、第3項の `go run ./cmd/api` で再起動します。起動ログに `using mock guide generator for development` が表示されます。DBには `20260910000100_cancel_guide_run.sql` までのmigrationを適用しておきます。
 
 1. Windowsで両クライアントを起動し、相談・支援を開始します。
 2. 画面全体を5秒以上共有し、定期取得画像を1枚以上残します。mockでも画像が0件の場合はガイドを作成しません。

@@ -91,7 +91,7 @@ export function MarkingOverlay({ bridge }: { bridge: MarkingOverlayBridge }) {
                   .filter(Boolean)
                   .join('・')}
                 <br />
-                押しています
+                ボタンの操作
               </span>
             </div>
           ) : null}

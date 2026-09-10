@@ -4,7 +4,6 @@ import type { UserOverlayLayout, UserOverlayMode } from '../shared/overlay'
 
 export interface ScreenSharePreview {
   name: string
-  thumbnailDataUrl: string
 }
 
 export interface CaptureEntry {

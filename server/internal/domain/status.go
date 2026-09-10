@@ -117,15 +117,16 @@ type GuideRunStatus string
 const (
 	GuideRunInProgress       GuideRunStatus = "IN_PROGRESS"
 	GuideRunCompleted        GuideRunStatus = "COMPLETED"
+	GuideRunCancelled        GuideRunStatus = "CANCELLED"
 	GuideRunPausedForSupport GuideRunStatus = "PAUSED_FOR_SUPPORT"
 )
 
 func (s GuideRunStatus) Valid() bool {
-	return s == GuideRunInProgress || s == GuideRunCompleted || s == GuideRunPausedForSupport
+	return s == GuideRunInProgress || s == GuideRunCompleted || s == GuideRunCancelled || s == GuideRunPausedForSupport
 }
 
 func (s GuideRunStatus) CanTransitionTo(next GuideRunStatus) bool {
-	return s == GuideRunInProgress && (next == GuideRunCompleted || next == GuideRunPausedForSupport)
+	return s == GuideRunInProgress && (next == GuideRunCompleted || next == GuideRunCancelled || next == GuideRunPausedForSupport)
 }
 
 type GuideMaterialBatchStatus string

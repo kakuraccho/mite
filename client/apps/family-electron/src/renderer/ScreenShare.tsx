@@ -186,10 +186,9 @@ export function ScreenShare({
       )
       .slice(0, 8)
     setKeys(next)
-    if (!next.length) {
-      current.current = null
-      void liveSupport.sendGuidance(null).catch(onError)
-    } else send({ mode, x: 0.5, y: 0.5, buttons: 0, keys: next })
+    // An ordinary release allows the receiver to finish its minimum display.
+    // Explicit clear/focus loss/stop still use guidance.clear immediately.
+    send({ mode, x: 0.5, y: 0.5, buttons: 0, keys: next })
   }
 
   return (

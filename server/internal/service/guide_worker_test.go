@@ -267,3 +267,79 @@ func TestGuideWorkerCreatesAllDraftsOrRejectsWholeOutput(t *testing.T) {
 		})
 	}
 }
+
+type controlledGuideStorage struct {
+	repository.ObjectStorage
+	started chan string
+	release chan struct{}
+}
+
+func (s *controlledGuideStorage) Get(ctx context.Context, key string) (repository.StoredObject, error) {
+	select {
+	case s.started <- key:
+	case <-ctx.Done():
+		return repository.StoredObject{}, ctx.Err()
+	}
+	select {
+	case <-s.release:
+	case <-ctx.Done():
+		return repository.StoredObject{}, ctx.Err()
+	}
+	return s.ObjectStorage.Get(ctx, key)
+}
+
+func TestGuideInputLoadsConcurrentlyAndPreservesSequence(t *testing.T) {
+	worker, tx, _ := workerFixture(t, 8)
+	storage := &controlledGuideStorage{ObjectStorage: worker.storage, started: make(chan string, 9), release: make(chan struct{})}
+	worker.storage = storage
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	type result struct {
+		input domain.GuideGenerationInput
+		err   error
+	}
+	done := make(chan result, 1)
+	go func() { input, err := worker.loadInput(ctx, tx.generation); done <- result{input, err} }()
+	for range guideInputConcurrency {
+		select {
+		case <-storage.started:
+		case <-ctx.Done():
+			t.Fatal("image downloads were serialized")
+		}
+	}
+	select {
+	case <-storage.started:
+		t.Fatal("unbounded parallel image downloads")
+	default:
+	}
+	close(storage.release)
+	loaded := <-done
+	if loaded.err != nil {
+		t.Fatal(loaded.err)
+	}
+	for position, image := range loaded.input.Images {
+		if image.Sequence != position || len(image.JPEG) == 0 {
+			t.Fatalf("image %d lost its sequence/data", position)
+		}
+	}
+}
+
+func TestGuideInputCancellationStopsPendingDownloads(t *testing.T) {
+	worker, tx, _ := workerFixture(t, 8)
+	storage := &controlledGuideStorage{ObjectStorage: worker.storage, started: make(chan string, 9), release: make(chan struct{})}
+	worker.storage = storage
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { _, err := worker.loadInput(ctx, tx.generation); done <- err }()
+	<-storage.started
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("error=%v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("downloads did not stop after cancellation")
+	}
+}

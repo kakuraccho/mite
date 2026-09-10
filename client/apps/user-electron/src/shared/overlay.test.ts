@@ -29,3 +29,13 @@ describe('user overlay geometry', () => {
     expect(detailOverlayWidth(640)).toBe(640)
   })
 })
+
+it('fits floating guides into small primary work areas, including negative monitor coordinates', async () => {
+  const { calculateGuideBounds } = await import('./overlay')
+  expect(
+    calculateGuideBounds(
+      { x: -500, y: -200, width: 500, height: 400 },
+      { x: 2000, y: 2000, width: 560, height: 720 },
+    ),
+  ).toEqual({ x: -500, y: -200, width: 500, height: 400 })
+})

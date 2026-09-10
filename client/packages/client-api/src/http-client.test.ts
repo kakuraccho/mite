@@ -128,3 +128,88 @@ it('支援の全下書き一覧と全件確定を正しいパス・本文・キ�
   expect(JSON.parse(init?.body as string)).toEqual(input)
   expect(new Headers(init?.headers).get('Idempotency-Key')).toBe('review-key')
 })
+
+it('shares concurrent artifact requests and reuses recently loaded bytes only within the same API instance', async () => {
+  const fetch = vi.fn(async () => new Response(new Blob(['image'])))
+  const options = {
+    baseUrl: 'https://example.test',
+    token: 'one',
+    fetch: fetch as typeof globalThis.fetch,
+  }
+  const api = new HttpMiteApi(options)
+  const [first, second] = await Promise.all([
+    api.getArtifactContent('a'),
+    api.getArtifactContent('a'),
+  ])
+  expect(first).toBe(second)
+  expect(await api.getArtifactContent('a')).toBe(first)
+  expect(fetch).toHaveBeenCalledOnce()
+  await new HttpMiteApi({ ...options, token: 'two' }).getArtifactContent('a')
+  expect(fetch).toHaveBeenCalledTimes(2)
+})
+
+it('retries failed artifact loads and expires cached images after a minute', async () => {
+  const fetch = vi
+    .fn<typeof globalThis.fetch>()
+    .mockRejectedValueOnce(new Error('offline'))
+    .mockImplementation(async () => new Response(new Blob(['image'])))
+  const api = new HttpMiteApi({
+    baseUrl: 'https://example.test',
+    token: 'one',
+    fetch,
+  })
+  await expect(api.getArtifactContent('a')).rejects.toThrow('offline')
+  const first = await api.getArtifactContent('a')
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 60_001)
+  try {
+    expect(await api.getArtifactContent('a')).not.toBe(first)
+  } finally {
+    clock.mockRestore()
+  }
+  expect(fetch).toHaveBeenCalledTimes(3)
+})
+
+it('evicts least recently used artifact bytes when the memory budget is reached', async () => {
+  const fetch = vi.fn(
+    async () =>
+      ({
+        ok: true,
+        blob: async () => ({ size: 12 * 1024 * 1024 }),
+      }) as Response,
+  )
+  const api = new HttpMiteApi({
+    baseUrl: 'https://example.test',
+    token: 'one',
+    fetch: fetch as typeof globalThis.fetch,
+  })
+  await api.getArtifactContent('a')
+  await api.getArtifactContent('b')
+  await api.getArtifactContent('a')
+  await api.getArtifactContent('c')
+  expect(fetch).toHaveBeenCalledTimes(3)
+  await api.getArtifactContent('b')
+  expect(fetch).toHaveBeenCalledTimes(4)
+})
+
+it('sends early guide termination to the cancellation endpoint with its revision and retry key', async () => {
+  const fetch = vi.fn(async () =>
+    jsonResponse({ data: { id: 'run_1', status: 'CANCELLED', revision: 3 } }),
+  )
+  const api = new HttpMiteApi({
+    baseUrl: 'https://example.test',
+    token: 'one',
+    fetch: fetch as typeof globalThis.fetch,
+  })
+  expect(
+    await api.cancelGuideRun(
+      'run/1',
+      { expectedRevision: 2 },
+      { idempotencyKey: 'cancel-key' },
+    ),
+  ).toMatchObject({ status: 'CANCELLED' })
+  const [url, options] = fetch.mock.calls[0] as unknown as [string, RequestInit]
+  expect(url).toBe('https://example.test/v1/guide-runs/run%2F1/cancel')
+  expect(options.method).toBe('POST')
+  expect(JSON.parse(options.body as string)).toEqual({ expectedRevision: 2 })
+  expect(new Headers(options.headers).get('Idempotency-Key')).toBe('cancel-key')
+})

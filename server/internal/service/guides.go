@@ -137,6 +137,12 @@ type UpdateGuideRunCommand struct {
 	Action           domain.GuideRunAction
 }
 
+type CancelGuideRunCommand struct {
+	Meta             CommandMeta
+	RunID            domain.ID
+	ExpectedRevision int64
+}
+
 type CompleteGuideRunCommand struct {
 	Meta             CommandMeta
 	RunID            domain.ID
@@ -1250,6 +1256,14 @@ func (s *GuideService) UpdateGuideRun(ctx context.Context, command UpdateGuideRu
 }
 
 func (s *GuideService) CompleteGuideRun(ctx context.Context, command CompleteGuideRunCommand) (domain.GuideRun, error) {
+	return s.finishGuideRun(ctx, command, false)
+}
+
+func (s *GuideService) CancelGuideRun(ctx context.Context, command CancelGuideRunCommand) (domain.GuideRun, error) {
+	return s.finishGuideRun(ctx, CompleteGuideRunCommand(command), true)
+}
+
+func (s *GuideService) finishGuideRun(ctx context.Context, command CompleteGuideRunCommand, cancel bool) (domain.GuideRun, error) {
 	if err := validateActorRole(command.Meta.Actor, domain.RoleUser); err != nil {
 		return domain.GuideRun{}, err
 	}
@@ -1264,13 +1278,16 @@ func (s *GuideService) CompleteGuideRun(ctx context.Context, command CompleteGui
 	}
 	result := storedEnvelope[domain.GuideRun]{}
 	path := "/v1/guide-runs/" + string(command.RunID) + "/complete"
+	if cancel {
+		path = "/v1/guide-runs/" + string(command.RunID) + "/cancel"
+	}
 	_, events, err := s.idempotent(ctx, command.Meta, path, hash, 200, &result, func(tx repository.GuideTx) ([]domain.Event, error) {
 		unlockedRun, err := tx.GetRun(ctx, command.RunID, false)
 		if err != nil {
 			return nil, err
 		}
 		if unlockedRun.UserID != command.Meta.Actor.ID {
-			return nil, domain.NewError(domain.CodeForbidden, "対象のガイド利用を完了できない")
+			return nil, domain.NewError(domain.CodeForbidden, "対象のガイド利用を終了できない")
 		}
 		if err := tx.LockUser(ctx, unlockedRun.UserID); err != nil {
 			return nil, err
@@ -1283,16 +1300,20 @@ func (s *GuideService) CompleteGuideRun(ctx context.Context, command CompleteGui
 			return nil, err
 		}
 		if run.Status != domain.GuideRunInProgress {
-			return nil, domain.NewError(domain.CodeInvalidState, "ガイド利用を完了できない")
+			return nil, domain.NewError(domain.CodeInvalidState, "ガイド利用を終了できない")
 		}
-		count, err := tx.GetStepCount(ctx, run.GuideID, run.GuideVersionNumber)
-		if err != nil {
-			return nil, err
+		if cancel {
+			run, err = tx.CancelRun(ctx, run.ID, timestamp(s.now()))
+		} else {
+			count, countErr := tx.GetStepCount(ctx, run.GuideID, run.GuideVersionNumber)
+			if countErr != nil {
+				return nil, countErr
+			}
+			if !domain.CanCompleteGuideRun(run.CurrentStepNumber, count) {
+				return nil, domain.NewError(domain.CodeInvalidState, "最終ステップ以外では完了できない")
+			}
+			run, err = tx.CompleteRun(ctx, run.ID, timestamp(s.now()))
 		}
-		if !domain.CanCompleteGuideRun(run.CurrentStepNumber, count) {
-			return nil, domain.NewError(domain.CodeInvalidState, "最終ステップ以外では完了できない")
-		}
-		run, err = tx.CompleteRun(ctx, run.ID, timestamp(s.now()))
 		if err != nil {
 			return nil, err
 		}

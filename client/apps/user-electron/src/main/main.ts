@@ -591,6 +591,7 @@ const createWindow = () => {
   window.setAlwaysOnTop(true, 'floating')
   window.setMenuBarVisibility(false)
   collapseOverlayOnBlur(window, overlayController)
+  window.on('moved', () => overlayController?.keepGuideInWorkArea())
 
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   window.webContents.on('will-navigate', (event, url) => {

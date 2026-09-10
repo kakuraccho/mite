@@ -31,6 +31,7 @@ type GuideUseCases interface {
 	GetGuideRun(context.Context, domain.Actor, domain.ID) (domain.GuideRun, error)
 	UpdateGuideRun(context.Context, service.UpdateGuideRunCommand) (domain.GuideRun, error)
 	CompleteGuideRun(context.Context, service.CompleteGuideRunCommand) (domain.GuideRun, error)
+	CancelGuideRun(context.Context, service.CancelGuideRunCommand) (domain.GuideRun, error)
 	CreateSupportRequestFromGuideRun(context.Context, service.CreateSupportRequestFromGuideRunCommand) (service.GuideRunSupportRequestCreated, error)
 }
 
@@ -573,6 +574,35 @@ func (h *GuideHandler) CompleteGuideRun(ctx context.Context, request generated.C
 		}
 	}
 	return generated.CompleteGuideRun200JSONResponse(generated.GuideRunResponse{Data: guideRunToAPI(value)}), nil
+}
+
+func (h *GuideHandler) CancelGuideRun(ctx context.Context, request generated.CancelGuideRunRequestObject) (generated.CancelGuideRunResponseObject, error) {
+	meta, err := commandMeta(ctx, request.Params.IdempotencyKey)
+	if err == nil && request.Body == nil {
+		err = domain.NewError(domain.CodeValidationError, "リクエスト本文が必要")
+	}
+	var value domain.GuideRun
+	if err == nil {
+		value, err = h.service.CancelGuideRun(ctx, service.CancelGuideRunCommand{Meta: meta, RunID: domain.ID(request.Id), ExpectedRevision: request.Body.ExpectedRevision})
+	}
+	if err != nil {
+		apiErr := makeGuideAPIError(ctx, err)
+		switch apiErr.Status {
+		case 400:
+			return generated.CancelGuideRun400JSONResponse{BadRequestJSONResponse: generated.BadRequestJSONResponse(apiErr.Response)}, nil
+		case 401:
+			return generated.CancelGuideRun401JSONResponse{UnauthorizedJSONResponse: generated.UnauthorizedJSONResponse(apiErr.Response)}, nil
+		case 403:
+			return generated.CancelGuideRun403JSONResponse{ForbiddenJSONResponse: generated.ForbiddenJSONResponse(apiErr.Response)}, nil
+		case 404:
+			return generated.CancelGuideRun404JSONResponse{NotFoundJSONResponse: generated.NotFoundJSONResponse(apiErr.Response)}, nil
+		case 409:
+			return generated.CancelGuideRun409JSONResponse{ConflictJSONResponse: generated.ConflictJSONResponse{Body: apiErr.Response, Headers: generated.ConflictResponseHeaders{RetryAfter: apiErr.RetryAfter}}}, nil
+		default:
+			return generated.CancelGuideRun500JSONResponse{InternalErrorJSONResponse: generated.InternalErrorJSONResponse(apiErr.Response)}, nil
+		}
+	}
+	return generated.CancelGuideRun200JSONResponse(generated.GuideRunResponse{Data: guideRunToAPI(value)}), nil
 }
 
 func (h *GuideHandler) CreateSupportRequestFromGuideRun(ctx context.Context, request generated.CreateSupportRequestFromGuideRunRequestObject) (generated.CreateSupportRequestFromGuideRunResponseObject, error) {

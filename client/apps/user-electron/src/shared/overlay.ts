@@ -3,10 +3,13 @@ export const overlayEntryWidth = 320
 export const overlayDetailMinimumWidth = 720
 export const overlayDetailMaximumWidth = 1_040
 
-export type UserOverlayMode = 'COLLAPSED' | 'ENTRY' | 'DETAIL'
+export type UserOverlayMode = 'COLLAPSED' | 'ENTRY' | 'DETAIL' | 'GUIDE'
 
 export const isUserOverlayMode = (value: unknown): value is UserOverlayMode =>
-  value === 'COLLAPSED' || value === 'ENTRY' || value === 'DETAIL'
+  value === 'COLLAPSED' ||
+  value === 'ENTRY' ||
+  value === 'DETAIL' ||
+  value === 'GUIDE'
 
 export interface OverlayRectangle {
   x: number
@@ -48,5 +51,32 @@ export const calculateOverlayBounds = (
     y: reservedBounds.y,
     width,
     height: reservedBounds.height,
+  }
+}
+
+// Keep a dragged guide entirely within the primary display's usable area.
+export const calculateGuideBounds = (
+  workArea: OverlayRectangle,
+  previous?: OverlayRectangle | null,
+): OverlayRectangle => {
+  const width = Math.min(560, workArea.width)
+  const height = Math.min(720, workArea.height)
+  return {
+    x: Math.max(
+      workArea.x,
+      Math.min(
+        previous?.x ?? workArea.x + workArea.width - width - 24,
+        workArea.x + workArea.width - width,
+      ),
+    ),
+    y: Math.max(
+      workArea.y,
+      Math.min(
+        previous?.y ?? workArea.y + 24,
+        workArea.y + workArea.height - height,
+      ),
+    ),
+    width,
+    height,
   }
 }
