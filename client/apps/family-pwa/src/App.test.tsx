@@ -18,6 +18,7 @@ const pendingRequest: SupportRequest = {
   supportSessionId: null,
   guideContext: null,
   acknowledgementKind: null,
+  acknowledgedAt: null,
   estimatedSupportAt: null,
   revision: 1,
   createdAt: '2026-09-11T00:00:00Z',
@@ -36,7 +37,7 @@ beforeEach(() => {
   localStorage.clear()
   vi.useFakeTimers()
   vi.spyOn(HttpMiteApi.prototype, 'getCompanionStatus').mockResolvedValue({
-    user: { id: 'user_demo', displayName: '利用者' },
+    user: { id: 'user_demo', role: 'USER', displayName: '利用者' },
     presence: {
       userId: 'user_demo',
       status: 'ONLINE',
@@ -95,7 +96,10 @@ it('取得が終わるまで依頼なしと表示しない', async () => {
 
 it('GETが5秒を超えても取得結果を表示できる', async () => {
   vi.mocked(HttpMiteApi.prototype.listSupportRequests).mockImplementation(
-    () => new Promise((resolve) => { setTimeout(() => resolve([pendingRequest]), 6_000) }),
+    () =>
+      new Promise((resolve) => {
+        setTimeout(() => resolve([pendingRequest]), 6_000)
+      }),
   )
   render(<App />)
   await signIn()
