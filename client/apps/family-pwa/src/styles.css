@@ -1,15 +1,17 @@
+@import '../../../packages/ui/src/tokens.css';
+
 :root {
-  font-family:
-    Inter, 'Yu Gothic UI', 'Hiragino Kaku Gothic ProN', system-ui, sans-serif;
-  color: #22312c;
-  background: #eef3f0;
+  font-family: var(--mite-font);
+  color: var(--mite-ink);
+  background: var(--mite-background);
   font-synthesis: none;
-  --green: #285548;
-  --green-dark: #17372f;
-  --green-soft: #e5f0eb;
-  --muted: #65726d;
-  --line: #dce3df;
-  --cream: #fbfaf5;
+  line-height: 1.6;
+  --green: var(--mite-green-800);
+  --green-dark: var(--mite-green-950);
+  --green-soft: var(--mite-green-100);
+  --muted: var(--mite-muted);
+  --line: var(--mite-line);
+  --cream: var(--mite-cream);
 }
 
 * {
@@ -23,8 +25,8 @@ body,
   margin: 0;
 }
 body {
-  min-height: 100vh;
-  background: #eef3f0;
+  min-height: 100dvh;
+  background: var(--mite-background);
 }
 button,
 input {
@@ -33,11 +35,11 @@ input {
 button {
   min-height: 48px;
   padding: 11px 16px;
-  border: 1px solid #c8ddd4;
-  border-radius: 12px;
+  border: 1px solid var(--mite-input-line);
+  border-radius: var(--mite-radius-sm);
   color: var(--green-dark);
   background: white;
-  font-weight: 800;
+  font-weight: 700;
   cursor: pointer;
 }
 button:disabled {
@@ -46,7 +48,7 @@ button:disabled {
 }
 button:focus-visible,
 input:focus-visible {
-  outline: 3px solid #a95600;
+  outline: 3px solid var(--mite-focus);
   outline-offset: 3px;
 }
 button.primary {
@@ -55,7 +57,7 @@ button.primary {
   background: var(--green);
 }
 .text-button {
-  min-height: 40px;
+  min-height: 48px;
   padding: 7px 12px;
   border: 0;
   background: transparent;
@@ -63,10 +65,10 @@ button.primary {
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 8px;
 }
 .app-shell {
-  min-height: 100vh;
+  min-height: 100dvh;
   padding-bottom: env(safe-area-inset-bottom);
 }
 header {
@@ -78,8 +80,8 @@ header {
   align-items: center;
   justify-content: space-between;
   padding: calc(10px + env(safe-area-inset-top)) 20px 10px;
-  border-bottom: 1px solid rgb(29 68 57 / 12%);
-  background: rgb(251 252 250 / 96%);
+  border-bottom: 1px solid var(--line);
+  background: var(--mite-surface);
 }
 .brand {
   display: flex;
@@ -95,11 +97,11 @@ header {
   color: white;
   background: var(--green);
   font-size: 20px;
-  font-weight: 900;
+  font-weight: 700;
 }
 .brand strong {
   color: var(--green-dark);
-  font-size: 18px;
+  font-size: 22px;
 }
 main {
   display: grid;
@@ -110,44 +112,45 @@ main {
 }
 .card {
   padding: 22px;
-  border: 1px solid rgb(31 63 53 / 11%);
-  border-radius: 20px;
-  background: rgb(255 255 253 / 94%);
-  box-shadow: 0 10px 30px rgb(30 53 46 / 8%);
+  border: 1px solid var(--line);
+  border-radius: var(--mite-radius-lg);
+  background: var(--mite-surface);
+  box-shadow: var(--mite-soft-shadow);
 }
 .hero {
-  background: var(--green-dark);
-  color: white;
+  border-top: 3px solid var(--green);
+  background: var(--green-soft);
+  color: var(--green-dark);
 }
 .eyebrow {
   margin: 0 0 8px;
   color: inherit;
-  font-size: 12px;
-  font-weight: 850;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  opacity: 0.75;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--muted);
 }
 .presence {
   display: flex;
   align-items: center;
   gap: 11px;
   font-size: clamp(21px, 6vw, 28px);
-  font-weight: 900;
+  font-weight: 700;
 }
 .presence i {
   width: 14px;
   height: 14px;
-  border: 3px solid rgb(255 255 255 / 35%);
+  flex: 0 0 14px;
+  border: 3px solid white;
   border-radius: 50%;
   background: #a4aea9;
 }
 .presence.online i {
-  background: #73d5a4;
-  box-shadow: 0 0 0 5px rgb(115 213 164 / 18%);
+  background: var(--green);
+  box-shadow: 0 0 0 1px var(--mite-green-600);
 }
 .presence.connecting i {
-  background: #f2c46d;
+  background: var(--mite-gold);
 }
 .last-seen {
   margin: 14px 0 0;
@@ -155,8 +158,8 @@ main {
 }
 .note {
   margin: 16px 0 0;
-  color: rgb(255 255 255 / 72%);
-  font-size: 12px;
+  color: var(--muted);
+  font-size: 14px;
   line-height: 1.65;
 }
 .section-heading {
@@ -173,7 +176,7 @@ p {
 h1 {
   margin-bottom: 0;
   font-size: 24px;
-  line-height: 1.35;
+  line-height: 1.5;
 }
 h2 {
   margin-bottom: 8px;
@@ -182,35 +185,35 @@ h2 {
 .badge {
   flex: none;
   padding: 6px 10px;
-  border-radius: 999px;
-  color: #76501b;
-  background: #f5ead1;
-  font-size: 12px;
-  font-weight: 850;
+  border-radius: 6px;
+  color: var(--mite-warning);
+  background: var(--mite-gold-soft);
+  font-size: 14px;
+  font-weight: 700;
 }
 blockquote {
   padding: 16px;
   margin: 20px 0 8px;
-  border-left: 4px solid #438872;
+  border-left: 3px solid var(--mite-gold);
   border-radius: 0 12px 12px 0;
-  background: #f2f8f5;
+  background: var(--mite-gold-soft);
   font-size: 17px;
-  font-weight: 700;
+  font-weight: 400;
   line-height: 1.65;
 }
 .requested-at,
 .empty-copy {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.65;
 }
 .acknowledged {
   padding: 12px 14px;
   margin: 16px 0;
-  border-radius: 12px;
+  border-radius: var(--mite-radius-sm);
   color: var(--green-dark);
   background: var(--green-soft);
-  font-weight: 800;
+  font-weight: 700;
 }
 .actions {
   display: grid;
@@ -227,16 +230,16 @@ label {
   display: grid;
   gap: 7px;
   color: var(--muted);
-  font-size: 13px;
-  font-weight: 750;
+  font-size: 14px;
+  font-weight: 700;
 }
 input {
   width: 100%;
   min-height: 48px;
   padding: 10px 12px;
-  border: 1px solid #bccac4;
-  border-radius: 10px;
-  color: #22312c;
+  border: 1px solid var(--mite-input-line);
+  border-radius: var(--mite-radius-sm);
+  color: var(--mite-ink);
   background: white;
 }
 .schedule button {
@@ -246,13 +249,13 @@ input {
 .desktop-callout {
   padding: 16px;
   margin-top: 20px;
-  border-radius: 14px;
+  border-radius: var(--mite-radius-md);
   background: var(--cream);
 }
 .desktop-callout p {
   margin: 6px 0 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
 }
 .notification-card {
@@ -264,26 +267,26 @@ input {
 .notification-card p {
   margin-bottom: 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
 }
 .error {
   padding: 13px 15px;
-  border-radius: 12px;
-  color: #7d2929;
-  background: #faeaea;
+  border-radius: var(--mite-radius-sm);
+  color: var(--mite-danger);
+  background: var(--mite-danger-soft);
   font-size: 14px;
   font-weight: 700;
 }
 footer {
   padding: 0 24px 30px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1.6;
   text-align: center;
 }
 .setup {
-  min-height: 100vh;
+  min-height: 100dvh;
   place-content: center;
 }
 .setup-card {
@@ -302,7 +305,7 @@ footer {
 @media (max-width: 520px) {
   .card {
     padding: 19px;
-    border-radius: 17px;
+    border-radius: var(--mite-radius-lg);
   }
   .actions,
   .notification-card {
@@ -310,5 +313,98 @@ footer {
   }
   .notification-card button {
     width: 100%;
+  }
+}
+
+button {
+  line-height: 1.5;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+button:not(:disabled):hover {
+  border-color: var(--green);
+  background: var(--green-soft);
+}
+
+button.primary {
+  box-shadow: 0 2px 0 var(--green-dark);
+}
+
+button.primary:not(:disabled):hover {
+  background: var(--green-dark);
+}
+
+button:not(:disabled):active {
+  box-shadow: inset 0 2px 3px rgb(0 0 0 / 12%);
+}
+
+input {
+  min-width: 0;
+  font-weight: 400;
+}
+
+input::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+.card,
+.section-heading > div {
+  min-width: 0;
+}
+
+.card p,
+blockquote,
+.acknowledged {
+  overflow-wrap: anywhere;
+}
+
+.request-card .section-heading {
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.request-card .empty-copy {
+  margin: 20px 0 0;
+}
+
+.acknowledged {
+  border: 1px solid var(--mite-green-200);
+}
+
+.desktop-callout {
+  border: 1px solid var(--line);
+}
+
+.notification-card {
+  box-shadow: none;
+}
+
+.setup-card {
+  border-top: 3px solid var(--green);
+}
+
+@media (max-width: 374px) {
+  header {
+    gap: 12px;
+    padding-inline: 14px;
+    flex-wrap: wrap;
+  }
+
+  .section-heading {
+    flex-wrap: wrap;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+    scroll-behavior: auto !important;
   }
 }

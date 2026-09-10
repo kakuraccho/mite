@@ -621,7 +621,7 @@ function GuideList({
         <LoadingState>手順を読み込んでいます</LoadingState>
       ) : guides.length === 0 ? (
         <EmptyState
-          symbol="☘"
+          symbol="▤"
           title="保存した手順はまだありません"
           description="困ったときは、画面の左端に触れると家族へ相談できます。"
           action={<Button onClick={onAskForHelp}>家族に相談する</Button>}
