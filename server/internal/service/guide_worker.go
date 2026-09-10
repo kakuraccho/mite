@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	guideAttemptTimeout   = 180 * time.Second
+	guideAttemptTimeout   = 300 * time.Second
 	guidePollInterval     = 500 * time.Millisecond
 	guideInputConcurrency = 4
 )

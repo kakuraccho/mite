@@ -1,0 +1,36 @@
+/* Shared by both desktop clients and the family companion.
+   Quiet surfaces keep the family's words and the next action in focus. */
+:root {
+  --mite-font:
+    'BIZ UDPGothic', 'Yu Gothic UI', 'Hiragino Kaku Gothic ProN',
+    'Noto Sans CJK JP', Meiryo, sans-serif;
+  --mite-ink: #253b32;
+  --mite-muted: #58675f;
+  --mite-background: #f3f5f1;
+  --mite-surface: #ffffff;
+  --mite-green-950: #203f32;
+  --mite-green-900: #294f3e;
+  --mite-green-800: #345f4b;
+  --mite-green-700: #416f58;
+  --mite-green-600: #547c65;
+  --mite-green-200: #c8d8cc;
+  --mite-green-100: #e7efe7;
+  --mite-green-50: #f2f6f0;
+  --mite-cream: #f8f9f5;
+  --mite-gold: #b38332;
+  --mite-gold-soft: #f8f1df;
+  --mite-danger: #a03936;
+  --mite-danger-soft: #fbefed;
+  --mite-warning: #79531b;
+  --mite-warning-soft: #fbf3e2;
+  --mite-line: #d8e0d7;
+  --mite-input-line: #7e9183;
+  --mite-focus: #925800;
+  --mite-image-background: #e8ede7;
+  --mite-media-background: #192b23;
+  --mite-shadow: 0 12px 36px rgb(32 63 50 / 14%);
+  --mite-soft-shadow: 0 2px 8px rgb(32 63 50 / 4%);
+  --mite-radius-sm: 8px;
+  --mite-radius-md: 12px;
+  --mite-radius-lg: 16px;
+}

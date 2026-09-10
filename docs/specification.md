@@ -1,7 +1,7 @@
 # Mite MVP 実装仕様書
 
 > DevCamp2026 / 実装基準 v1.9
-> 最終更新: 2026-09-10
+> 最終更新: 2026-09-11
 > 対象: 利用者側クライアント、家族側クライアント、家族向けコンパニオンPWA、Miteサーバー
 
 ## 0. 本書の扱い
@@ -1221,11 +1221,11 @@ Electron起動・再読込時は、各captureディレクトリとサーバー�
 - MVPの既定実装はGemini Interactions APIの `POST /v1beta/interactions` とする。
 - モデルは `gemini-3.8-flash` とし、画像入力とStructured Outputsを使う。
 - Google AI Studioで発行したGemini API用のAuth APIキーを `x-goog-api-key` ヘッダーで送る。キーをURL、リクエスト本文、ログへ含めてはならない。
-- リクエストでは `store=false`、`background=false`、`stream=false`、`generation_config.thinking_level=low`、`generation_config.max_output_tokens=8192` とし、HTTPタイムアウトは150秒とする。
+- リクエストでは `store=false`、`background=false`、`stream=false`、`generation_config.thinking_level=low`、`generation_config.max_output_tokens=8192` とし、HTTPタイムアウトは300秒とする。
 - AI生成はサーバーの非同期ジョブとして実行する。
 - ジョブ実行には外部キューを使わず、サーバープロセス内のワーカー1個がQUEUEDを順番に処理する。
 - 入力画像の取得・変換は最大4件を並列処理し、入力の時系列順序を維持する。画像準備時間、生成時間、枚数、入力バイト数、失敗した工程とerrorCodeだけを記録し、画像・コメント・外部API応答の詳細はログへ含めない。
-- 各attemptは入力準備を含め180秒以内に必ずSUCCEEDEDまたはFAILEDへ確定し、Gemini APIへのHTTP要求はその内側で最大150秒とする。
+- 各attemptは入力準備を含め300秒以内に必ずSUCCEEDEDまたはFAILEDへ確定し、Gemini APIへのHTTP要求はその内側で最大300秒とする。入力準備後のattemptの残り時間が300秒未満なら、HTTP要求もその残り時間で打ち切る。
 - ワーカーは1秒以内の間隔でQUEUEDを検索し、`FOR UPDATE SKIP LOCKED`で1件だけ取得して、RUNNINGへの変更、attemptの加算、startedAtの設定、errorCodeとfinishedAtの消去を同一トランザクションで行う。このとき確定したrevisionを実行権の識別に使う。
 - サーバー起動時に残っているRUNNINGは、attemptが3未満ならQUEUEDへ戻してstartedAtをnullにし、attemptが3ならFAILEDへ変更してerrorCode=WORKER_RESTARTED、finishedAtを設定する。どちらもrevisionを1増やしてからワーカーを開始する。
 - バッチ完了時にQUEUEDで作成し、ワーカーがRUNNINGへ変更する。外部API応答後の成功・失敗更新は、jobがまだRUNNINGでrevisionが実行開始時の値と一致する場合だけ確定する。古い実行の遅延応答は破棄する。

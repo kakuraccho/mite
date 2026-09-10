@@ -20,7 +20,7 @@ import (
 const (
 	GeminiModel         = "gemini-3.8-flash"
 	GeminiPromptVersion = "v2"
-	geminiHTTPTimeout   = 150 * time.Second
+	geminiHTTPTimeout   = 300 * time.Second
 	geminiSystemPrompt  = `PC操作支援の連続画像から、高齢の利用者が後日一人で実行できる短いガイドを作る。
 異なる目的の操作が含まれる場合は、目的ごとに独立したガイドを生成順にguidesへ並べる。
 各ガイドは1〜8ステップにする。操作が1つの目的にまとまる場合はガイドを1件だけ作る。

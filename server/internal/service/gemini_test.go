@@ -186,13 +186,13 @@ func TestGeminiTimeoutWhileReadingBody(t *testing.T) {
 	}
 }
 
-func TestGeminiHas150SecondBudgetAndRespectsShorterParentDeadline(t *testing.T) {
-	for _, budget := range []time.Duration{180 * time.Second, 20 * time.Second} {
+func TestGeminiHas300SecondBudgetAndRespectsShorterParentDeadline(t *testing.T) {
+	for _, budget := range []time.Duration{600 * time.Second, 300 * time.Second, 20 * time.Second} {
 		ctx, cancel := context.WithTimeout(context.Background(), budget)
 		client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 			deadline, ok := request.Context().Deadline()
 			remaining := time.Until(deadline)
-			want := min(budget, 150*time.Second)
+			want := min(budget, 300*time.Second)
 			if !ok || remaining > want || remaining < want-time.Second {
 				t.Errorf("HTTP budget=%v, want %v", remaining, want)
 			}
