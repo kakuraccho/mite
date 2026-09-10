@@ -7,21 +7,20 @@ export function useCompanionData(api: MiteApi) {
   const [request, setRequest] = useState<SupportRequest | null>(null)
   const [refreshError, setRefreshError] = useState<unknown>(null)
   const [refreshedAt, setRefreshedAt] = useState(0)
-  const active = useRef(false)
-  const refreshVersion = useRef(0)
-  const settledVersion = useRef(0)
+  const refreshState = useRef({ active: false, started: 0, settled: 0 })
 
   const refresh = useCallback(async () => {
-    if (!active.current) return
-    const version = ++refreshVersion.current
+    const state = refreshState.current
+    if (!state.active) return
+    const version = ++state.started
     try {
       const [nextStatus, pending] = await Promise.all([
         api.getCompanionStatus(),
         api.listSupportRequests('PENDING'),
       ])
       // Compare completed reads: a slow response remains useful while a newer GET is in flight.
-      if (!active.current || version < settledVersion.current) return
-      settledVersion.current = version
+      if (!state.active || version < state.settled) return
+      state.settled = version
       setStatus((current) =>
         current &&
         current.user.id === nextStatus.user.id &&
@@ -35,16 +34,17 @@ export function useCompanionData(api: MiteApi) {
       setRefreshedAt(Date.now())
       setRefreshError(null)
     } catch (error) {
-      if (active.current && version >= settledVersion.current) {
-        settledVersion.current = version
+      if (state.active && version >= state.settled) {
+        state.settled = version
         setRefreshError(error)
       }
     }
   }, [api])
 
   const acceptAcknowledgement = (updated: SupportRequest) => {
-    if (!active.current) return
-    settledVersion.current = ++refreshVersion.current
+    const state = refreshState.current
+    if (!state.active) return
+    state.settled = ++state.started
     // A request removed/replaced by a newer list must not reappear on PATCH completion.
     setRequest((current) =>
       current?.id === updated.id
@@ -54,7 +54,8 @@ export function useCompanionData(api: MiteApi) {
   }
 
   useEffect(() => {
-    active.current = true
+    const state = refreshState.current
+    state.active = true
     const polling = startPolling(refresh)
     const onFocus = () => void refresh()
     const onVisible = () => {
@@ -64,8 +65,8 @@ export function useCompanionData(api: MiteApi) {
     window.addEventListener('online', onFocus)
     document.addEventListener('visibilitychange', onVisible)
     return () => {
-      active.current = false
-      settledVersion.current = ++refreshVersion.current
+      state.active = false
+      state.settled = ++state.started
       polling.stop()
       window.removeEventListener('focus', onFocus)
       window.removeEventListener('online', onFocus)

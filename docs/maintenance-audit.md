@@ -35,12 +35,29 @@
 
 ## 検証結果
 
-検証完了後に結果を記録する。
+LinuxでNode.js 24.21.0、npm 11.19.0、Go 1.26.8を使い、以下を確認した。外部サービスの呼び出しと実機確認は、下記の範囲に含めない。
+
+| 対象 | 結果 |
+| --- | --- |
+| API・SQL生成 | `npm run generate:api` と `go tool sqlc generate` が成功。生成物の差分なし |
+| 共有API | ルートの `npm run typecheck`、`npm run lint`、`npm run build` が成功 |
+| client | `npm run format:check`、`npm run lint`、`npm run typecheck`、`npm run build` が成功。両Electronと本番サブパスのPWAをビルド |
+| clientの自動テスト | `npm run test -- --maxWorkers=2` で203件成功・2件skip。フック終了処理の整理後もPWAの9件が成功 |
+| Go | `go test -race ./... -count=1 -timeout=5m`、`go vet ./...`、`go build ./...` が成功 |
+| デプロイ | `server/deploy/test-*.sh` の4スイートが成功。配置・再実行・checksum・排他・失敗時の復元を確認 |
+| DB・Storage・HTTP/WebSocket | 新規の専用Supabaseに全9 migrationを適用。`go test -race -p 1 ./... -run 'Postgres\|Integration\|^TestServerRuntimeE2E$' -count=1 -timeout=5m -v` が成功。既存の開発DBは使用せず、専用環境は確認後に破棄 |
+| 実TypeScript adapter | CIの専用Supabaseで `TestClientAdapterE2E` が成功。支援から複数ガイドの一括保存・利用・再相談、heartbeat・確認返答・取消・Push未設定時の503と購読解除の204を確認 |
+| 実ブラウザー | Headless Chromiumでビルド済みPWAを `/mite/pwa/` から起動。テスト用HTTP応答を使い、トークン入力、返答、競合エラーの保持と再試行、通信復帰、依頼非表示、トークン初期化を確認。幅390px・844pxで横方向のはみ出しなし、未処理のJavaScript例外なし |
+| 現行公開環境 | 現行devの公開PWAとService WorkerがHTTP 200、認証なしのAPIが401になることを確認。今回のPR内容の公開確認はマージ後に行う |
+
+通常のclientテストのskipは、Windows専用のCore Audio COMコンパイル確認と、接続情報を別途必要とするTypeScript adapter E2Eである。後者は独立したCIジョブで実行した。CIの6ジョブと最終コミットの結果は[PR #39のChecks](https://github.com/kakuraccho/mite/pull/39/checks)を参照する。
+
+Windowsでの `npm run make:user` / `npm run make:family`、Windows固有の画面取得・AppBar・音量動作、2台間の実LiveKit/Gemini、iPhoneの実Web Pushは、このLinux環境では未実施である。第17章のすべてに合格したことやMVPの実機検証完了を示すものではない。
 
 ## マージ後に行うこと
 
 1. PRの変更内容とCI結果を確認してdevへマージする。
-2. [CI/CDガイド](ci-cd.md)に従い、マイグレーション・API・PWAのデプロイ結果を確認する。今回の変更で新しい秘密情報や外部サービスの追加は不要である。
+2. `VPS_DEPLOY_BRANCH=dev` と `VPS_AUTO_DEPLOY=true` が設定されているため、マージ後は[CI/CDガイド](ci-cd.md)に従い、API・PWAの自動デプロイ成功を確認する。今回の変更に新しいmigration、秘密情報、外部サービスの追加は不要である。
 3. Windows上で `client/` の `npm run make:user` と `npm run make:family` を実行し、2台のWindows PCで[仕様第17章](specification.md#17-受け入れテスト)の正常系を確認する。画面取得・AppBar、実LiveKitの音声・共有・マーキング、実Geminiのガイド生成は実機確認に含める。
 4. iPhoneのホーム画面へ公開PWAを追加し、通知購読、ロック画面受信、通知タップ後の最新取得、600秒以上切断後の再接続通知を確認する。返答の表示、取消後の依頼非表示、通信復帰も確認する。
 
