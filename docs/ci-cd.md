@@ -152,7 +152,7 @@ sudo -u "$MITE_PWA_DEPLOY_USER" /usr/local/bin/mite-pwa-deploy --check "$MITE_PW
 
 PWAの`current`がまだない場合、PWA URLの404は初回デプロイまで正常である。デプロイスクリプトを変更したcommitをデプロイする前には、同じ手順でVPS上のコピーを更新する。
 
-CIのPWA archiveは`server/deploy/package-family-pwa.sh`で作成する。tarの格納順・更新日時・所有者・権限とgzipヘッダーを揃え、同じ公開ファイルを再buildした場合も同じchecksumにする。通常の`tar -czf`ではbuild時刻などが変わるため、同じcommitの再配信でも`The release commit already exists with different contents.`で拒否されることがある。実際にファイル内容が異なる場合は、同じcommitの既存releaseを上書きせずに停止する。
+CIのPWA archiveは`server/deploy/package-family-pwa.sh`で作成する。tarの格納順・所有者・権限とgzipヘッダーを揃え、更新日時には`SOURCE_DATE_EPOCH`で渡す配信対象commitのcommitter時刻を使う。同じcommitから同じ公開ファイルを再buildした場合も同じchecksumになり、後続commitではその時刻を使ってApacheの更新判定を維持する。通常の`tar -czf`ではbuild時刻などが変わるため、同じcommitの再配信でも`The release commit already exists with different contents.`で拒否されることがある。実際にファイル内容が異なる場合は、同じcommitの既存releaseを上書きせずに停止する。
 
 この梱包処理へ移行する際は、修正を含む新しいcommitからデプロイする。梱包処理だけの変更では、VPSの配信スクリプトを再設置する必要はない。
 

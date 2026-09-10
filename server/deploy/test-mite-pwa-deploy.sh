@@ -10,6 +10,7 @@ source "$script_directory/mite-pwa-deploy.sh"
 old_release=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 new_release=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 public_url=https://priv.chi-llenge.com/mite/pwa/
+export SOURCE_DATE_EPOCH=1700000000
 
 create_build() {
   local root="$1" label="$2"
@@ -74,6 +75,7 @@ mite_pwa_install "$directory" "$directory/deploy.lock" "$public_url" "$digest" "
 [[ "$(readlink "$directory/previous")" == "releases/$old_release" ]]
 [[ "$(cat "$directory/releases/$new_release/.mite-archive.sha256")" == "$digest" ]]
 grep -q new "$directory/releases/$new_release/index.html"
+[[ "$(stat -c %Y "$directory/releases/$new_release/index.html")" == "$SOURCE_DATE_EPOCH" ]]
 printf 'PASS successful update\n'
 
 # Replaying the same verified release is safe and keeps the current selection.
@@ -98,6 +100,15 @@ mite_pwa_install "$directory" "$directory/deploy.lock" "$public_url" "$rebuilt_d
 [[ "$(readlink "$directory/current")" == "releases/$new_release" ]]
 [[ "$(readlink "$directory/previous")" == "releases/$old_release" ]]
 printf 'PASS rebuilt identical release\n'
+
+# A later commit retains a distinct mtime for HTTP cache revalidation.
+later_archive="$test_root/later.tar.gz"
+SOURCE_DATE_EPOCH=1700000001 bash "$script_directory/package-family-pwa.sh" "$rebuilt_fixture" "$later_archive"
+if cmp -s "$archive" "$later_archive"; then exit 1; fi
+mkdir "$test_root/later"
+tar -xzf "$later_archive" -C "$test_root/later"
+[[ "$(stat -c %Y "$test_root/later/index.html")" == 1700000001 ]]
+printf 'PASS release commit timestamp\n'
 
 # A real content change must still be rejected for an existing commit.
 printf 'changed application\n' > "$rebuilt_fixture/assets/app-new.js"
