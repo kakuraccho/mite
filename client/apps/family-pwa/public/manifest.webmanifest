@@ -2,6 +2,7 @@
   "name": "Mite 家族用",
   "short_name": "Mite",
   "description": "家族から支援状況を確認するための補助アプリ",
+  "id": "./",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

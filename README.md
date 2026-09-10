@@ -47,7 +47,7 @@ MVPでは固定の1対1とデモ用Bearerトークンを使用します。遠隔
 | ---- | ------------ |
 | 初回セットアップ・環境変数の設定・ローカル起動 | [セットアップガイド](docs/setup.md) |
 | コード生成・テスト・ビルド・Windows配布 | [開発ガイド](docs/development.md) |
-| サーバーの自動検証・VPSへのデプロイ設定 | [サーバーのCI/CD](docs/ci-cd.md) |
+| 自動検証・VPSへのAPIとPWAのデプロイ設定 | [MiteのCI/CD](docs/ci-cd.md) |
 | API接続・再送・復旧・E2E確認 | [サーバー・クライアント接続ガイド](docs/server-client-integration.md) |
 | REST APIとWebSocketの手動確認 | [サーバー手動検証ガイド](server/MANUAL_TESTING.md) |
 | MVPの範囲・API・状態・画面・受け入れ条件 | [MVP実装仕様書](docs/specification.md) |
@@ -83,6 +83,8 @@ MVPでは固定の1対1とデモ用Bearerトークンを使用します。遠隔
 | 利用者側アプリ | `client/` | `npm run dev:user` |
 | 家族側アプリ | `client/` | `npm run dev:family` |
 | 家族向けPWA | `client/` | `npm run dev:pwa` |
+
+VPSの初回設定とデプロイ後、家族向けPWAは[https://priv.chi-llenge.com/mite/pwa/](https://priv.chi-llenge.com/mite/pwa/)で開きます。初回公開手順は[MiteのCI/CD](docs/ci-cd.md#2-家族向けpwaの初回vpsapache設定)を参照してください。
 
 WSLから起動した利用者アプリではWindows画面全体を撮影・共有できません。黒いスクリーンショットになる場合は、[Windows側での起動手順](docs/setup.md#wslでスクリーンショットが真っ黒になる場合)を参照してください。
 

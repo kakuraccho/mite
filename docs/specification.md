@@ -192,6 +192,7 @@ Electronでは `contextIsolation` を有効、`nodeIntegration` を無効にす�
 - デモでは、HTTPSとWSSで公開した同一のGoサーバーへ両アプリから接続する。
 - Goサーバーは既存のVPSへ配置する。配置先はHTTPS、WebSocket、環境変数、Goプロセスの常時実行に対応するものとする。CI/CDにはGitHub Actionsを使う。
 - CDは対象ブランチのCI成功後、Supabase Cloudへの未適用マイグレーションを適用し、成功した場合だけVPSのGoサーバーを更新する。DB変更とVPS更新は同じデプロイジョブで直列化する。
+- 家族向けコンパニオンPWAは `https://priv.chi-llenge.com/mite/pwa/` でApacheから配信する。Goサーバーの更新成功後、同じ検証済みcommitから作成した静的buildをVPSへ配置し、versioned directoryとsymlinkでatomicに切り替える。公開URLからbuild内容を取得できない場合は直前のPWAへ戻す。
 - CDで適用するマイグレーションは稼働中および復元対象のGoバイナリとの互換性を保つ。VPS更新に失敗した場合はバイナリを復元し、DBスキーマは自動で戻さない。データを削除・不可逆に変更するマイグレーションは適用前に確認する。
 - MVPのGoサーバーは1インスタンスで実行する。複数インスタンスへの負荷分散は行わない。
 - 開発時はローカルのGoサーバーへ接続できる。2台でローカル接続する場合は同一LAN上のサーバーPCのIPアドレスを使う。
@@ -1640,12 +1641,15 @@ MITE_DEMO_TOKEN=change-me
 
 ~~~dotenv
 VITE_API_BASE_URL=https://api.example.com
+VITE_PWA_BASE_PATH=/
 VITE_DEMO_FAMILY_TOKEN=change-me
 ~~~
 
-コンパニオンPWAは家族用DEMO_FAMILY_TOKENに対応するuser-tokenをBearerとして使う。暫定認証であり、トークンをURL、Service Worker、Push通知payload、ログへ含めない。公開前に本格認証、端末管理、トークン失効を別途設計する。PWAはHTTPSまたはlocalhostで提供し、API URLをbuild時設定から、トークンを初回入力または開発用build時設定から受け取る。
+コンパニオンPWAは家族用DEMO_FAMILY_TOKENに対応するuser-tokenをBearerとして使う。暫定認証であり、トークンをURL、Service Worker、Push通知payload、ログへ含めない。公開前に本格認証、端末管理、トークン失効を別途設計する。PWAはHTTPSまたはlocalhostで提供し、API URLと配信base pathをbuild時設定から、トークンを初回入力または開発用build時設定から受け取る。base pathは `/` で始まり `/` で終わる絶対pathとする。
 
 ローカル開発ではElectronのMITE_API_BASE_URLとPWAのVITE_API_BASE_URLを `http://localhost:3000` に変更する。別端末から接続する場合はlocalhostではなく、HTTPS公開したGoサーバーのURLを使う。
+
+VPSへの公開buildでは `VITE_API_BASE_URL=https://priv.chi-llenge.com/mite`、`VITE_PWA_BASE_PATH=/mite/pwa/` とし、`VITE_DEMO_FAMILY_TOKEN`を設定しない。Service Worker、manifest、icon、通知から開くURLはbase pathを基準にする。Service WorkerはPWAのbase path外にある同一origin APIの認証付き応答をキャッシュしない。
 
 GEMINI_API_KEYにはGoogle AI Studioで新規発行したGemini API用のAuth APIキーを設定し、Gemini APIだけに制限する。Standard APIキーは使わない。
 

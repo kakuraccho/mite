@@ -1,4 +1,4 @@
-name: Server CI/CD
+name: Mite CI/CD
 
 on:
   pull_request:
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       deploy:
-        description: Apply Supabase migrations and deploy to VPS after CI succeeds
+        description: Apply migrations and deploy the API and family PWA after CI succeeds
         type: boolean
         default: false
 
@@ -32,12 +32,46 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '24'
+          node-version: "24"
           cache: npm
           cache-dependency-path: client/package-lock.json
       # Formatting does not need Electron downloads or native install scripts.
       - run: npm ci --ignore-scripts
       - run: npm run format:check
+
+  client:
+    name: Client lint, tests and builds
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            client/package-lock.json
+      # The client workspace installs @mite/api-client from its built local package.
+      - run: npm ci
+      - run: npm run build
+      - run: npm ci
+        working-directory: client
+      - run: npm run lint
+        working-directory: client
+      - run: npm run typecheck
+        working-directory: client
+      - run: npm run test
+        working-directory: client
+      - name: Build clients with the production family PWA paths
+        working-directory: client
+        env:
+          VITE_API_BASE_URL: https://priv.chi-llenge.com/mite
+          VITE_DEMO_FAMILY_TOKEN: ""
+          VITE_PWA_BASE_PATH: /mite/pwa/
+        run: npm run build
 
   generated-api:
     name: Generated code and shared API
@@ -53,7 +87,7 @@ jobs:
           cache-dependency-path: server/go.sum
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '24'
+          node-version: "24"
           cache: npm
           cache-dependency-path: package-lock.json
       - run: npm ci
@@ -101,6 +135,10 @@ jobs:
         run: bash deploy/test-mite-deploy.sh
       - name: Test Supabase and VPS deployment sequence
         run: bash deploy/test-deploy-from-ci.sh
+      - name: Test family PWA deployment and rollback
+        run: bash deploy/test-mite-pwa-deploy.sh
+      - name: Test family PWA deployment sequence
+        run: bash deploy/test-deploy-pwa-from-ci.sh
 
   integration:
     name: Supabase integration and HTTP WebSocket E2E
@@ -116,7 +154,7 @@ jobs:
           cache-dependency-path: server/go.sum
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '24'
+          node-version: "24"
           cache: npm
           cache-dependency-path: package-lock.json
       - run: npm ci
@@ -151,7 +189,7 @@ jobs:
 
   deploy:
     name: Migrate Supabase and deploy to VPS
-    needs: [client-format, generated-api, server, integration]
+    needs: [client-format, client, generated-api, server, integration]
     if: >-
       vars.VPS_DEPLOY_BRANCH != '' &&
       github.ref == format('refs/heads/{0}', vars.VPS_DEPLOY_BRANCH) &&
@@ -173,14 +211,14 @@ jobs:
           cache-dependency-path: server/go.sum
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '24'
+          node-version: "24"
           cache: npm
           cache-dependency-path: package-lock.json
       - run: npm ci
       - name: Build Linux amd64 binary
         working-directory: server
         env:
-          CGO_ENABLED: '0'
+          CGO_ENABLED: "0"
           GOOS: linux
           GOARCH: amd64
         run: go build -trimpath -o "$RUNNER_TEMP/mite-api" ./cmd/api
@@ -195,3 +233,52 @@ jobs:
           VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
           VPS_SSH_PORT: ${{ vars.VPS_SSH_PORT || '22' }}
         run: bash server/deploy/deploy-from-ci.sh "$RUNNER_TEMP/mite-api"
+
+  deploy-pwa:
+    name: Deploy family PWA to VPS
+    needs: [deploy]
+    if: >-
+      needs.deploy.result == 'success' &&
+      vars.VPS_DEPLOY_BRANCH != '' &&
+      github.ref == format('refs/heads/{0}', vars.VPS_DEPLOY_BRANCH) &&
+      ((github.event_name == 'push' && vars.VPS_AUTO_DEPLOY == 'true') ||
+       (github.event_name == 'workflow_dispatch' && inputs.deploy))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: vps-mirai-server
+    concurrency:
+      group: mite-vps-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            client/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: npm ci
+        working-directory: client
+      - name: Build family PWA for HTTPS subpath deployment
+        working-directory: client
+        env:
+          VITE_API_BASE_URL: https://priv.chi-llenge.com/mite
+          VITE_DEMO_FAMILY_TOKEN: ""
+          VITE_PWA_BASE_PATH: /mite/pwa/
+        run: npm run build -w @mite/family-pwa
+      - name: Package family PWA
+        run: tar -czf "$RUNNER_TEMP/mite-family-pwa.tar.gz" -C client/apps/family-pwa/dist .
+      - name: Deploy and verify family PWA
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+          VPS_SSH_PORT: ${{ vars.VPS_SSH_PORT || '22' }}
+        run: bash server/deploy/deploy-pwa-from-ci.sh "$RUNNER_TEMP/mite-family-pwa.tar.gz"

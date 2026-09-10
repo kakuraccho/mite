@@ -17,7 +17,7 @@ cd ..
 
 ## 検証
 
-Pull Requestと`dev`・`main`へのpushでは、GitHub Actionsがサーバー・共有APIとclientの整形を検証します。チェックの内容とVPSへのデプロイ設定は[サーバーのCI/CD](ci-cd.md)を参照してください。
+Pull Requestと`dev`・`main`へのpushでは、GitHub Actionsがサーバー・共有APIとclientの整形・Lint・型・テスト・buildを検証します。チェックの内容とVPSへのデプロイ設定は[MiteのCI/CD](ci-cd.md)を参照してください。
 
 ### API生成と共有APIクライアント
 
@@ -59,18 +59,21 @@ PWAの開発サーバーは、Viteが挿入するスクリプトとスタイル�
 `https://example.com/mite/pwa/`へ置く場合は、API接続先を設定したうえで`client/`から次を実行します。公開するビルドに家族用トークンを埋め込まず、初回画面で入力してください。
 
 ```bash
-VITE_API_BASE_URL=https://example.com/mite VITE_DEMO_FAMILY_TOKEN= npm run build -w @mite/family-pwa -- --base=/mite/pwa/
+VITE_API_BASE_URL=https://example.com/mite VITE_PWA_BASE_PATH=/mite/pwa/ VITE_DEMO_FAMILY_TOKEN= npm run build -w @mite/family-pwa
 ```
 
 WindowsのPowerShellでは、同じ設定を次のように渡します。
 
 ```powershell
 $env:VITE_API_BASE_URL = 'https://example.com/mite'
+$env:VITE_PWA_BASE_PATH = '/mite/pwa/'
 $env:VITE_DEMO_FAMILY_TOKEN = ''
-npm run build -w @mite/family-pwa -- --base=/mite/pwa/
+npm run build -w @mite/family-pwa
 ```
 
 `apps/family-pwa/dist/`の中身を公開先へ配置します。Apacheの`DocumentRoot`が`/var/www/mite-public`なら配置先は`/var/www/mite-public/mite/pwa/`です。既存の`/mite/v1/`へのProxyPassは引き続きAPIへ転送できます。Viteの`base`がHTML・アセットとService Workerの登録先に反映され、manifestと通知のリンクもPWAのパスを使います。開発時の既定URLは`http://localhost:5175/`です。[Viteの公開パス設定](https://vite.dev/guide/build.html#public-base-path)
+
+これは手動配置の例です。`priv.chi-llenge.com`の自動デプロイでは、同じ`/mite/pwa/`をApacheのAliasで`/var/www/mite-family-pwa/current/`へ割り当てます。[CI/CDの初回設定と手動配置からの移行](ci-cd.md#2-家族向けpwaの初回vpsapache設定)を行ってください。手動配置だけでは自動デプロイの事前確認は通りません。
 
 PWA用のApache設定例は次のとおりです。`headers`モジュールを有効にして読み込ませ、`apache2ctl configtest`の成功後にApacheをreloadします。`index.html`、Service Worker、manifestは更新時に再検証させます。[ApacheのHeader設定](https://httpd.apache.org/docs/2.4/mod/mod_headers.html)
 
