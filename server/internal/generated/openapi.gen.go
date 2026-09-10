@@ -345,6 +345,7 @@ func (e GuideRunAction) Valid() bool {
 
 // Defines values for GuideRunStatus.
 const (
+	GuideRunStatusCANCELLED        GuideRunStatus = "CANCELLED"
 	GuideRunStatusCOMPLETED        GuideRunStatus = "COMPLETED"
 	GuideRunStatusINPROGRESS       GuideRunStatus = "IN_PROGRESS"
 	GuideRunStatusPAUSEDFORSUPPORT GuideRunStatus = "PAUSED_FOR_SUPPORT"
@@ -353,6 +354,8 @@ const (
 // Valid indicates whether the value is a known member of the GuideRunStatus enum.
 func (e GuideRunStatus) Valid() bool {
 	switch e {
+	case GuideRunStatusCANCELLED:
+		return true
 	case GuideRunStatusCOMPLETED:
 		return true
 	case GuideRunStatusINPROGRESS:
@@ -423,22 +426,22 @@ func (e SupportAcknowledgementKind) Valid() bool {
 
 // Defines values for SupportRequestStatus.
 const (
-	CANCELLED SupportRequestStatus = "CANCELLED"
-	INSUPPORT SupportRequestStatus = "IN_SUPPORT"
-	PENDING   SupportRequestStatus = "PENDING"
-	RESOLVED  SupportRequestStatus = "RESOLVED"
+	SupportRequestStatusCANCELLED SupportRequestStatus = "CANCELLED"
+	SupportRequestStatusINSUPPORT SupportRequestStatus = "IN_SUPPORT"
+	SupportRequestStatusPENDING   SupportRequestStatus = "PENDING"
+	SupportRequestStatusRESOLVED  SupportRequestStatus = "RESOLVED"
 )
 
 // Valid indicates whether the value is a known member of the SupportRequestStatus enum.
 func (e SupportRequestStatus) Valid() bool {
 	switch e {
-	case CANCELLED:
+	case SupportRequestStatusCANCELLED:
 		return true
-	case INSUPPORT:
+	case SupportRequestStatusINSUPPORT:
 		return true
-	case PENDING:
+	case SupportRequestStatusPENDING:
 		return true
-	case RESOLVED:
+	case SupportRequestStatusRESOLVED:
 		return true
 	default:
 		return false
@@ -571,6 +574,9 @@ type CallSupportRequestResponse struct {
 		SupportSession SupportSession `json:"supportSession"`
 	} `json:"data"`
 }
+
+// CancelGuideRunRequest defines model for CancelGuideRunRequest.
+type CancelGuideRunRequest = CompleteGuideRunRequest
 
 // CancelSupportRequestRequest defines model for CancelSupportRequestRequest.
 type CancelSupportRequestRequest struct {
@@ -1193,6 +1199,12 @@ type CreateGuideRunParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// CancelGuideRunParams defines parameters for CancelGuideRun.
+type CancelGuideRunParams struct {
+	// IdempotencyKey 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // CompleteGuideRunParams defines parameters for CompleteGuideRun.
 type CompleteGuideRunParams struct {
 	// IdempotencyKey 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。
@@ -1290,6 +1302,9 @@ type CreateGuideRunJSONRequestBody = CreateGuideRunRequest
 // UpdateGuideRunJSONRequestBody defines body for UpdateGuideRun for application/json ContentType.
 type UpdateGuideRunJSONRequestBody = UpdateGuideRunRequest
 
+// CancelGuideRunJSONRequestBody defines body for CancelGuideRun for application/json ContentType.
+type CancelGuideRunJSONRequestBody = CancelGuideRunRequest
+
 // CompleteGuideRunJSONRequestBody defines body for CompleteGuideRun for application/json ContentType.
 type CompleteGuideRunJSONRequestBody = CompleteGuideRunRequest
 
@@ -1386,6 +1401,9 @@ type ServerInterface interface {
 	// UpdateGuideRun 前または次のステップへ移動する
 	// (PATCH /v1/guide-runs/{id})
 	UpdateGuideRun(w http.ResponseWriter, r *http.Request, id ResourceId)
+	// CancelGuideRun ガイド利用を途中で終了する
+	// (POST /v1/guide-runs/{id}/cancel)
+	CancelGuideRun(w http.ResponseWriter, r *http.Request, id ResourceId, params CancelGuideRunParams)
 	// CompleteGuideRun ガイド利用を完了する
 	// (POST /v1/guide-runs/{id}/complete)
 	CompleteGuideRun(w http.ResponseWriter, r *http.Request, id ResourceId, params CompleteGuideRunParams)
@@ -1546,6 +1564,12 @@ func (_ Unimplemented) GetGuideRun(w http.ResponseWriter, r *http.Request, id Re
 // UpdateGuideRun 前または次のステップへ移動する
 // (PATCH /v1/guide-runs/{id})
 func (_ Unimplemented) UpdateGuideRun(w http.ResponseWriter, r *http.Request, id ResourceId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// CancelGuideRun ガイド利用を途中で終了する
+// (POST /v1/guide-runs/{id}/cancel)
+func (_ Unimplemented) CancelGuideRun(w http.ResponseWriter, r *http.Request, id ResourceId, params CancelGuideRunParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2191,6 +2215,60 @@ func (siw *ServerInterfaceWrapper) UpdateGuideRun(w http.ResponseWriter, r *http
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateGuideRun(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CancelGuideRun operation middleware
+func (siw *ServerInterfaceWrapper) CancelGuideRun(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ResourceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CancelGuideRunParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CancelGuideRun(w, r, id, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3264,6 +3342,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/v1/guide-runs/{id}/complete", wrapper.CompleteGuideRun)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/v1/guide-runs/{id}/cancel", wrapper.CancelGuideRun)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/v1/guide-runs/{id}/support-request", wrapper.CreateSupportRequestFromGuideRun)
@@ -4705,6 +4786,117 @@ func (response UpdateGuideRun409JSONResponse) VisitUpdateGuideRunResponse(w http
 type UpdateGuideRun500JSONResponse struct{ InternalErrorJSONResponse }
 
 func (response UpdateGuideRun500JSONResponse) VisitUpdateGuideRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelGuideRunRequestObject struct {
+	Id     ResourceId `json:"id"`
+	Params CancelGuideRunParams
+	Body   *CancelGuideRunJSONRequestBody
+}
+
+type CancelGuideRunResponseObject interface {
+	VisitCancelGuideRunResponse(w http.ResponseWriter) error
+}
+
+type CancelGuideRun200JSONResponse GuideRunResponse
+
+func (response CancelGuideRun200JSONResponse) VisitCancelGuideRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelGuideRun400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response CancelGuideRun400JSONResponse) VisitCancelGuideRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelGuideRun401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response CancelGuideRun401JSONResponse) VisitCancelGuideRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelGuideRun403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CancelGuideRun403JSONResponse) VisitCancelGuideRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelGuideRun404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response CancelGuideRun404JSONResponse) VisitCancelGuideRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelGuideRun409JSONResponse struct{ ConflictJSONResponse }
+
+func (response CancelGuideRun409JSONResponse) VisitCancelGuideRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelGuideRun500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response CancelGuideRun500JSONResponse) VisitCancelGuideRunResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -7004,6 +7196,9 @@ type StrictServerInterface interface {
 	// UpdateGuideRun 前または次のステップへ移動する
 	// (PATCH /v1/guide-runs/{id})
 	UpdateGuideRun(ctx context.Context, request UpdateGuideRunRequestObject) (UpdateGuideRunResponseObject, error)
+	// CancelGuideRun ガイド利用を途中で終了する
+	// (POST /v1/guide-runs/{id}/cancel)
+	CancelGuideRun(ctx context.Context, request CancelGuideRunRequestObject) (CancelGuideRunResponseObject, error)
 	// CompleteGuideRun ガイド利用を完了する
 	// (POST /v1/guide-runs/{id}/complete)
 	CompleteGuideRun(ctx context.Context, request CompleteGuideRunRequestObject) (CompleteGuideRunResponseObject, error)
@@ -7531,6 +7726,40 @@ func (sh *strictHandler) UpdateGuideRun(w http.ResponseWriter, r *http.Request, 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateGuideRunResponseObject); ok {
 		if err := validResponse.VisitUpdateGuideRunResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CancelGuideRun operation middleware
+func (sh *strictHandler) CancelGuideRun(w http.ResponseWriter, r *http.Request, id ResourceId, params CancelGuideRunParams) {
+	var request CancelGuideRunRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	var body CancelGuideRunJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CancelGuideRun(ctx, request.(CancelGuideRunRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CancelGuideRun")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CancelGuideRunResponseObject); ok {
+		if err := validResponse.VisitCancelGuideRunResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

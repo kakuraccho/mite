@@ -41,7 +41,6 @@ const bridge = Object.freeze({
   prepareScreenShare: () =>
     ipcRenderer.invoke('screen:prepare-share') as Promise<{
       name: string
-      thumbnailDataUrl: string
     }>,
   capturePreview: () =>
     ipcRenderer.invoke('screen:capture-preview') as Promise<{

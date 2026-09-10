@@ -894,7 +894,11 @@ function DraftViewer({ api, draft }: { api: MiteApi; draft: GuideDraft }) {
         description={`全${draft.steps.length}ステップ。家族が手順を整えています。内容は自動で新しくなります。`}
       />
       {step ? (
-        <div className="user-guide-step">
+        <div
+          className="user-guide-step"
+          tabIndex={0}
+          aria-label="手順の画像と説明"
+        >
           <ArtifactImage
             api={api}
             artifactId={step.artifactId}
@@ -1179,14 +1183,18 @@ function GuideRunner({
     )
   }
   return (
-    <Surface elevated>
+    <Surface elevated className="user-guide-runner">
       <ScreenHeading
         eyebrow={`${run.currentStepNumber} / ${guide.currentVersion.steps.length}`}
         title={guide.title}
         description="画面と説明を見ながら、1つずつ操作してください。"
       />
       {error ? <ErrorNotice message={error} /> : null}
-      <div className="user-guide-step">
+      <div
+        className="user-guide-step"
+        tabIndex={0}
+        aria-label="手順の画像と説明"
+      >
         <ArtifactImage
           api={api}
           artifactId={step.artifactId}
@@ -1318,6 +1326,11 @@ export function UserClient({
     [desktop],
   )
   const supportScreen = deriveUserSupportScreen(request, session)
+  const floatingGuide =
+    !!guideRun &&
+    !!guide &&
+    (supportScreen === 'HOME' ||
+      (supportScreen === 'GUIDE_SAVED' && closedSavedSession === session?.id))
   const reportError = useCallback((caught: unknown) => {
     if (caught instanceof MiteApiError && caught.status === 401) {
       setFatalConfiguration(true)
@@ -1336,7 +1349,9 @@ export function UserClient({
   useEffect(() => {
     if (restoring) return
     void desktop
-      .setOverlayMode(overlayCollapsed ? 'COLLAPSED' : 'DETAIL')
+      .setOverlayMode(
+        overlayCollapsed ? 'COLLAPSED' : floatingGuide ? 'GUIDE' : 'DETAIL',
+      )
       .then(() => {
         if (overlayCollapsed) return
         const dialog = document.querySelector<HTMLElement>(
@@ -1345,7 +1360,7 @@ export function UserClient({
         if (dialog && !dialog.closest('[hidden]')) dialog.focus()
       })
       .catch(() => setFatalConfiguration(true))
-  }, [desktop, overlayCollapsed, restoring])
+  }, [desktop, overlayCollapsed, restoring, floatingGuide])
 
   const mergeRequest = useCallback(
     (incoming: SupportRequest) => {
@@ -1626,7 +1641,10 @@ export function UserClient({
           const savedRunId = storage.getItem(guideRunKey)
           if (savedRunId) {
             const restoredRun = await api.getGuideRun(savedRunId)
-            if (restoredRun.status === 'COMPLETED') {
+            if (
+              restoredRun.status === 'COMPLETED' ||
+              restoredRun.status === 'CANCELLED'
+            ) {
               storage.removeItem(guideRunKey)
             } else if (
               restoredRun.status === 'PAUSED_FOR_SUPPORT' &&
@@ -1975,13 +1993,13 @@ export function UserClient({
         mediaRef.current = media
         if (!volumePreparedSessions.current.has(current.id)) {
           volumePreparedSessions.current.add(current.id)
-          await desktop
-            .prepareSpeakerVolume()
-            .catch(() =>
+          // Volume preparation may start a native process; it must not delay media.
+          void desktop.prepareSpeakerVolume().catch(() => {
+            if (isCurrentShare())
               setError(
                 'スピーカーの音量を確認してください。通話は続けられます。',
-              ),
-            )
+              )
+          })
         }
         if (!isCurrentShare()) return
         const token = await api.getLiveKitToken(current.id)
@@ -2135,6 +2153,42 @@ export function UserClient({
       setGuideRun(run)
     } catch (caught) {
       reportError(caught)
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
+  const closeGuide = async () => {
+    const activeRun = guideRun
+    if (!activeRun || actionBusy) return
+    setActionBusy(true)
+    setError(null)
+    const finish = () => {
+      setError(null)
+      storage.removeItem(guideRunKey)
+      setGuideRun(null)
+      setGuide(null)
+      setView('HOME')
+    }
+    try {
+      await runIdempotent(
+        keys,
+        `guide-cancel:${activeRun.id}:${activeRun.revision}`,
+        (idempotencyKey) =>
+          api.cancelGuideRun(
+            activeRun.id,
+            { expectedRevision: activeRun.revision },
+            { idempotencyKey },
+          ),
+      )
+      finish()
+    } catch (caught) {
+      reportError(caught)
+      const current = await api.getGuideRun(activeRun.id).catch(() => null)
+      if (current?.status === 'CANCELLED' || current?.status === 'COMPLETED')
+        finish()
+      else if (current)
+        setGuideRun((previous) => selectNewestRevision(previous, current))
     } finally {
       setActionBusy(false)
     }
@@ -2536,9 +2590,21 @@ export function UserClient({
     <>
       {edge}
       <div
-        className={`user-overlay-detail${view === 'REQUEST' && supportScreen === 'HOME' && !guideRun ? ' user-overlay-detail--request' : ''}`}
+        className={`user-overlay-detail${floatingGuide ? ' user-overlay-detail--guide' : ''}${view === 'REQUEST' && supportScreen === 'HOME' && !guideRun ? ' user-overlay-detail--request' : ''}`}
         hidden={overlayCollapsed}
       >
+        {floatingGuide ? (
+          <div className="user-guide-window-header">
+            <span>ここをつかんで移動</span>
+            <Button
+              variant="secondary"
+              disabled={actionBusy}
+              onClick={() => void closeGuide()}
+            >
+              途中で終了する
+            </Button>
+          </div>
+        ) : null}
         <AppShell
           className="user-overlay-shell"
           roleLabel="利用者用"

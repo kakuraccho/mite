@@ -54,7 +54,9 @@ it('shows a real Ctrl+C chord, repeats held keys, and clears on key release, mod
     expect.objectContaining({ keys: ['Ctrl'] }),
   )
   fireEvent.keyUp(stage, { code: 'ControlLeft', key: 'Control' })
-  expect(media.sendGuidance).toHaveBeenLastCalledWith(null)
+  expect(media.sendGuidance).toHaveBeenLastCalledWith(
+    expect.objectContaining({ mode: 'KEYBOARD', keys: [] }),
+  )
   fireEvent.keyDown(stage, { code: 'Escape', key: 'Escape' })
   expect(media.sendGuidance).toHaveBeenLastCalledWith(
     expect.objectContaining({ keys: ['Esc'] }),

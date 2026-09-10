@@ -12,6 +12,7 @@ import type {
   CallSupportRequestInput,
   CompleteGuideMaterialBatchInput,
   CompleteGuideRunInput,
+  CancelGuideRunInput,
   CreateGuideMaterialBatchInput,
   CreateGuideRunInput,
   CreateSupportRequestFromGuideRunInput,
@@ -48,6 +49,10 @@ export interface HttpMiteApiOptions {
   fetch?: typeof globalThis.fetch
 }
 
+const artifactCacheMaxBytes = 32 * 1024 * 1024
+const artifactCacheMaxEntries = 32
+const artifactCacheLifetimeMs = 60_000
+
 const encodeId = (id: string) => encodeURIComponent(id)
 
 const isApiErrorBody = (value: unknown): value is ApiErrorBody => {
@@ -66,6 +71,11 @@ export class HttpMiteApi implements MiteApi {
   readonly #baseUrl: string
   readonly #token: string
   readonly #fetch: typeof globalThis.fetch
+  // Scope cached bytes to this API instance (and therefore its endpoint/token).
+  // Keep them in memory only; authenticated HTTP responses remain no-store.
+  readonly #artifacts = new Map<string, { blob: Blob; expiresAt: number }>()
+  readonly #artifactRequests = new Map<string, Promise<Blob>>()
+  #artifactBytes = 0
 
   constructor(options: HttpMiteApiOptions) {
     this.#baseUrl = options.baseUrl.replace(/\/$/, '')
@@ -197,6 +207,47 @@ export class HttpMiteApi implements MiteApi {
   }
 
   async getArtifactContent(artifactId: string): Promise<Blob> {
+    const now = Date.now()
+    for (const [id, entry] of this.#artifacts) {
+      if (entry.expiresAt <= now) {
+        this.#artifactBytes -= entry.blob.size
+        this.#artifacts.delete(id)
+      }
+    }
+    const cached = this.#artifacts.get(artifactId)
+    if (cached) {
+      this.#artifacts.delete(artifactId)
+      this.#artifacts.set(artifactId, cached)
+      return cached.blob
+    }
+    const pending = this.#artifactRequests.get(artifactId)
+    if (pending) return pending
+    const request = this.#fetchArtifactContent(artifactId)
+      .then((blob) => {
+        if (blob.size <= artifactCacheMaxBytes) {
+          while (
+            this.#artifacts.size >= artifactCacheMaxEntries ||
+            this.#artifactBytes + blob.size > artifactCacheMaxBytes
+          ) {
+            const oldest = this.#artifacts.entries().next().value
+            if (!oldest) break
+            this.#artifacts.delete(oldest[0])
+            this.#artifactBytes -= oldest[1].blob.size
+          }
+          this.#artifacts.set(artifactId, {
+            blob,
+            expiresAt: Date.now() + artifactCacheLifetimeMs,
+          })
+          this.#artifactBytes += blob.size
+        }
+        return blob
+      })
+      .finally(() => this.#artifactRequests.delete(artifactId))
+    this.#artifactRequests.set(artifactId, request)
+    return request
+  }
+
+  async #fetchArtifactContent(artifactId: string): Promise<Blob> {
     const response = await this.#fetch(
       `${this.#baseUrl}/v1/artifacts/${encodeId(artifactId)}/content`,
       { headers: { Authorization: `Bearer ${this.#token}` } },
@@ -443,6 +494,18 @@ export class HttpMiteApi implements MiteApi {
   ): Promise<GuideRun> {
     return this.#request(
       `/v1/guide-runs/${encodeId(guideRunId)}/complete`,
+      { method: 'POST', body: JSON.stringify(input) },
+      operation,
+    )
+  }
+
+  cancelGuideRun(
+    guideRunId: string,
+    input: CancelGuideRunInput,
+    operation: IdempotentOperation,
+  ): Promise<GuideRun> {
+    return this.#request(
+      `/v1/guide-runs/${encodeId(guideRunId)}/cancel`,
       { method: 'POST', body: JSON.stringify(input) },
       operation,
     )

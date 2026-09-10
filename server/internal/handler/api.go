@@ -46,6 +46,7 @@ type GuideAPI interface {
 	GetGuideRun(context.Context, generated.GetGuideRunRequestObject) (generated.GetGuideRunResponseObject, error)
 	UpdateGuideRun(context.Context, generated.UpdateGuideRunRequestObject) (generated.UpdateGuideRunResponseObject, error)
 	CompleteGuideRun(context.Context, generated.CompleteGuideRunRequestObject) (generated.CompleteGuideRunResponseObject, error)
+	CancelGuideRun(context.Context, generated.CancelGuideRunRequestObject) (generated.CancelGuideRunResponseObject, error)
 	CreateSupportRequestFromGuideRun(context.Context, generated.CreateSupportRequestFromGuideRunRequestObject) (generated.CreateSupportRequestFromGuideRunResponseObject, error)
 	ListGuides(context.Context, generated.ListGuidesRequestObject) (generated.ListGuidesResponseObject, error)
 	GetGuide(context.Context, generated.GetGuideRequestObject) (generated.GetGuideResponseObject, error)

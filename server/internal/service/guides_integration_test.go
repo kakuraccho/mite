@@ -353,9 +353,31 @@ func TestGuideFlowPostgresIntegration(t *testing.T) {
 		t.Fatalf("replay completed run: result=%+v err=%v", replayed, err)
 	}
 
+	cancelRun, err := guideService.CreateGuideRun(ctx, CreateGuideRunCommand{Meta: userCommandMeta("cancel-run-create"), GuideID: guide.Guide.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancelCommand := CancelGuideRunCommand{Meta: userCommandMeta("run-cancel"), RunID: cancelRun.ID, ExpectedRevision: cancelRun.Revision}
+	cancelRun, err = guideService.CancelGuideRun(ctx, cancelCommand)
+	if err != nil || cancelRun.Status != domain.GuideRunCancelled || cancelRun.CurrentStepNumber != 1 || cancelRun.CompletedAt != nil {
+		t.Fatalf("cancel run: run=%+v err=%v", cancelRun, err)
+	}
+	if got, err := guideService.GetGuideRun(ctx, user, cancelRun.ID); err != nil || got.Status != domain.GuideRunCancelled {
+		t.Fatalf("get cancelled: %+v, %v", got, err)
+	}
+	if replay, err := guideService.CancelGuideRun(ctx, cancelCommand); err != nil || replay.Revision != cancelRun.Revision {
+		t.Fatalf("cancel replay: %+v, %v", replay, err)
+	}
+	if _, err := guideService.UpdateGuideRun(ctx, UpdateGuideRunCommand{Actor: user, RunID: cancelRun.ID, ExpectedRevision: cancelRun.Revision, Action: domain.GuideRunNext}); errorCodeOf(err) != domain.CodeInvalidState {
+		t.Fatalf("cancelled run moved: %v", err)
+	}
+
 	helpRun, err := guideService.CreateGuideRun(ctx, CreateGuideRunCommand{Meta: userCommandMeta("help-run-create"), GuideID: guide.Guide.ID})
 	if err != nil {
 		t.Fatalf("create help run: %v", err)
+	}
+	if helpRun.CurrentStepNumber != 1 || helpRun.ID == cancelRun.ID {
+		t.Fatal("next use did not start a fresh run")
 	}
 	if saved.SupportSession.EndedAt == nil || saved.SupportSession.EndReason == nil || *saved.SupportSession.EndReason != domain.EndReasonGuideSaved {
 		t.Fatalf("save did not end support: %+v", saved.SupportSession)

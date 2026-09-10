@@ -81,6 +81,7 @@ type GuideTx interface {
 	GetStepCount(context.Context, domain.ID, int) (int, error)
 	MoveRun(context.Context, domain.ID, int, pgtype.Timestamptz) (domain.GuideRun, error)
 	CompleteRun(context.Context, domain.ID, pgtype.Timestamptz) (domain.GuideRun, error)
+	CancelRun(context.Context, domain.ID, pgtype.Timestamptz) (domain.GuideRun, error)
 	GetPair(context.Context, domain.ID) (domain.UserPair, error)
 	LockUser(context.Context, domain.ID) error
 	HasActiveSupportFlow(context.Context, domain.ID) (bool, error)
@@ -830,4 +831,12 @@ func (t *postgresGuideTx) ListDrafts(ctx context.Context, sessionID domain.ID, l
 		result = append(result, draft)
 	}
 	return result, nil
+}
+
+func (t *postgresGuideTx) CancelRun(ctx context.Context, id domain.ID, now pgtype.Timestamptz) (domain.GuideRun, error) {
+	row, err := t.queries.CancelGuideRunRow(ctx, dbgen.CancelGuideRunRowParams{UpdatedAt: now, ID: string(id)})
+	if err != nil {
+		return domain.GuideRun{}, err
+	}
+	return guideRunFromDB(row), nil
 }

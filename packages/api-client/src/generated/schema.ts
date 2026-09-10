@@ -614,6 +614,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/guide-runs/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** ガイド利用を途中で終了する */
+        post: operations["cancelGuideRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/guide-runs/{id}/support-request": {
         parameters: {
             query?: never;
@@ -672,7 +691,7 @@ export interface components {
         /** @enum {string} */
         GuideDraftStatus: "EDITING" | "SAVED";
         /** @enum {string} */
-        GuideRunStatus: "IN_PROGRESS" | "COMPLETED" | "PAUSED_FOR_SUPPORT";
+        GuideRunStatus: "IN_PROGRESS" | "COMPLETED" | "CANCELLED" | "PAUSED_FOR_SUPPORT";
         /** @enum {string} */
         GuideRunAction: "NEXT" | "PREVIOUS";
         User: {
@@ -1015,6 +1034,7 @@ export interface components {
             expectedRevision: number;
             action: components["schemas"]["GuideRunAction"];
         };
+        CancelGuideRunRequest: components["schemas"]["CompleteGuideRunRequest"];
         CompleteGuideRunRequest: {
             /** Format: int64 */
             expectedRevision: number;
@@ -2345,6 +2365,41 @@ export interface operations {
         };
         responses: {
             /** @description 完了成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuideRunResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    cancelGuideRun: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CancelGuideRunRequest"];
+            };
+        };
+        responses: {
+            /** @description 途中終了成功 */
             200: {
                 headers: {
                     [name: string]: unknown;

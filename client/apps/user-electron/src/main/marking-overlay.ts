@@ -7,10 +7,14 @@ import {
 } from '../shared/marking-overlay'
 import { isTrustedRendererUrl } from './security'
 
+const guidanceMinimumDisplayMs = 1_000
+
 export class MarkingOverlay {
   readonly window: BrowserWindow
   #marks: DesktopMark[] = []
   #guidance: DesktopGuidance | null = null
+  #heldGuidance: { buttons: number; keys: string[]; until: number } | null =
+    null
   #ready = false
   #visible = false
   #timer: ReturnType<typeof setTimeout> | null = null
@@ -84,6 +88,20 @@ export class MarkingOverlay {
   setGuidance(value: unknown) {
     if (value !== null && !isDesktopGuidance(value))
       throw new Error('Invalid guidance')
+    const previous = this.#guidance
+    if (value === null || value.mode !== previous?.mode)
+      this.#heldGuidance = null
+    if (
+      value !== null &&
+      ((value.buttons & ~(previous?.buttons ?? 0)) !== 0 ||
+        value.keys.some((key) => !previous?.keys.includes(key)))
+    ) {
+      this.#heldGuidance = {
+        buttons: value.buttons,
+        keys: [...value.keys],
+        until: Date.now() + guidanceMinimumDisplayMs,
+      }
+    }
     this.#guidance =
       value === null
         ? null
@@ -97,6 +115,7 @@ export class MarkingOverlay {
   }
 
   clear() {
+    this.#heldGuidance = null
     this.#guidance = null
     this.setMarks([])
   }
@@ -129,15 +148,34 @@ export class MarkingOverlay {
     const now = Date.now()
     this.#marks = this.#marks.filter((mark) => mark.expiresAt > now)
     if (this.#guidance && this.#guidance.expiresAt <= now) this.#guidance = null
+    if (
+      !this.#guidance ||
+      (this.#heldGuidance && this.#heldGuidance.until <= now)
+    )
+      this.#heldGuidance = null
+    const displayedGuidance =
+      this.#guidance && this.#heldGuidance
+        ? {
+            ...this.#guidance,
+            buttons: this.#heldGuidance.buttons,
+            keys: this.#heldGuidance.keys,
+          }
+        : this.#guidance
     if (this.#ready)
-      this.window.webContents.send('guidance:changed', this.#guidance)
+      this.window.webContents.send('guidance:changed', displayedGuidance)
     if (this.#ready)
       this.window.webContents.send('marking:changed', this.#marks)
-    this.#setVisible(this.#ready && (!!this.#marks.length || !!this.#guidance))
+    this.#setVisible(
+      this.#ready &&
+        (!!this.#marks.length ||
+          displayedGuidance?.mode === 'CURSOR_MOUSE' ||
+          !!displayedGuidance?.keys.length),
+    )
     if (this.#marks.length || this.#guidance) {
       const delay = Math.min(
         ...this.#marks.map((mark) => mark.expiresAt - now),
         this.#guidance ? this.#guidance.expiresAt - now : Infinity,
+        this.#heldGuidance ? this.#heldGuidance.until - now : Infinity,
       )
       this.#timer = setTimeout(
         () => this.#render(),

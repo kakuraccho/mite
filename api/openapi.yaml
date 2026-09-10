@@ -912,6 +912,35 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
         '500': { $ref: '#/components/responses/InternalError' }
 
+  /v1/guide-runs/{id}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      tags: [GuideRuns]
+      operationId: cancelGuideRun
+      summary: ガイド利用を途中で終了する
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelGuideRunRequest'
+      responses:
+        '200':
+          description: 途中終了成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuideRunResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
   /v1/guide-runs/{id}/support-request:
     parameters:
       - $ref: '#/components/parameters/ResourceId'
@@ -1103,7 +1132,7 @@ components:
       enum: [EDITING, SAVED]
     GuideRunStatus:
       type: string
-      enum: [IN_PROGRESS, COMPLETED, PAUSED_FOR_SUPPORT]
+      enum: [IN_PROGRESS, COMPLETED, CANCELLED, PAUSED_FOR_SUPPORT]
     GuideRunAction:
       type: string
       enum: [NEXT, PREVIOUS]
@@ -1668,6 +1697,8 @@ components:
       properties:
         expectedRevision: { type: integer, format: int64, minimum: 1 }
         action: { $ref: '#/components/schemas/GuideRunAction' }
+    CancelGuideRunRequest:
+      $ref: '#/components/schemas/CompleteGuideRunRequest'
     CompleteGuideRunRequest:
       type: object
       additionalProperties: false

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -19,7 +20,7 @@ import (
 const (
 	GeminiModel         = "gemini-3.8-flash"
 	GeminiPromptVersion = "v2"
-	geminiHTTPTimeout   = 50 * time.Second
+	geminiHTTPTimeout   = 150 * time.Second
 	geminiSystemPrompt  = `PC操作支援の連続画像から、高齢の利用者が後日一人で実行できる短いガイドを作る。
 異なる目的の操作が含まれる場合は、目的ごとに独立したガイドを生成順にguidesへ並べる。
 各ガイドは1〜8ステップにする。操作が1つの目的にまとまる場合はガイドを1件だけ作る。
@@ -111,7 +112,7 @@ func (g *GeminiGuideGenerator) Generate(ctx context.Context, input domain.GuideG
 	request.Header.Set("x-goog-api-key", g.apiKey)
 	response, err := g.client.Do(request)
 	if err != nil {
-		if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		if isGenerationTimeout(ctx, err) {
 			return nil, &GuideGenerationFailure{Code: domain.GuideGenerationAITimeout, Cause: err}
 		}
 		return nil, &GuideGenerationFailure{Code: domain.GuideGenerationAIUnavailable, Cause: err}
@@ -119,7 +120,13 @@ func (g *GeminiGuideGenerator) Generate(ctx context.Context, input domain.GuideG
 	defer func() { _ = response.Body.Close() }()
 	responseBody, err := io.ReadAll(io.LimitReader(response.Body, 4*1024*1024))
 	if err != nil {
+		if isGenerationTimeout(ctx, err) {
+			return nil, &GuideGenerationFailure{Code: domain.GuideGenerationAITimeout, Cause: err}
+		}
 		return nil, &GuideGenerationFailure{Code: domain.GuideGenerationAIUnavailable, Cause: err}
+	}
+	if response.StatusCode == http.StatusRequestTimeout || response.StatusCode == http.StatusGatewayTimeout {
+		return nil, &GuideGenerationFailure{Code: domain.GuideGenerationAITimeout}
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return nil, &GuideGenerationFailure{Code: domain.GuideGenerationAIUnavailable, Cause: fmt.Errorf("Gemini HTTP status %d", response.StatusCode)}
@@ -230,3 +237,8 @@ func ensureJSONEOF(decoder *json.Decoder) error {
 }
 
 var _ GuideGenerator = (*GeminiGuideGenerator)(nil)
+
+func isGenerationTimeout(ctx context.Context, err error) bool {
+	var timeout net.Error
+	return errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &timeout) && timeout.Timeout())
+}

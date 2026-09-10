@@ -759,3 +759,9 @@ SELECT * FROM guide_drafts
 WHERE support_session_id = $1
 ORDER BY position
 FOR UPDATE;
+
+-- name: CancelGuideRunRow :one
+UPDATE guide_runs
+SET status = 'CANCELLED', updated_at = sqlc.arg(updated_at), revision = revision + 1
+WHERE id = sqlc.arg(id) AND status = 'IN_PROGRESS'
+RETURNING *;

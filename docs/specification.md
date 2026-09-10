@@ -350,10 +350,11 @@ EDITING → SAVED
 ~~~text
 IN_PROGRESS
   ├─ 最終ステップで完了 → COMPLETED
+  ├─ 途中で終了する → CANCELLED
   └─ 家族に聞く → PAUSED_FOR_SUPPORT
 ~~~
 
-COMPLETEDとPAUSED_FOR_SUPPORTはMVPでは終端状態とする。PAUSED_FOR_SUPPORTになったGuideRunを再開するAPIは設けない。支援終了後にガイドをもう一度使う場合は、新しいGuideRunを作成する。
+COMPLETED、CANCELLEDとPAUSED_FOR_SUPPORTはMVPでは終端状態とする。PAUSED_FOR_SUPPORTになったGuideRunを再開するAPIは設けない。支援終了後にガイドをもう一度使う場合は、新しいGuideRunを作成する。
 
 ### 4.6 状態更新の原則
 
@@ -378,7 +379,7 @@ COMPLETEDとPAUSED_FOR_SUPPORTはMVPでは終端状態とする。PAUSED_FOR_SUP
 - CREATEの場合、SupportSessionはresolveでGENERATING_GUIDE=3、バッチ作成=4、バッチ完了でguideGenerationJobId設定=5、AI成功でREVIEWING_GUIDEかつguideDraftId設定=6、全件保存でENDEDかつguideId、endedAt、endReason=GUIDE_SAVED設定=7となる。
 - GuideMaterialBatchは作成=1、新しいGuideMaterialを1件確定するごとに1増え、N件登録後は1+N、complete後は2+Nとなる。同じmaterialの再送では増えない。
 - GuideGenerationJobは作成時QUEUED・attempt=0・revision=1、ワーカー取得時RUNNING・attempt=1・revision=2、成功または失敗時revision=3となる。retry、次のRUNNING、次の結果でもそれぞれ1増える。
-- GuideDraftとGuideRunは作成=1とし、PATCH、save、complete、support-requestによる状態変更ごとに1増える。
+- GuideDraftとGuideRunは作成=1とし、PATCH、save、complete、cancel、support-requestによる状態変更ごとに1増える。
 - Idempotency-Keyによる完了済み応答の再送では、上記のどのrevisionも増えない。
 
 ## 5. データモデル
@@ -566,7 +567,7 @@ SupportSessionとGuideGenerationJobのguideDraftIdは先頭を示す互換用の
 | guideId | string | 必須 |
 | guideVersionNumber | integer | 開始時の版で固定 |
 | userId | string | 必須 |
-| status | IN_PROGRESS、COMPLETED、PAUSED_FOR_SUPPORT | 必須 |
+| status | IN_PROGRESS、COMPLETED、CANCELLED、PAUSED_FOR_SUPPORT | 必須 |
 | currentStepNumber | integer | 1始まり |
 | supportRequestId | string または null | PAUSED_FOR_SUPPORT遷移時に設定、一意 |
 | startedAt | datetime | 必須 |
@@ -575,7 +576,7 @@ SupportSessionとGuideGenerationJobのguideDraftIdは先頭を示す互換用の
 | updatedAt | datetime | 必須 |
 | revision | integer | 1から開始 |
 
-currentStepNumberは固定したGuideVersionの1〜ステップ数とする。IN_PROGRESSではsupportRequestId、completedAt、pausedAtをnullとする。COMPLETEDではcompletedAtを必須としてsupportRequestIdとpausedAtをnullにし、PAUSED_FOR_SUPPORTではsupportRequestIdとpausedAtを必須としてcompletedAtをnullにする。
+currentStepNumberは固定したGuideVersionの1〜ステップ数とする。IN_PROGRESSとCANCELLEDではsupportRequestId、completedAt、pausedAtをnullとする。CANCELLEDへの遷移時刻はupdatedAtで表す。COMPLETEDではcompletedAtを必須としてsupportRequestIdとpausedAtをnullにし、PAUSED_FOR_SUPPORTではsupportRequestIdとpausedAtを必須としてcompletedAtをnullにする。
 
 ### 5.10 内部整合性データ
 
@@ -626,6 +627,7 @@ ArtifactDeletionTaskは id、artifactId、storageKey、status、attempt、nextAt
 | 35 | GET | /v1/push-subscriptions/vapid-public-key | 家族 | 200 | Push購読に使うVAPID公開鍵を取得する |
 | 36 | PUT | /v1/push-subscriptions | 家族 | 200 | 現在端末のPush購読を登録または更新する |
 | 37 | DELETE | /v1/push-subscriptions | 家族 | 204 | 現在端末のPush購読を解除する |
+| 38 | POST | /v1/guide-runs/{id}/cancel | 利用者 | 200 | ガイド利用を途中で終了する |
 
 状態を変更するAPIは次の条件を満たす場合だけ実行する。満たさない場合は409 INVALID_STATEを返す。
 
@@ -643,7 +645,7 @@ ArtifactDeletionTaskは id、artifactId、storageKey、status、attempt、nextAt
 | batch complete | GuideMaterialBatch=UPLOADINGかつ関連SupportSession=GENERATING_GUIDEでguideMaterialBatchIdが対象IDと一致し、receivedItemCount=expectedItemCountかつsequenceが1〜expectedItemCountまですべて存在する |
 | job retry | GuideGenerationJob=FAILEDかつattempt<3で、関連SupportSession=GENERATING_GUIDEかつguideGenerationJobIdが対象IDと一致する |
 | draft PATCH/save | SupportSession=REVIEWING_GUIDEかつSupportSession.guideDraftIdが対象IDと一致し、GuideDraft=EDITING |
-| guide-run PATCH/complete/support-request | GuideRun=IN_PROGRESS |
+| guide-run PATCH/complete/cancel/support-request | GuideRun=IN_PROGRESS |
 | end-without-guide | 第6.3節の中止条件を満たす |
 
 子エンティティのGETと更新は、SupportRequestまたはSupportSessionまで関連をたどり、認証actorがそのuserId・familyIdのペアに属することを確認する。GuideとGuideRunは所有するuserIdを確認する。URLのIDだけで認可してはならない。
@@ -669,7 +671,7 @@ GET /v1/artifacts/{id}/content だけは画像バイナリを返す。それ以�
 | POST draft save | { guide: GuideDetail, supportSession: SupportSession } |
 | GET guides | { items: GuideSummary[] } |
 | GET guides/{id} | GuideDetail |
-| POST/GET/PATCH guide-runs、POST complete | GuideRun |
+| POST/GET/PATCH guide-runs、POST complete/cancel | GuideRun |
 | POST guide-run support-request | { guideRun: GuideRun, supportRequest: SupportRequest } |
 | POST end-without-guide、POST end | SupportSession |
 | POST presence heartbeat | UserPresence |
@@ -971,6 +973,10 @@ actionはNEXTまたはPREVIOUSとする。範囲外への移動は400を返す�
 
 GuideRunがIN_PROGRESSであり、currentStepNumberが最終ステップの場合だけCOMPLETEDへ変更し、completedAtを設定する。
 
+#### ガイド利用を途中で終了
+
+POST /v1/guide-runs/{id}/cancelは完了APIと同じexpectedRevisionおよびIdempotency-Keyを受け取り、利用者本人のIN_PROGRESSのGuideRunを任意の手順でCANCELLEDへ変更する。currentStepNumberとguideVersionNumberを保持し、updatedAtとrevisionを更新する。COMPLETEDにはしない。CANCELLEDは再開できず、次の利用は新しいGuideRunを作成する。所有者、revision、状態の検証と冪等性は完了APIと同じとする。
+
 #### ガイド作成を中止して終了
 
 ~~~json
@@ -1012,7 +1018,7 @@ WebSocketは到達保証とイベント再送を行わない通知経路であ�
 
 復元対象がPENDINGかつsupportSessionId=nullなら支援待ちへ移る。supportSessionIdがあればセッションを取得し、guideMaterialBatchId、guideGenerationJobId、guideDraftId、guideIdの順に、nullでない必要な子を取得する。未終了セッションなら対応する画面へ、未終了の依頼がなく保存対象のセッションがENDEDならendReasonに対応する完了画面へ移る。
 
-利用者側はIN_PROGRESSのGuideRun IDも端末へ保存する。起動時にGuideRunとGuideをGETし、IN_PROGRESSならcurrentStepNumberからU-07を復元する。PAUSED_FOR_SUPPORTならsupportRequestIdを使って支援フローへ移る。COMPLETEDなら保存IDを消す。GENERATING_GUIDEでの端末画像復旧は第9.4節に従う。
+利用者側はIN_PROGRESSのGuideRun IDも端末へ保存する。起動時にGuideRunとGuideをGETし、IN_PROGRESSならcurrentStepNumberからU-07を復元する。PAUSED_FOR_SUPPORTならsupportRequestIdを使って支援フローへ移る。COMPLETEDまたはCANCELLEDなら保存IDを消す。GENERATING_GUIDEでの端末画像復旧は第9.4節に従う。
 
 ### 7.2 イベント形式
 
@@ -1068,6 +1074,7 @@ dataには差分ではなく更新後のエンティティ全体を入れる。
 ### 8.2 利用者側
 
 - マイク音声をpublishする。
+- 配信対象の準備ではサムネイル生成を行わず、mainプロセスでプライマリ画面のIDだけを確認する。実際の配信開始時に対象が同じであることを再検証する。スピーカー音量の調整完了を待たずに接続を進める。
 - プライマリ画面全体をscreen share trackとしてpublishする。応答成功時に自動開始し、追加の同意・共有開始ボタンや共有対象の選択は挟まない。共有停止後の再開や再起動時の復旧には再開ボタンを残す。
 - 家族の音声をsubscribeして再生する。
 - topicが mite.marking.v1 のData Packetを受け取り、画面上へ表示する。
@@ -1123,9 +1130,9 @@ LiveKit Roomだけが切断した場合、SupportSessionはその時点の業務
 
 家族が「丸」「カーソルとマウス」「キーボード」を選ぶ。キー案内は共有画面へフォーカスした間だけ行い、Shift+Escで抜けられる。丸は第8.4節を維持する。新しい案内はtopic `mite.guidance.v1` のreliable Data Packetで送り、`type=guidance.set`、`trackSid`、`sequence`（接続内で単調増加）、`mode=CURSOR_MOUSE|KEYBOARD`、`x`、`y`（第8.4節の正規化座標）、`buttons`（PointerEvent.buttonsの左1・右2・中央4）、`keys`（同時に押しているキー、最大8個）、`ttlMs=2000`、`sentAt`を持つ。全消去は `type=guidance.clear`、`trackSid`、`sequence`、`sentAt`を送る。
 
-カーソルとマウスのモードを選ぶとカーソルを中央に表示し、その後はカーソル移動とマウスの押下・解放を送信する。ドラッグ中は押下表示を保持する。マウスの図はボタンを押している間だけカーソルの横に表示し、画面端では表示範囲に収める。クリック解放、ポインター捕捉の解除・取消、共有映像の領域外への移動、フォーカス喪失では押下表示だけを消し、カーソルは最後の有効な位置に表示し続ける。家族側が別のウィンドウを操作している間も、接続と共有が有効ならカーソルの状態を更新する。
+カーソルとマウスのモードを選ぶとカーソルを中央に表示し、その後はカーソル移動とマウスの押下・解放を送信する。ドラッグ中は押下表示を保持する。マウスの図はカーソルの横に表示し、押下開始から最低1秒、長押し中は解放まで保持する。通常のクリック解放後も最低表示時間が過ぎるまでは押下したボタンの案内を残す。画面端では表示範囲に収める。ポインター捕捉の解除・取消、共有映像の領域外への移動、フォーカス喪失では解放状態を送り、最低表示時間後に押下表示を消す。カーソルは最後の有効な位置に表示し続ける。家族側が別のウィンドウを操作している間も、接続と共有が有効ならカーソルの状態を更新する。
 
-キーボード案内は家族が案内領域へフォーカスした間の実キー入力を使い、キーを押している間だけキーボードの全体図を画面中央に幅約80%・高さ80%以内で表示する。押しているキーを強調し、Ctrl+Cなどの同時押しを併記する。編集欄の入力を案内として送らず、OSの操作を遠隔実行しない。キー解放とフォーカス喪失では古いキー案内を消去する。押下中・静止中はTTL内に状態を更新し、連続した更新の間で消去・非表示を挟まない。「案内を消す」、モード変更、共有停止、参加者切断、Room切断ではカーソルを含む古い状態を消去する。更新が途絶えた場合のTTLによる消去も維持する。受信は家族identity、共有trackSid、順序、値の範囲、TTLを検証し、再接続時は案内状態を初期化する。
+キーボード案内は家族が案内領域へフォーカスした間の実キー入力を使い、押下開始から最低1秒、長押し中は解放までキーボードの全体図を画面中央に幅約80%・高さ80%以内で表示する。押しているキーを強調し、Ctrl+Cなどの同時押しを併記する。編集欄の入力を案内として送らず、OSの操作を遠隔実行しない。通常のキー解放ではkeysが空のguidance.setを送り、部分解放も含め受信側で最低表示時間まで直前のキー・同時押しを残す。新たな押下は最新の案内へ更新し、同じ押下状態の定期送信だけでは最低表示時間を延長しない。フォーカス喪失では即時消去する。押下中・静止中はTTL内に状態を更新し、連続した更新の間で消去・非表示を挟まない。「案内を消す」、モード変更、共有停止、参加者切断、Room切断ではカーソルを含む古い状態を消去する。更新が途絶えた場合のTTLによる消去も維持する。受信は家族identity、共有trackSid、順序、値の範囲、TTLを検証し、再接続時は案内状態を初期化する。
 
 利用者のメニューとは独立した、クリックを透過するオーバーレイに表示する。座標は共有映像の実領域からプライマリ画面のDIPへ変換し、表示倍率を二重適用しない。Miteの全ウィンドウと案内にWindowsのcontent protectionを設定し、共有映像・撮影画像へ含めない。案内とキー入力はDB・ログ・ガイドへ保存しない。
 
@@ -1213,10 +1220,11 @@ Electron起動・再読込時は、各captureディレクトリとサーバー�
 - MVPの既定実装はGemini Interactions APIの `POST /v1beta/interactions` とする。
 - モデルは `gemini-3.8-flash` とし、画像入力とStructured Outputsを使う。
 - Google AI Studioで発行したGemini API用のAuth APIキーを `x-goog-api-key` ヘッダーで送る。キーをURL、リクエスト本文、ログへ含めてはならない。
-- リクエストでは `store=false`、`background=false`、`stream=false`、`generation_config.thinking_level=low`、`generation_config.max_output_tokens=8192` とし、HTTPタイムアウトは50秒とする。
+- リクエストでは `store=false`、`background=false`、`stream=false`、`generation_config.thinking_level=low`、`generation_config.max_output_tokens=8192` とし、HTTPタイムアウトは150秒とする。
 - AI生成はサーバーの非同期ジョブとして実行する。
 - ジョブ実行には外部キューを使わず、サーバープロセス内のワーカー1個がQUEUEDを順番に処理する。
-- 各attemptは入力準備を含め55秒以内に必ずSUCCEEDEDまたはFAILEDへ確定し、Gemini APIへのHTTP要求はその内側で最大50秒とする。
+- 入力画像の取得・変換は最大4件を並列処理し、入力の時系列順序を維持する。画像準備時間、生成時間、枚数、入力バイト数、失敗した工程とerrorCodeだけを記録し、画像・コメント・外部API応答の詳細はログへ含めない。
+- 各attemptは入力準備を含め180秒以内に必ずSUCCEEDEDまたはFAILEDへ確定し、Gemini APIへのHTTP要求はその内側で最大150秒とする。
 - ワーカーは1秒以内の間隔でQUEUEDを検索し、`FOR UPDATE SKIP LOCKED`で1件だけ取得して、RUNNINGへの変更、attemptの加算、startedAtの設定、errorCodeとfinishedAtの消去を同一トランザクションで行う。このとき確定したrevisionを実行権の識別に使う。
 - サーバー起動時に残っているRUNNINGは、attemptが3未満ならQUEUEDへ戻してstartedAtをnullにし、attemptが3ならFAILEDへ変更してerrorCode=WORKER_RESTARTED、finishedAtを設定する。どちらもrevisionを1増やしてからワーカーを開始する。
 - バッチ完了時にQUEUEDで作成し、ワーカーがRUNNINGへ変更する。外部API応答後の成功・失敗更新は、jobがまだRUNNINGでrevisionが実行開始時の値と一致する場合だけ確定する。古い実行の遅延応答は破棄する。
@@ -1237,7 +1245,7 @@ errorCodeはAI_TIMEOUT、AI_UNAVAILABLE、AI_REFUSAL、AI_INCOMPLETE_RESPONSE、
 
 定期取得画像が30枚を超える場合は最初と最後を必ず残し、間を時間順に等間隔で選ぶ。支援依頼時の画像はkind=REQUEST_SCREENSHOT、sequence=0とし、定期取得画像はkind=GUIDE_MATERIALと元のsequenceを使う。したがってAI入力は支援依頼時の画像1枚と定期取得画像最大30枚の計最大31枚である。音声、マーキング、ユーザー識別情報は渡さない。
 
-Gemini APIへ送る直前に、選択した各画像をAI入力専用に長辺1920px、短辺1080px以内へアスペクト比を維持して縮小し、JPEGとして1枚2MiB以下になるまで品質を下げる。この処理でSupabase Storage上のArtifactとそのハッシュを変更してはならない。Base64化した画像、テキスト、JSON Schemaを含むリクエスト全体のシリアライズ後サイズを90MiB以下とする。上限を超える場合は、画像の寸法または品質をさらに下げる。それでも上限内にできない場合はGemini APIを呼ばず、AI_INPUT_UNAVAILABLEで失敗させる。
+Gemini APIへ送る直前に、選択した各画像をAI入力専用に長辺1920px、短辺1080px以内へアスペクト比を維持して縮小し、JPEGとして1枚2MiB以下になるまで品質を下げる。すでに寸法・バイト数の条件を満たすJPEGは画像全体のデコードによる検証後に元のバイト列を再利用し、再圧縮しない。この処理でSupabase Storage上のArtifactとそのハッシュを変更してはならない。Base64化した画像、テキスト、JSON Schemaを含むリクエスト全体のシリアライズ後サイズを90MiB以下とする。上限を超える場合は、画像の寸法または品質をさらに下げる。それでも上限内にできない場合はGemini APIを呼ばず、AI_INPUT_UNAVAILABLEで失敗させる。
 
 画像は各リクエストへinline dataとして含める。Gemini Files API、公開URL、署名付きURLは使わない。
 
@@ -1370,26 +1378,28 @@ U-01、F-01などのIDは管理資料だけで使用し、画面には表示し�
 | U-04 | 着信 | 家族名、第6.3節の同意文と「同意して応答する」のポップアップ | POST /v1/support-sessions/{id}/accept |
 | U-05 | 支援中 | 支援中表示、経過時間、マイク切替、自分のマイク出力、共有停止、終了状態、3モードの操作案内 | LiveKit、WebSocket、GET /v1/support-sessions/{id} |
 | U-06 | ガイド一覧 | タイトル、代表画像、選択 | GET /v1/guides |
-| U-07 | ガイド実行 | 1ステップの画像と説明、戻る、次へ、完了、家族に聞く。家族に聞く時はプライマリ画面全体を自動撮影し、撮り直してから登録できる | /v1/guide-runs API、POST /v1/artifacts |
+| U-07 | ガイド実行 | 移動できる常時表示の小窓に1ステップの画像と説明、戻る、次へ、完了、家族に聞く、途中で終了する。家族に聞く時はプライマリ画面全体を自動撮影し、撮り直してから登録できる | /v1/guide-runs API、POST /v1/artifacts |
 | U-08 | 下書き閲覧 | 家族が編集中のタイトルと手順を読み取り専用表示 | GET /v1/guide-drafts/{id}、WebSocket |
 
 利用者側の本文文字は20px以上、主要ボタンの高さは48px以上とする。専門用語を画面へ表示しない。
 
 U-02の支援依頼画面は、通常の詳細表示サイズでは画像とコメント入力を横に並べ、送信操作まで画面内へ収める。画像を押すと拡大ポップアップで確認でき、閉じても入力内容を保持する。幅560px未満や高さ560px未満、長いエラー表示などで収まらない場合は、文字やボタンを小さくせずスクロールで全内容へ到達できるようにする。
 
+両クライアントで同一Artifactの同時取得をまとめ、取得済み画像をAPIインスタンス（接続先・認証情報）ごとのメモリ内で最大60秒、32件・32MiBまで再利用する。保存先はメモリのみとし、認証付きHTTP応答のprivate, no-storeを維持する。失敗応答は保持しない。
+
 U-06のガイド一覧、U-07のガイド実行、U-08の下書き閲覧の画像は、押すと拡大ポップアップで確認できる。「閉じる」またはEscで元の画面へ戻り、選択中の手順と進行状態を保持する。表示対象の画像が変わる場合は古い画像の拡大表示を閉じる。画像の取得失敗時は拡大操作を出さず、既存のエラー表示を使う。
 
 U-02とU-07からの相談入力を開くと、保存済みの相談画像がある場合は復元し、ない場合はプライマリ画面全体を自動で撮影してプレビューを表示する。「画面を撮り直す」で画像と撮影日時を更新し、入力済みコメントを保持する。撮影中と送信中は撮り直しと送信の同時実行を防ぐ。撮り直しに失敗した場合は直前の画像を保持し、初回撮影に失敗した場合は撮影ボタンで再試行できる。送信結果が未確定の場合は、同じIdempotency-Keyと同じ画像・確定済みの依頼本文による再送を優先し、結果が確定するまで撮り直しで画像を置き換えない。
 
-利用者側アプリは通常のメインウィンドウを表示せず、U-01からU-08までをプライマリ画面の左端に常駐するフレームなしオーバーレイで完結させる。WindowsではShellのAppBarとして左端4pxだけを予約し、他アプリを最大化した場合もこの入口を隠さない。hover後の幅320pxの入口パネルと、それより広い幅を必要とする支援依頼、着信、支援中およびガイド画面は他アプリの上へ重ねて表示し、予約幅を4pxから増やさない。詳細画面の幅はプライマリ画面の利用可能範囲内で内容に応じて広げてよい。
+利用者側アプリは通常のメインウィンドウを表示せず、U-07以外はプライマリ画面の左端に常駐するフレームなしオーバーレイで完結させる。U-07は同じウィンドウを常に最前面の移動可能な小窓（標準560×720 DIP、利用可能範囲に合わせて縮小）へ切り替える。上部をドラッグして移動でき、他アプリの操作でフォーカスを失っても閉じない。プライマリ画面の作業領域内に収め、表示設定変更時も補正する。ガイドを閉じると左端の表示へ戻す。ガイド表示中もAppBarの予約幅は4pxのまま変えない。WindowsではShellのAppBarとして左端4pxだけを予約し、他アプリを最大化した場合もこの入口を隠さない。hover後の幅320pxの入口パネルと、それより広い幅を必要とする支援依頼、着信、支援中およびガイド画面は他アプリの上へ重ねて表示し、予約幅を4pxから増やさない。詳細画面の幅はプライマリ画面の利用可能範囲内で内容に応じて広げてよい。
 
 配布済みのWindows版利用者側アプリはOSへのログイン時に自動起動を登録し、PCが利用可能な間はMiteも常駐する構成とする。開発実行では自動起動を登録しない。家族側に示す状態はそれでも本人の在席ではなく、heartbeatで観測したMiteとサーバー間の接続状態に限る。
 
-入口パネルはマウスが離れた後に4pxへ戻す。Mite外側のクリックでも4pxへ戻し、通話開始時は自動でしまう。再表示は入口メニューを経由せず、直前の詳細画面・入力・操作状態へ戻る。しまっている間に支援状態が変わった場合は最新状態に対応する画面へ戻る。しまう操作は通話、共有、撮影、案内を停止しない。U-02からU-08は「しまう」操作で4pxへ戻せるようにし、入力内容と進行中の状態を保持して左端入口から同じ画面へ戻れるようにする。新しい着信を受け取った場合は着信画面を自動で展開する。表示設定、DPIまたは作業領域が変わった場合は位置と高さを再計算する。アプリ終了時はAppBar登録を解除する。MVPではプライマリ画面だけを対象とする。
+入口パネルはマウスが離れた後に4pxへ戻す。Mite外側のクリックでも4pxへ戻し、通話開始時は自動でしまう。再表示は入口メニューを経由せず、直前の詳細画面・入力・操作状態へ戻る。しまっている間に支援状態が変わった場合は最新状態に対応する画面へ戻る。しまう操作は通話、共有、撮影、案内を停止しない。U-07を除くU-02からU-08は「しまう」操作で4pxへ戻せるようにし、入力内容と進行中の状態を保持して左端入口から同じ画面へ戻れるようにする。新しい着信を受け取った場合は着信画面を自動で展開する。表示設定、DPIまたは作業領域が変わった場合は位置と高さを再計算する。アプリ終了時はAppBar登録を解除する。MVPではプライマリ画面だけを対象とする。
 
-Windows AppBar APIの呼び出しとDIP・スクリーン座標の変換は、Electron mainプロセスのプラットフォームアダプターへ隔離する。rendererにはCOLLAPSED、ENTRY、DETAILの表示モードを切り替えるIPCだけを公開し、ネイティブAPIとウィンドウハンドルを公開しない。Linuxでのクライアント開発では、OSの作業領域を予約しない疑似オーバーレイとして同じ画面遷移とサイズ変更を確認する。WSLから起動したLinux版はWindowsのデスクトップ全体を取得できないため、撮影・画面共有と保存済み相談画像の復元を開始せず、Windows用アプリの起動を案内する。Windows画面の取得はWindows版Electronで確認する。Windows AppBarの登録、最大化した他アプリとの共存、DPI、タスクバーとの競合および終了時の予約解除はWindows 11で別途確認する。現在のWindows 11とWSL2（Ubuntu）の開発環境では、Windows固有の実動作確認は未実施とする。
+Windows AppBar APIの呼び出しとDIP・スクリーン座標の変換は、Electron mainプロセスのプラットフォームアダプターへ隔離する。rendererにはCOLLAPSED、ENTRY、DETAIL、GUIDEの表示モードを切り替えるIPCだけを公開し、ネイティブAPIとウィンドウハンドルを公開しない。Linuxでのクライアント開発では、OSの作業領域を予約しない疑似オーバーレイとして同じ画面遷移とサイズ変更を確認する。WSLから起動したLinux版はWindowsのデスクトップ全体を取得できないため、撮影・画面共有と保存済み相談画像の復元を開始せず、Windows用アプリの起動を案内する。Windows画面の取得はWindows版Electronで確認する。Windows AppBarの登録、最大化した他アプリとの共存、DPI、タスクバーとの競合および終了時の予約解除はWindows 11で別途確認する。現在のWindows 11とWSL2（Ubuntu）の開発環境では、Windows固有の実動作確認は未実施とする。
 
-U-07ではGuideRun IDを端末へ保存し、状態変更のたびに更新する。「家族に聞く」の成功後は返されたsupportRequestIdを保存してU-03へ移る。CREATE後に画像が0件だった場合は、422を受けてNO_MATERIALS終了を実行し、「画像を保存できなかったため手順を作れなかった」と表示する。
+U-07ではGuideRun IDを端末へ保存し、状態変更のたびに更新する。「途中で終了する」はPOST /v1/guide-runs/{id}/cancelで今回の利用をCANCELLEDへ変更する。成功後は端末のGuideRun IDを消して一覧へ戻り、次回は新しいGuideRunの最初の手順から始める。通信失敗ではガイドを閉じず、結果不明時は同じIdempotency-Keyで再送する。終了中は他の状態変更操作を無効にする。「家族に聞く」の成功後は返されたsupportRequestIdを保存してU-03へ移る。CREATE後に画像が0件だった場合は、422を受けてNO_MATERIALS終了を実行し、「画像を保存できなかったため手順を作れなかった」と表示する。
 
 ### 11.2 家族側
 
@@ -1489,7 +1499,7 @@ DBスキーマはSupabase CLIのマイグレーションだけで変更する。
 9. AI失敗とジョブのFAILED化
 10. 下書き更新
 11. レビュー完了、全下書き分のGuide、GuideVersion、GuideVersionStep作成、全下書きとセッションの完了、中間データ削除、全ガイドで使われない画像の削除予約
-12. ガイド利用のステップ移動または完了
+12. ガイド利用のステップ移動、完了または途中終了
 13. ガイド途中の支援依頼作成、GuideRunのPAUSED_FOR_SUPPORT化と関連ID設定
 14. ガイド作成中止、全下書きを含む子データの参照解除・削除、セッション完了、画像の削除予約
 
@@ -1692,7 +1702,7 @@ Supabase、LiveKit、Google AI StudioのGemini APIキーをクライアントの
 4. 双方の自分のマイクのメーターが発声に応じて動き、相手の声を聞ける。家族側には利用者の共有画面が表示される。利用者側スピーカーは50%未満なら50%へ上がり、50%以上は維持する。
 5. 家族が共有画面をクリックすると、2秒以内に利用者側へ2秒間マークが出る。表示中心の誤差は、同じ映像座標へ換算したとき20px以内とする。
 6. 共有開始から30秒後までに、開始直後を含め4枚の画像が端末へ保存される。
-7. CREATEを選ぶと全画像がアップロードされ、AIジョブが実行される。バッチ完了から60秒以内にSUCCEEDEDまたはFAILEDへ到達する。
+7. CREATEを選ぶと全画像がアップロードされ、AIジョブが実行される。バッチ完了から185秒以内にSUCCEEDEDまたはFAILEDへ到達する。
 8. 成功した下書きが1〜8ステップで、JSON Schema検証を通り、入力に存在するartifactIdだけを参照している。
 9. 両画面に同じ下書きが表示される。
 10. 家族の編集がPATCH成功から2秒以内に利用者側へ反映される。
@@ -1716,6 +1726,9 @@ Supabase、LiveKit、Google AI StudioのGemini APIキーをクライアントの
 6. 新しいSupportRequestのguideContextだけで、家族側にガイド名、該当手順の説明と画像が表示される。
 7. 同時にGuideRunがPAUSED_FOR_SUPPORTになり、相互の関連IDが設定される。
 8. そのSupportRequestから発信、応答、解決まで通常支援フローを実行できる。元のGuideRunはPAUSED_FOR_SUPPORTのまま残る。
+
+9. ガイドを途中で終了するとCANCELLEDになり、小窓が閉じる。次回の利用は新しいGuideRunの手順1から始まる。終了失敗では画面を保持し、結果不明時の再送キーが変わらない。
+10. ガイドの上部をドラッグして位置を変え、他アプリを操作しても手順が見える。表示設定変更後もプライマリ画面内に収まる。
 
 ### 17.4 契約と安全性
 
