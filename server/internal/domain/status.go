@@ -6,15 +6,42 @@ const (
 	SupportRequestPending   SupportRequestStatus = "PENDING"
 	SupportRequestInSupport SupportRequestStatus = "IN_SUPPORT"
 	SupportRequestResolved  SupportRequestStatus = "RESOLVED"
+	SupportRequestCancelled SupportRequestStatus = "CANCELLED"
 )
 
 func (s SupportRequestStatus) Valid() bool {
-	return s == SupportRequestPending || s == SupportRequestInSupport || s == SupportRequestResolved
+	return s == SupportRequestPending || s == SupportRequestInSupport ||
+		s == SupportRequestResolved || s == SupportRequestCancelled
 }
 
 func (s SupportRequestStatus) CanTransitionTo(next SupportRequestStatus) bool {
-	return (s == SupportRequestPending && next == SupportRequestInSupport) ||
+	return (s == SupportRequestPending && (next == SupportRequestInSupport || next == SupportRequestCancelled)) ||
 		(s == SupportRequestInSupport && next == SupportRequestResolved)
+}
+
+type SupportAcknowledgementKind string
+
+const (
+	SupportAcknowledgementNow       SupportAcknowledgementKind = "NOW"
+	SupportAcknowledgementScheduled SupportAcknowledgementKind = "SCHEDULED"
+	SupportAcknowledgementUnknown   SupportAcknowledgementKind = "UNKNOWN"
+)
+
+func (k SupportAcknowledgementKind) Valid() bool {
+	return k == SupportAcknowledgementNow || k == SupportAcknowledgementScheduled ||
+		k == SupportAcknowledgementUnknown
+}
+
+type PresenceStatus string
+
+const (
+	PresenceConnecting PresenceStatus = "CONNECTING"
+	PresenceOnline     PresenceStatus = "ONLINE"
+	PresenceOffline    PresenceStatus = "OFFLINE"
+)
+
+func (s PresenceStatus) Valid() bool {
+	return s == PresenceConnecting || s == PresenceOnline || s == PresenceOffline
 }
 
 type SupportSessionStatus string

@@ -578,6 +578,8 @@ const createWindow = () => {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      // Presence heartbeat must continue while the overlay is inactive.
+      backgroundThrottling: false,
     },
   })
   userWindow = window
@@ -625,6 +627,9 @@ const createWindow = () => {
 }
 
 app.whenReady().then(() => {
+  if (process.platform === 'win32' && app.isPackaged) {
+    app.setLoginItemSettings({ openAtLogin: true, path: process.execPath })
+  }
   if (isWslCaptureEnvironment()) {
     console.warn(
       'WSLではWindowsの画面全体を撮影・共有できません。Windows側のNode.jsで npm run dev:user を実行してください。手順: docs/setup.md',

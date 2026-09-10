@@ -53,6 +53,14 @@ export default tseslint.config(
     },
   },
   {
+    files: ['apps/*/public/sw.js'],
+    languageOptions: {
+      globals: {
+        ...globals.serviceworker,
+      },
+    },
+  },
+  {
     files: [
       'apps/*/src/main/**/*.ts',
       'apps/*/src/preload/**/*.ts',

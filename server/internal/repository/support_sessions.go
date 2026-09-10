@@ -298,7 +298,9 @@ func sessionRequestFromDB(value *dbgen.SupportRequest) (domain.SupportRequest, e
 		ID: domain.ID(value.ID), UserID: domain.ID(value.UserID), FamilyID: domain.ID(value.FamilyID),
 		InitialScreenshotArtifactID: domain.ID(value.InitialScreenshotArtifactID), Comment: value.Comment,
 		Status: domain.SupportRequestStatus(value.Status), SupportSessionID: stringPointerToID(value.SupportSessionID),
-		CreatedAt: value.CreatedAt.Time, UpdatedAt: value.UpdatedAt.Time, Revision: value.Revision,
+		AcknowledgedAt: optionalTime(value.AcknowledgedAt), AcknowledgementKind: stringPointerToAcknowledgementKind(value.AcknowledgementKind),
+		EstimatedSupportAt: optionalTime(value.EstimatedSupportAt),
+		CreatedAt:          value.CreatedAt.Time, UpdatedAt: value.UpdatedAt.Time, Revision: value.Revision,
 	}
 	if len(value.GuideContext) > 0 {
 		var raw struct {

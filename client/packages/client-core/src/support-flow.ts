@@ -24,7 +24,7 @@ export const deriveUserSupportScreen = (
   request: SupportRequest | null,
   session: SupportSession | null,
 ): UserSupportScreen => {
-  if (!request) return 'HOME'
+  if (!request || request.status === 'CANCELLED') return 'HOME'
   if (!session) return 'WAITING_FOR_FAMILY'
   switch (session.status) {
     case 'RINGING':

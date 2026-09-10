@@ -52,12 +52,23 @@ type GuideAPI interface {
 	GetGuide(context.Context, generated.GetGuideRequestObject) (generated.GetGuideResponseObject, error)
 }
 
+type CompanionAPI interface {
+	GetCompanionStatus(context.Context, generated.GetCompanionStatusRequestObject) (generated.GetCompanionStatusResponseObject, error)
+	RecordPresenceHeartbeat(context.Context, generated.RecordPresenceHeartbeatRequestObject) (generated.RecordPresenceHeartbeatResponseObject, error)
+	DeletePushSubscription(context.Context, generated.DeletePushSubscriptionRequestObject) (generated.DeletePushSubscriptionResponseObject, error)
+	UpsertPushSubscription(context.Context, generated.UpsertPushSubscriptionRequestObject) (generated.UpsertPushSubscriptionResponseObject, error)
+	GetVapidPublicKey(context.Context, generated.GetVapidPublicKeyRequestObject) (generated.GetVapidPublicKeyResponseObject, error)
+	UpdateSupportRequestAcknowledgement(context.Context, generated.UpdateSupportRequestAcknowledgementRequestObject) (generated.UpdateSupportRequestAcknowledgementResponseObject, error)
+	CancelSupportRequest(context.Context, generated.CancelSupportRequestRequestObject) (generated.CancelSupportRequestResponseObject, error)
+}
+
 // API combines independently implemented feature lanes into the generated
 // strict server contract.
 type API struct {
 	ArtifactSupportAPI
 	SupportSessionAPI
 	GuideAPI
+	CompanionAPI
 }
 
 var _ generated.StrictServerInterface = API{}

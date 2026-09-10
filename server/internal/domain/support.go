@@ -13,17 +13,20 @@ type GuideContext struct {
 }
 
 type SupportRequest struct {
-	ID                          ID                   `json:"id"`
-	UserID                      ID                   `json:"userId"`
-	FamilyID                    ID                   `json:"familyId"`
-	InitialScreenshotArtifactID ID                   `json:"initialScreenshotArtifactId"`
-	Comment                     string               `json:"comment"`
-	Status                      SupportRequestStatus `json:"status"`
-	SupportSessionID            *ID                  `json:"supportSessionId"`
-	GuideContext                *GuideContext        `json:"guideContext"`
-	CreatedAt                   time.Time            `json:"createdAt"`
-	UpdatedAt                   time.Time            `json:"updatedAt"`
-	Revision                    int64                `json:"revision"`
+	ID                          ID                          `json:"id"`
+	UserID                      ID                          `json:"userId"`
+	FamilyID                    ID                          `json:"familyId"`
+	InitialScreenshotArtifactID ID                          `json:"initialScreenshotArtifactId"`
+	Comment                     string                      `json:"comment"`
+	Status                      SupportRequestStatus        `json:"status"`
+	SupportSessionID            *ID                         `json:"supportSessionId"`
+	GuideContext                *GuideContext               `json:"guideContext"`
+	AcknowledgedAt              *time.Time                  `json:"acknowledgedAt"`
+	AcknowledgementKind         *SupportAcknowledgementKind `json:"acknowledgementKind"`
+	EstimatedSupportAt          *time.Time                  `json:"estimatedSupportAt"`
+	CreatedAt                   time.Time                   `json:"createdAt"`
+	UpdatedAt                   time.Time                   `json:"updatedAt"`
+	Revision                    int64                       `json:"revision"`
 }
 
 type Consent struct {

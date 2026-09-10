@@ -37,6 +37,10 @@ import type {
   SupportSession,
   UpdateGuideDraftInput,
   UpdateGuideRunInput,
+  UserPresence,
+  CompanionStatus,
+  UpdateSupportRequestAcknowledgementInput,
+  PushSubscriptionInput,
 } from './types'
 
 export interface HttpMiteApiOptions {
@@ -77,6 +81,71 @@ export class HttpMiteApi implements MiteApi {
     this.#baseUrl = options.baseUrl.replace(/\/$/, '')
     this.#token = options.token
     this.#fetch = options.fetch ?? globalThis.fetch.bind(globalThis)
+  }
+
+  recordPresenceHeartbeat(): Promise<UserPresence> {
+    return this.#request('/v1/presence/heartbeat', {
+      method: 'POST',
+      body: '{}',
+    })
+  }
+
+  getCompanionStatus(): Promise<CompanionStatus> {
+    return this.#request('/v1/companion/status')
+  }
+
+  updateSupportRequestAcknowledgement(
+    supportRequestId: string,
+    input: UpdateSupportRequestAcknowledgementInput,
+  ): Promise<SupportRequest> {
+    return this.#request(
+      `/v1/support-requests/${encodeId(supportRequestId)}/acknowledgement`,
+      { method: 'PATCH', body: JSON.stringify(input) },
+    )
+  }
+
+  cancelSupportRequest(
+    supportRequestId: string,
+    expectedRevision: number,
+    operation: IdempotentOperation,
+  ): Promise<SupportRequest> {
+    return this.#request(
+      `/v1/support-requests/${encodeId(supportRequestId)}/cancel`,
+      { method: 'POST', body: JSON.stringify({ expectedRevision }) },
+      operation,
+    )
+  }
+
+  async getVapidPublicKey(): Promise<string> {
+    const data = await this.#request<{ publicKey: string }>(
+      '/v1/push-subscriptions/vapid-public-key',
+    )
+    return data.publicKey
+  }
+
+  async upsertPushSubscription(input: PushSubscriptionInput): Promise<boolean> {
+    const data = await this.#request<{ enabled: boolean }>(
+      '/v1/push-subscriptions',
+      { method: 'PUT', body: JSON.stringify(input) },
+    )
+    return data.enabled
+  }
+
+  async deletePushSubscription(endpoint: string): Promise<void> {
+    const headers = new Headers({
+      Accept: 'application/json',
+      Authorization: `Bearer ${this.#token}`,
+      'Content-Type': 'application/json',
+    })
+    const response = await this.#fetch(
+      `${this.#baseUrl}/v1/push-subscriptions`,
+      { method: 'DELETE', headers, body: JSON.stringify({ endpoint }) },
+    )
+    if (!response.ok) {
+      const body: unknown = await response.json().catch(() => null)
+      if (isApiErrorBody(body)) throw new MiteApiError(response.status, body)
+      throw new Error(`Mite API request failed with HTTP ${response.status}`)
+    }
   }
 
   async #request<TData>(

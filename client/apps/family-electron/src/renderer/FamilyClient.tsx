@@ -117,6 +117,8 @@ const requestStatus = (status: SupportRequest['status']) => {
       return { text: '支援中', tone: 'active' as const }
     case 'RESOLVED':
       return { text: '解決済み', tone: 'success' as const }
+    case 'CANCELLED':
+      return { text: '取消済み', tone: 'neutral' as const }
   }
 }
 

@@ -123,11 +123,7 @@ func (h *SupportSessionHandler) EndSupportSessionWithoutGuide(ctx context.Contex
 }
 
 func generatedSupportRequest(value domain.SupportRequest) generated.SupportRequest {
-	result := generated.SupportRequest{Comment: value.Comment, CreatedAt: value.CreatedAt, FamilyId: string(value.FamilyID), Id: string(value.ID), InitialScreenshotArtifactId: string(value.InitialScreenshotArtifactID), Revision: value.Revision, Status: generated.SupportRequestStatus(value.Status), SupportSessionId: handlerIDPointer(value.SupportSessionID), UpdatedAt: value.UpdatedAt, UserId: string(value.UserID)}
-	if value.GuideContext != nil {
-		result.GuideContext = &generated.GuideContext{GuideId: string(value.GuideContext.GuideID), GuideRunId: string(value.GuideContext.GuideRunID), GuideTitle: value.GuideContext.GuideTitle, GuideVersionNumber: value.GuideContext.GuideVersionNumber, StepArtifactId: string(value.GuideContext.StepArtifactID), StepInstruction: value.GuideContext.StepInstruction, StepNumber: value.GuideContext.StepNumber}
-	}
-	return result
+	return supportRequestToGenerated(value)
 }
 
 func generatedSupportSession(value domain.SupportSession) generated.SupportSession {

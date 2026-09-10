@@ -81,6 +81,40 @@ describe('HttpMiteApi', () => {
       retryAfterSeconds: 2,
     } satisfies Partial<MiteApiError>)
   })
+
+  it('heartbeat・確認返答・取消を専用の契約で送る', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async () =>
+      jsonResponse({ data: { status: 'ONLINE' } }),
+    )
+    const api = new HttpMiteApi({
+      baseUrl: 'https://api.example.com',
+      token: 'user-token',
+      fetch,
+    })
+
+    await api.recordPresenceHeartbeat()
+    await api.updateSupportRequestAcknowledgement('request/1', {
+      acknowledgementKind: 'UNKNOWN',
+      estimatedSupportAt: null,
+      expectedRevision: 2,
+    })
+    await api.cancelSupportRequest('request/1', 3, {
+      idempotencyKey: 'cancel-key',
+    })
+
+    expect(fetch.mock.calls[0]?.[0]).toBe(
+      'https://api.example.com/v1/presence/heartbeat',
+    )
+    expect(fetch.mock.calls[1]?.[0]).toBe(
+      'https://api.example.com/v1/support-requests/request%2F1/acknowledgement',
+    )
+    expect(fetch.mock.calls[2]?.[0]).toBe(
+      'https://api.example.com/v1/support-requests/request%2F1/cancel',
+    )
+    expect(
+      new Headers(fetch.mock.calls[2]?.[1]?.headers).get('idempotency-key'),
+    ).toBe('cancel-key')
+  })
 })
 
 it('支援の全下書き一覧と全件確定を正しいパス・本文・キーで送る', async () => {

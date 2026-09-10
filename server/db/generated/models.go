@@ -145,6 +145,17 @@ type IdempotencyRecord struct {
 	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
 }
 
+type PushSubscription struct {
+	ID        string             `json:"id"`
+	FamilyID  string             `json:"family_id"`
+	Endpoint  string             `json:"endpoint"`
+	P256dh    string             `json:"p256dh"`
+	Auth      string             `json:"auth"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	Revision  int64              `json:"revision"`
+}
+
 type SupportRequest struct {
 	ID                          string             `json:"id"`
 	UserID                      string             `json:"user_id"`
@@ -157,6 +168,15 @@ type SupportRequest struct {
 	CreatedAt                   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt                   pgtype.Timestamptz `json:"updated_at"`
 	Revision                    int64              `json:"revision"`
+	AcknowledgedAt              pgtype.Timestamptz `json:"acknowledged_at"`
+	AcknowledgementKind         *string            `json:"acknowledgement_kind"`
+	EstimatedSupportAt          pgtype.Timestamptz `json:"estimated_support_at"`
+}
+
+type SupportRequestPresenceNotification struct {
+	SupportRequestID string             `json:"support_request_id"`
+	ConnectionEpoch  int64              `json:"connection_epoch"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 }
 
 type SupportSession struct {
@@ -190,4 +210,14 @@ type User struct {
 type UserPair struct {
 	UserID   string `json:"user_id"`
 	FamilyID string `json:"family_id"`
+}
+
+type UserPresence struct {
+	UserID          string             `json:"user_id"`
+	ConnectedSince  pgtype.Timestamptz `json:"connected_since"`
+	LastSeenAt      pgtype.Timestamptz `json:"last_seen_at"`
+	ConnectionEpoch int64              `json:"connection_epoch"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	Revision        int64              `json:"revision"`
 }

@@ -30,7 +30,7 @@ npm run lint
 npm run build
 ```
 
-### Electronクライアント
+### Electronクライアントと家族向けPWA
 
 `client/`で実行します。
 
@@ -45,6 +45,8 @@ npm run build
 ```
 
 Electronの `main` と各 `preload` は `client/scripts/build-electron.mjs` で型チェック後、既存のViteを使ってCommonJSへバンドルします。`npm run dev:user`、`npm run dev:family` と配布用の `build:electron` は同じ処理を使います。`dist-electron/main/main.js` と `dist-electron/preload/*.js` が実行用の生成物です。
+
+`npm run build`は家族向けPWAも静的ファイルとして`client/apps/family-pwa/dist/`へ生成します。実端末のService WorkerとPush確認には、生成物とAPIをHTTPSで公開し、PWAのoriginをサーバーの`CLIENT_ORIGINS`へ追加してください。
 
 `@mite/client-core` などのworkspaceはTypeScriptソースを公開しているため、Electronから直接読み込まず、必要なコードを実行用JavaScriptへ含めます。Electron・Node組み込みmodule・Koffiはバンドルの外に残し、既存のKoffi配布hookを維持します。sandbox付きpreloadはアプリ内moduleを `require` できないため、それぞれ単独のファイルにまとめます。根拠: [Vite library mode](https://vite.dev/guide/build.html#library-mode)、[Electron sandbox](https://www.electronjs.org/docs/latest/tutorial/sandbox)。
 

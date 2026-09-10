@@ -10,6 +10,12 @@ export type Artifact = Schema<'Artifact'>
 export type SupportRequestStatus = Schema<'SupportRequestStatus'>
 export type SupportRequestGuideContext = Schema<'GuideContext'>
 export type SupportRequest = Schema<'SupportRequest'>
+export type SupportAcknowledgementKind = Schema<'SupportAcknowledgementKind'>
+export type UserPresence = Schema<'UserPresence'>
+export type CompanionStatus = Schema<'CompanionStatusResponse'>['data']
+export type UpdateSupportRequestAcknowledgementInput =
+  Schema<'UpdateSupportRequestAcknowledgementRequest'>
+export type PushSubscriptionInput = Schema<'PushSubscriptionRequest'>
 export type SupportSessionStatus = Schema<'SupportSessionStatus'>
 export type GuideDecision = Schema<'GuideDecision'>
 export type SupportSessionEndReason = Schema<'SupportSessionEndReason'>

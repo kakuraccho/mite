@@ -3,6 +3,7 @@ package config
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestLoad(t *testing.T) {
@@ -26,6 +27,66 @@ func TestLoad(t *testing.T) {
 	}
 	if _, ok := config.ClientOrigins["http://127.0.0.1:5173"]; !ok {
 		t.Fatal("user development origin is missing")
+	}
+	if config.PresenceOnlineAfter != time.Minute || config.PresenceOfflineAfter != 90*time.Second || config.PresenceReconnectAfter != 10*time.Minute {
+		t.Fatalf("unexpected presence defaults: online=%s offline=%s reconnect=%s", config.PresenceOnlineAfter, config.PresenceOfflineAfter, config.PresenceReconnectAfter)
+	}
+	if config.WebPushVAPIDPublicKey != "" || config.WebPushVAPIDPrivateKey != "" || config.WebPushSubject != "" {
+		t.Fatal("Web Push must be disabled when its settings are omitted")
+	}
+}
+
+func TestLoadPresenceAndWebPushConfiguration(t *testing.T) {
+	t.Parallel()
+	environment := validEnvironment()
+	environment["PRESENCE_ONLINE_AFTER_SECONDS"] = "30"
+	environment["PRESENCE_OFFLINE_AFTER_SECONDS"] = "60"
+	environment["PRESENCE_RECONNECT_AFTER_SECONDS"] = "300"
+	environment["WEB_PUSH_VAPID_PUBLIC_KEY"] = "public-key"
+	environment["WEB_PUSH_VAPID_PRIVATE_KEY"] = "private-key"
+	environment["WEB_PUSH_SUBJECT"] = "mailto:support@example.com"
+	config, err := load(func(name string) (string, bool) {
+		value, ok := environment[name]
+		return value, ok
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if config.PresenceOnlineAfter != 30*time.Second || config.PresenceOfflineAfter != time.Minute || config.PresenceReconnectAfter != 5*time.Minute {
+		t.Fatalf("unexpected presence settings: online=%s offline=%s reconnect=%s", config.PresenceOnlineAfter, config.PresenceOfflineAfter, config.PresenceReconnectAfter)
+	}
+	if config.WebPushVAPIDPublicKey != "public-key" || config.WebPushVAPIDPrivateKey != "private-key" || config.WebPushSubject != "mailto:support@example.com" {
+		t.Fatal("Web Push settings were not loaded")
+	}
+}
+
+func TestLoadRejectsInvalidCompanionConfiguration(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		values map[string]string
+		want   string
+	}{
+		{name: "non-positive duration", values: map[string]string{"PRESENCE_ONLINE_AFTER_SECONDS": "0"}, want: "positive integer"},
+		{name: "unordered durations", values: map[string]string{"PRESENCE_ONLINE_AFTER_SECONDS": "90"}, want: "online < offline < reconnect"},
+		{name: "partial Web Push", values: map[string]string{"WEB_PUSH_VAPID_PUBLIC_KEY": "public-key"}, want: "all WEB_PUSH settings"},
+		{name: "invalid Web Push subject", values: map[string]string{"WEB_PUSH_VAPID_PUBLIC_KEY": "public-key", "WEB_PUSH_VAPID_PRIVATE_KEY": "private-key", "WEB_PUSH_SUBJECT": "support@example.com"}, want: "mailto or HTTPS"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			environment := validEnvironment()
+			for name, value := range test.values {
+				environment[name] = value
+			}
+			_, err := load(func(name string) (string, bool) {
+				value, ok := environment[name]
+				return value, ok
+			})
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("load() error = %v, want substring %q", err, test.want)
+			}
+		})
 	}
 }
 

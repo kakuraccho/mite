@@ -37,6 +37,9 @@ const supportRequest = (
   status: supportSessionId ? 'IN_SUPPORT' : 'PENDING',
   supportSessionId,
   guideContext: null,
+  acknowledgedAt: null,
+  acknowledgementKind: null,
+  estimatedSupportAt: null,
   revision: supportSessionId ? 3 : 1,
   createdAt: timestamp,
   updatedAt: timestamp,
@@ -127,6 +130,7 @@ const makeApi = (overrides: Record<string, unknown> = {}): MiteApi =>
   ({
     listSupportRequests: vi.fn().mockResolvedValue([]),
     listGuides: vi.fn().mockResolvedValue([]),
+    recordPresenceHeartbeat: vi.fn().mockResolvedValue({}),
     ...overrides,
   }) as unknown as MiteApi
 
