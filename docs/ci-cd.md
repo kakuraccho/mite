@@ -152,6 +152,10 @@ sudo -u "$MITE_PWA_DEPLOY_USER" /usr/local/bin/mite-pwa-deploy --check "$MITE_PW
 
 PWAの`current`がまだない場合、PWA URLの404は初回デプロイまで正常である。デプロイスクリプトを変更したcommitをデプロイする前には、同じ手順でVPS上のコピーを更新する。
 
+CIのPWA archiveは`server/deploy/package-family-pwa.sh`で作成する。tarの格納順・所有者・権限とgzipヘッダーを揃え、更新日時には`SOURCE_DATE_EPOCH`で渡す配信対象commitのcommitter時刻を使う。同じcommitから同じ公開ファイルを再buildした場合も同じchecksumになり、後続commitではその時刻を使ってApacheの更新判定を維持する。通常の`tar -czf`ではbuild時刻などが変わるため、同じcommitの再配信でも`The release commit already exists with different contents.`で拒否されることがある。実際にファイル内容が異なる場合は、同じcommitの既存releaseを上書きせずに停止する。
+
+この梱包処理へ移行する際は、修正を含む新しいcommitからデプロイする。梱包処理だけの変更では、VPSの配信スクリプトを再設置する必要はない。
+
 事前確認が失敗した場合は、最後の`Family PWA preflight failed`より前に出るメッセージを確認する。`--check`へ渡すchecksumは、CIが配置するcommitのスクリプトから計算する。VPSに設置済みのファイル自身から計算すると、古いスクリプトのままでもローカルの確認だけ通ってしまう。
 
 | メッセージ | 対処 |
@@ -234,7 +238,7 @@ sudo cat /opt/mite/mite-api.previous | sudo -n /usr/local/sbin/mite-deploy "$MIT
 
 `bash server/deploy/test-deploy-from-ci.sh`でCDの制御も確認する。GitHub・Supabase・SSHを模擬し、設定不足、古いコミット、SSH事前確認の失敗、dry-run失敗、マイグレーション失敗、VPS更新失敗を再現する。DB適用より前にVPSを更新しないこと、失敗後の処理を止めること、一時SSH鍵を削除することを検証する。
 
-`bash server/deploy/test-mite-pwa-deploy.sh`では一時directoryを使い、初回配置、再送、checksum不一致、公開確認失敗時のrollback、排他制御、危険なarchiveの拒否を確認する。`bash server/deploy/test-deploy-pwa-from-ci.sh`ではGitHubとSSHを模擬し、古いcommitの停止、preflight失敗、転送内容、秘密鍵の一時directory削除を確認する。実際のApacheや公開URLは変更しない。
+`bash server/deploy/test-mite-pwa-deploy.sh`では一時directoryを使い、初回配置、再送、日時・作成順・権限が異なる同一buildの再配信、同じcommitで内容が変わった場合の拒否、checksum不一致、公開確認失敗時のrollback、排他制御、危険なarchiveの拒否を確認する。`bash server/deploy/test-deploy-pwa-from-ci.sh`ではGitHubとSSHを模擬し、古いcommitの停止、preflight失敗、転送内容、秘密鍵の一時directory削除を確認する。実際のApacheや公開URLは変更しない。
 
 ## 参考
 

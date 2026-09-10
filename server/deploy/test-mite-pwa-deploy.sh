@@ -10,6 +10,7 @@ source "$script_directory/mite-pwa-deploy.sh"
 old_release=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 new_release=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 public_url=https://priv.chi-llenge.com/mite/pwa/
+export SOURCE_DATE_EPOCH=1700000000
 
 create_build() {
   local root="$1" label="$2"
@@ -34,7 +35,7 @@ create_archive() {
   archive="$test_root/$label.tar.gz"
   mkdir -p "$fixture"
   create_build "$fixture" "$label"
-  tar -czf "$archive" -C "$fixture" .
+  bash "$script_directory/package-family-pwa.sh" "$fixture" "$archive"
   printf '%s\n' "$archive"
 }
 
@@ -74,12 +75,59 @@ mite_pwa_install "$directory" "$directory/deploy.lock" "$public_url" "$digest" "
 [[ "$(readlink "$directory/previous")" == "releases/$old_release" ]]
 [[ "$(cat "$directory/releases/$new_release/.mite-archive.sha256")" == "$digest" ]]
 grep -q new "$directory/releases/$new_release/index.html"
+[[ "$(stat -c %Y "$directory/releases/$new_release/index.html")" == "$SOURCE_DATE_EPOCH" ]]
 printf 'PASS successful update\n'
 
 # Replaying the same verified release is safe and keeps the current selection.
 mite_pwa_install "$directory" "$directory/deploy.lock" "$public_url" "$digest" "$new_release" < "$archive"
 [[ "$(readlink "$directory/current")" == "releases/$new_release" ]]
 printf 'PASS idempotent update\n'
+
+# A new runner rebuilds the same files with different timestamps and order.
+rebuilt_fixture="$test_root/rebuilt-new"
+mkdir -p "$rebuilt_fixture/assets"
+for file in icon.svg sw.js manifest.webmanifest index.html assets/app-new.js; do
+  cp "$test_root/fixture-new/$file" "$rebuilt_fixture/$file"
+done
+find "$rebuilt_fixture" -exec touch -d '2001-01-01 00:00:00 UTC' {} +
+chmod -R u=rwX,go= "$rebuilt_fixture"
+rebuilt_archive="$test_root/rebuilt.tar.gz"
+bash "$script_directory/package-family-pwa.sh" "$rebuilt_fixture" "$rebuilt_archive"
+cmp "$archive" "$rebuilt_archive"
+rebuilt_digest="$(sha256sum "$rebuilt_archive")"
+rebuilt_digest="${rebuilt_digest%% *}"
+mite_pwa_install "$directory" "$directory/deploy.lock" "$public_url" "$rebuilt_digest" "$new_release" < "$rebuilt_archive"
+[[ "$(readlink "$directory/current")" == "releases/$new_release" ]]
+[[ "$(readlink "$directory/previous")" == "releases/$old_release" ]]
+printf 'PASS rebuilt identical release\n'
+
+# A later commit retains a distinct mtime for HTTP cache revalidation.
+later_archive="$test_root/later.tar.gz"
+SOURCE_DATE_EPOCH=1700000001 bash "$script_directory/package-family-pwa.sh" "$rebuilt_fixture" "$later_archive"
+if cmp -s "$archive" "$later_archive"; then exit 1; fi
+mkdir "$test_root/later"
+tar -xzf "$later_archive" -C "$test_root/later"
+[[ "$(stat -c %Y "$test_root/later/index.html")" == 1700000001 ]]
+printf 'PASS release commit timestamp\n'
+
+# A real content change must still be rejected for an existing commit.
+printf 'changed application\n' > "$rebuilt_fixture/assets/app-new.js"
+bash "$script_directory/package-family-pwa.sh" "$rebuilt_fixture" "$rebuilt_archive"
+changed_digest="$(sha256sum "$rebuilt_archive")"
+changed_digest="${changed_digest%% *}"
+[[ "$changed_digest" != "$digest" ]]
+status=0
+set +e
+mite_pwa_install "$directory" "$directory/deploy.lock" "$public_url" "$changed_digest" "$new_release" < "$rebuilt_archive" > "$directory/output" 2>&1
+status="$?"
+set -e
+[[ "$status" -ne 0 ]]
+grep -Fq 'The release commit already exists with different contents.' "$directory/output"
+[[ "$(readlink "$directory/current")" == "releases/$new_release" ]]
+[[ "$(readlink "$directory/previous")" == "releases/$old_release" ]]
+[[ "$(cat "$directory/releases/$new_release/assets/app-new.js")" == new ]]
+[[ "$(cat "$directory/releases/$new_release/.mite-archive.sha256")" == "$digest" ]]
+printf 'PASS changed content rejection\n'
 
 directory="$test_root/first"
 mkdir -p "$directory/releases"

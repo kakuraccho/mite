@@ -272,7 +272,10 @@ jobs:
           VITE_PWA_BASE_PATH: /mite/pwa/
         run: npm run build -w @mite/family-pwa
       - name: Package family PWA
-        run: tar -czf "$RUNNER_TEMP/mite-family-pwa.tar.gz" -C client/apps/family-pwa/dist .
+        run: |
+          SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")"
+          export SOURCE_DATE_EPOCH
+          bash server/deploy/package-family-pwa.sh client/apps/family-pwa/dist "$RUNNER_TEMP/mite-family-pwa.tar.gz"
       - name: Deploy and verify family PWA
         env:
           GH_TOKEN: ${{ github.token }}
