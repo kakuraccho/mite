@@ -141,9 +141,19 @@ jobs:
         run: bash deploy/test-deploy-pwa-from-ci.sh
 
   integration:
-    name: Supabase integration and HTTP WebSocket E2E
+    name: ${{ matrix.name }}
     runs-on: ubuntu-24.04
     timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Supabase integration and HTTP WebSocket E2E
+            pattern: 'Postgres|Integration|^TestServerRuntimeE2E$'
+            client-adapter: '0'
+          - name: TypeScript client adapter E2E
+            pattern: '^TestClientAdapterE2E$'
+            client-adapter: '1'
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -158,6 +168,11 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
       - run: npm ci
+      - name: Build shared API and install the client adapter test runner
+        if: matrix.client-adapter == '1'
+        run: |
+          npm run build
+          npm ci --prefix client --ignore-scripts
       - name: Start an ephemeral Supabase with migrations
         timeout-minutes: 15
         run: |
@@ -168,6 +183,9 @@ jobs:
             exit 1
           fi
       - name: Run database, Storage and runtime integration tests
+        env:
+          MITE_E2E_CLIENT_ADAPTER: ${{ matrix.client-adapter }}
+          MITE_TEST_PATTERN: ${{ matrix.pattern }}
         run: |
           eval "$(npx --no-install supabase status -o env 2>/dev/null)"
           : "${DB_URL:?Local database URL is missing}"
@@ -182,7 +200,7 @@ jobs:
           export MITE_E2E_SUPABASE_SECRET_KEY="$SECRET_KEY"
           cd server
           # Run packages serially so runtime workers do not consume other tests' jobs.
-          go test -race -p 1 ./... -run 'Postgres|Integration|^TestServerRuntimeE2E$' -count=1 -timeout=5m -v
+          go test -race -p 1 ./... -run "$MITE_TEST_PATTERN" -count=1 -timeout=5m -v
       - name: Stop ephemeral Supabase
         if: always()
         run: npx --no-install supabase stop --no-backup

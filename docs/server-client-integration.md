@@ -19,8 +19,9 @@
 
 - A: Artifact登録・取得、SupportRequest作成・一覧・取得、Supabase Storage、削除workerを実装済み
 - B: SupportSessionのcall・取得・accept・LiveKit token・resolve・end、WebSocketを実装済み
-- C: GuideMaterial、生成job、draft、Guide、GuideRunと支援単位のレビューの18 operationと生成workerを実装済み
-- OpenAPIの30 operationはすべて実handlerへ配線済みで、`/v1/events` も利用できます。
+- C: GuideMaterial、生成job、draft、Guide、GuideRunと支援単位のレビューの各操作と生成workerを実装済み
+- D: 利用者PCのheartbeat、接続状態、依頼の確認返答・取消、PWAのPush購読を実装済み
+- OpenAPIの38 operationはすべて実handlerへ配線済みで、`/v1/events` も利用できます。
 
 ## 3. 基本の操作順
 
@@ -100,7 +101,7 @@ LiveKit tokenはSupportSessionが `ACTIVE`、`GENERATING_GUIDE`、`REVIEWING_GUI
 
 コード生成・テスト・静的解析・ビルドは[開発ガイドのGoサーバー検証](development.md#goサーバー)を参照してください。
 
-ローカルSupabaseとfake GuideGeneratorを使うHTTP/WebSocket E2Eは、専用DBと非公開Storage bucketを用意して実行します。共有DBや普段の開発データがあるDBは使用しないでください。DBには `20260904000100`、`20260904000300`、`20260909000100`、`20260909000200` のmigrationを順に適用します。Storageのbucketは接続先のStorage APIで作成します。
+ローカルSupabaseとfake GuideGeneratorを使うHTTP/WebSocket E2Eは、専用DBと非公開Storage bucketを用意して実行します。共有DBや普段の開発データがあるDBは使用しないでください。`supabase/migrations/` の全migrationをファイル名順に適用します。固定デモユーザーと既定の非公開Storage bucketはmigrationに含まれます。別名のbucketを使う場合は接続先のStorage APIで作成します。
 
 PowerShellで、秘密値を表示せず設定する例です。`mite_test_only` は新規のテスト専用DB、`mite-test-only` は専用bucketの名前へ置き換えます。両方のruntimeテストはシナリオの末尾にデータを残すため、それぞれ別の新規DBで実行します。
 
