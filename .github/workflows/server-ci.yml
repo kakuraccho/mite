@@ -70,7 +70,7 @@ jobs:
         env:
           VITE_API_BASE_URL: https://priv.chi-llenge.com/mite
           VITE_DEMO_FAMILY_TOKEN: ""
-          VITE_PWA_BASE_PATH: /mite/family-pwa/
+          VITE_PWA_BASE_PATH: /mite/pwa/
         run: npm run build
 
   generated-api:
@@ -269,7 +269,7 @@ jobs:
         env:
           VITE_API_BASE_URL: https://priv.chi-llenge.com/mite
           VITE_DEMO_FAMILY_TOKEN: ""
-          VITE_PWA_BASE_PATH: /mite/family-pwa/
+          VITE_PWA_BASE_PATH: /mite/pwa/
         run: npm run build -w @mite/family-pwa
       - name: Package family PWA
         run: tar -czf "$RUNNER_TEMP/mite-family-pwa.tar.gz" -C client/apps/family-pwa/dist .

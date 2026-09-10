@@ -28,9 +28,14 @@ case "${0##*/}" in
     [[ "$1" == -F && "$2" == /dev/null && "$3" == -i ]]
     [[ "$(stat -c %a "$4")" == 600 ]]
     case "${*: -1}" in
-      'test -x /usr/local/bin/mite-pwa-deploy && /usr/local/bin/mite-pwa-deploy --check '*)
+      'if test -x /usr/local/bin/mite-pwa-deploy; then /usr/local/bin/mite-pwa-deploy --check '*)
         printf 'preflight\n' >> "$scenario_root/calls"
-        [[ "${*: -1}" =~ [0-9a-f]{64}$ ]]
+        [[ "${*: -1}" =~ --check\ [0-9a-f]{64}\; ]]
+        if [[ "$scenario" == missing-script ]]; then
+          # Execute the real remote command with only its file check stubbed.
+          test() { return 1; }
+          eval "${*: -1}"
+        fi
         [[ "$scenario" != preflight-fails ]]
         ;;
       '/usr/local/bin/mite-pwa-deploy '*)
@@ -49,7 +54,7 @@ for command in gh ssh; do
   ln -s stub "$test_root/bin/$command"
 done
 
-for scenario in success missing-secret invalid-port invalid-sha stale-start github-fails preflight-fails stale-after-preflight deploy-fails; do
+for scenario in success missing-secret invalid-port invalid-sha stale-start github-fails missing-script preflight-fails stale-after-preflight deploy-fails; do
   scenario_root="$test_root/$scenario"
   mkdir "$scenario_root" "$scenario_root/temp"
   printf 'test-pwa-archive\n' > "$scenario_root/archive"
@@ -85,7 +90,7 @@ for scenario in success missing-secret invalid-port invalid-sha stale-start gith
   case "$scenario" in
     missing-secret|invalid-port|invalid-sha) ;;
     stale-start|github-fails) expected=(check) ;;
-    preflight-fails) expected=(check preflight) ;;
+    missing-script|preflight-fails) expected=(check preflight) ;;
     stale-after-preflight) expected=(check preflight check) ;;
     success|deploy-fails) expected=(check preflight check deploy) ;;
   esac
@@ -94,6 +99,9 @@ for scenario in success missing-secret invalid-port invalid-sha stale-start gith
     printf '%s\n' "${expected[@]}" > "$scenario_root/expected"
   fi
   diff -u "$scenario_root/expected" "$scenario_root/calls"
+  if [[ "$scenario" == missing-script ]]; then
+    grep -Fq 'Missing or non-executable /usr/local/bin/mite-pwa-deploy.' "$scenario_root/output"
+  fi
   shopt -s nullglob
   leftovers=("$scenario_root/temp"/mite-pwa-ssh.*)
   [[ "${#leftovers[@]}" -eq 0 ]]

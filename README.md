@@ -84,7 +84,7 @@ MVPでは固定の1対1とデモ用Bearerトークンを使用します。遠隔
 | 家族側アプリ | `client/` | `npm run dev:family` |
 | 家族向けPWA | `client/` | `npm run dev:pwa` |
 
-VPSの初回設定とデプロイ後、家族向けPWAは[https://priv.chi-llenge.com/mite/family-pwa/](https://priv.chi-llenge.com/mite/family-pwa/)で開きます。初回公開手順は[MiteのCI/CD](docs/ci-cd.md#2-家族向けpwaの初回vpsapache設定)を参照してください。
+VPSの初回設定とデプロイ後、家族向けPWAは[https://priv.chi-llenge.com/mite/pwa/](https://priv.chi-llenge.com/mite/pwa/)で開きます。初回公開手順は[MiteのCI/CD](docs/ci-cd.md#2-家族向けpwaの初回vpsapache設定)を参照してください。
 
 WSLから起動した利用者アプリではWindows画面全体を撮影・共有できません。黒いスクリーンショットになる場合は、[Windows側での起動手順](docs/setup.md#wslでスクリーンショットが真っ黒になる場合)を参照してください。
 

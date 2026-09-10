@@ -8,21 +8,25 @@ import { expect, it } from 'vitest'
 const clientDirectory = fileURLToPath(new URL('..', import.meta.url))
 const appDirectory = path.join(clientDirectory, 'apps/family-pwa')
 const outputDirectory = path.join(appDirectory, 'dist')
-const publicPath = '/mite/family-pwa/'
+const publicPath = '/mite/pwa/'
 const apiBaseUrl = 'https://priv.chi-llenge.com/mite'
 
 it('builds the family PWA for its production subpath without embedding a token', () => {
-  const built = spawnSync('npm', ['run', 'build', '-w', '@mite/family-pwa'], {
-    cwd: clientDirectory,
-    encoding: 'utf8',
-    env: {
-      ...process.env,
-      VITE_API_BASE_URL: apiBaseUrl,
-      VITE_DEMO_FAMILY_TOKEN: '',
-      VITE_PWA_BASE_PATH: publicPath,
+  const built = spawnSync(
+    process.execPath,
+    [path.join(clientDirectory, 'node_modules/vite/bin/vite.js'), 'build'],
+    {
+      cwd: appDirectory,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        VITE_API_BASE_URL: apiBaseUrl,
+        VITE_DEMO_FAMILY_TOKEN: '',
+        VITE_PWA_BASE_PATH: publicPath,
+      },
+      timeout: 30_000,
     },
-    timeout: 30_000,
-  })
+  )
   expect(built.error).toBeUndefined()
   expect(built.status, built.stdout + built.stderr).toBe(0)
 
@@ -60,4 +64,4 @@ it('builds the family PWA for its production subpath without embedding a token',
   expect(serviceWorker).toContain('self.registration.scope')
   expect(serviceWorker).not.toContain("caches.match('/')")
   expect(serviceWorker).not.toContain("openWindow('/')")
-})
+}, 40_000)

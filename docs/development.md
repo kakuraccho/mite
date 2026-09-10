@@ -48,19 +48,48 @@ Electronの `main` と各 `preload` は `client/scripts/build-electron.mjs` で�
 
 `npm run build`は家族向けPWAも静的ファイルとして`client/apps/family-pwa/dist/`へ生成します。実端末のService WorkerとPush確認には、生成物とAPIをHTTPSで公開し、PWAのoriginをサーバーの`CLIENT_ORIGINS`へ追加してください。
 
-本番のサブパス向けPWAだけを再現する場合は次を実行します。家族用トークンはbuildへ含めません。
-
-```bash
-cd client
-VITE_API_BASE_URL=https://priv.chi-llenge.com/mite \
-VITE_PWA_BASE_PATH=/mite/family-pwa/ \
-VITE_DEMO_FAMILY_TOKEN= \
-npm run build -w @mite/family-pwa
-```
+PWAの開発サーバーは、Viteが挿入するスクリプトとスタイルにリクエストごとのnonceを付け、ローカルのHMR WebSocket接続をCSPで許可します。ビルドしたPWAでは`script-src 'self'`と`style-src 'self'`を維持します。`frame-ancestors`はmetaタグでは無効なため、開発・previewではHTTPヘッダーで返します。公開時もPWAのHTMLを配信するサーバーに`Content-Security-Policy: frame-ancestors 'none'`を設定してください。根拠: [ViteのCSP対応](https://vite.dev/guide/features.html#content-security-policy-csp)、[frame-ancestorsの制約](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/frame-ancestors)。
 
 `@mite/client-core` などのworkspaceはTypeScriptソースを公開しているため、Electronから直接読み込まず、必要なコードを実行用JavaScriptへ含めます。Electron・Node組み込みmodule・Koffiはバンドルの外に残し、既存のKoffi配布hookを維持します。sandbox付きpreloadはアプリ内moduleを `require` できないため、それぞれ単独のファイルにまとめます。根拠: [Vite library mode](https://vite.dev/guide/build.html#library-mode)、[Electron sandbox](https://www.electronjs.org/docs/latest/tutorial/sandbox)。
 
 `client/scripts/build-electron.test.ts` は両アプリを実際にビルドし、生成したmainとpreloadをViteのTypeScript変換を介さず読み込みます。ElectronのAPIを疑似化したmodule読み込みの回帰テストであり、実ウィンドウや通話の確認は別途必要です。
+
+### 家族向けPWAをサブパスで公開する
+
+`https://example.com/mite/pwa/`へ置く場合は、API接続先を設定したうえで`client/`から次を実行します。公開するビルドに家族用トークンを埋め込まず、初回画面で入力してください。
+
+```bash
+VITE_API_BASE_URL=https://example.com/mite VITE_PWA_BASE_PATH=/mite/pwa/ VITE_DEMO_FAMILY_TOKEN= npm run build -w @mite/family-pwa
+```
+
+WindowsのPowerShellでは、同じ設定を次のように渡します。
+
+```powershell
+$env:VITE_API_BASE_URL = 'https://example.com/mite'
+$env:VITE_PWA_BASE_PATH = '/mite/pwa/'
+$env:VITE_DEMO_FAMILY_TOKEN = ''
+npm run build -w @mite/family-pwa
+```
+
+`apps/family-pwa/dist/`の中身を公開先へ配置します。Apacheの`DocumentRoot`が`/var/www/mite-public`なら配置先は`/var/www/mite-public/mite/pwa/`です。既存の`/mite/v1/`へのProxyPassは引き続きAPIへ転送できます。Viteの`base`がHTML・アセットとService Workerの登録先に反映され、manifestと通知のリンクもPWAのパスを使います。開発時の既定URLは`http://localhost:5175/`です。[Viteの公開パス設定](https://vite.dev/guide/build.html#public-base-path)
+
+これは手動配置の例です。`priv.chi-llenge.com`の自動デプロイでは、同じ`/mite/pwa/`をApacheのAliasで`/var/www/mite-family-pwa/current/`へ割り当てます。[CI/CDの初回設定と手動配置からの移行](ci-cd.md#2-家族向けpwaの初回vpsapache設定)を行ってください。手動配置だけでは自動デプロイの事前確認は通りません。
+
+PWA用のApache設定例は次のとおりです。`headers`モジュールを有効にして読み込ませ、`apache2ctl configtest`の成功後にApacheをreloadします。`index.html`、Service Worker、manifestは更新時に再検証させます。[ApacheのHeader設定](https://httpd.apache.org/docs/2.4/mod/mod_headers.html)
+
+```apache
+<Directory /var/www/mite-public/mite/pwa>
+    DirectoryIndex index.html
+    Header always set Content-Security-Policy "frame-ancestors 'none'"
+    <FilesMatch "^(index\.html|sw\.js|manifest\.webmanifest)$">
+        Header always set Cache-Control "no-cache"
+    </FilesMatch>
+</Directory>
+```
+
+API側の`CLIENT_ORIGINS`へ追加する値は`https://example.com`です。`/mite/pwa/`はOriginに含めません。同じドメインでもOriginを送る状態変更APIのために必要です。Service WorkerがキャッシュするのはPWAの公開ファイルだけで、API応答や認証付きリクエストを保存しません。通知タップは同じPWAのパスを開きます。
+
+公開後は末尾に`/`があるPWA URLで、画面表示、家族用トークンの初回入力、接続状況の取得と返答を確認します。Web Pushは別途サーバーのVAPID設定が必要です。iPhoneのホーム画面追加、通知購読と受信は実端末で確認してください。
 
 ### Goサーバー
 

@@ -9,12 +9,12 @@ source "$script_directory/mite-pwa-deploy.sh"
 
 old_release=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 new_release=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-public_url=https://priv.chi-llenge.com/mite/family-pwa/
+public_url=https://priv.chi-llenge.com/mite/pwa/
 
 create_build() {
   local root="$1" label="$2"
   mkdir -p "$root/assets"
-  printf '<!doctype html><script src="/mite/family-pwa/assets/app-%s.js"></script>\n' "$label" > "$root/index.html"
+  printf '<!doctype html><script src="/mite/pwa/assets/app-%s.js"></script>\n' "$label" > "$root/index.html"
   printf '{\n  "start_url": "./",\n  "scope": "./"\n}\n' > "$root/manifest.webmanifest"
   printf 'const root = self.registration.scope\n' > "$root/sw.js"
   printf '<svg>%s</svg>\n' "$label" > "$root/icon.svg"
@@ -43,9 +43,12 @@ curl() {
   local url="${*: -1}" target root
   if [[ "$*" == *'--write-out'* ]]; then
     [[ "$*" == *'Origin: https://priv.chi-llenge.com'* ]]
+    if [[ "$scenario" == api-unavailable ]]; then return 7; fi
+    if [[ "$scenario" == api-forbidden ]]; then printf '403'; return; fi
     printf '401'
     return
   fi
+  if [[ "$scenario" == public-mismatch ]]; then printf 'wrong build'; return; fi
   target="$(readlink "$directory/current")"
   root="$directory/$target"
   if [[ "$scenario" == unhealthy-after && "$target" == "releases/$new_release" ]]; then
@@ -153,3 +156,31 @@ if mite_pwa_check_directory "$directory" 2>/dev/null; then
   exit 1
 fi
 printf 'PASS deployment preflight\n'
+
+script_digest="$(sha256sum "$script_directory/mite-pwa-deploy.sh")"
+script_digest="${script_digest%% *}"
+for scenario in ready empty checksum-mismatch missing-directory api-forbidden api-unavailable public-mismatch; do
+  directory="$test_root/preflight-$scenario"
+  prepare_directory "$directory"
+  expected_script_digest="$script_digest"
+  checked_directory="$directory"
+  case "$scenario" in
+    empty) rm "$directory/current" ;;
+    checksum-mismatch) expected_script_digest="$wrong_digest" ;;
+    missing-directory) checked_directory="$directory/missing" ;;
+  esac
+  status=0
+  mite_pwa_preflight "$expected_script_digest" "$checked_directory" "$public_url" > "$directory/output" 2>&1 || status="$?"
+  case "$scenario" in
+    ready|empty) [[ "$status" -eq 0 ]]; message='Family PWA preflight passed.' ;;
+    checksum-mismatch) message='deployment script checksum mismatch' ;;
+    missing-directory) message='deployment directory is not ready' ;;
+    api-forbidden) message='expected HTTP 401, got 403' ;;
+    api-unavailable) message='API preflight failed' ;;
+    public-mismatch) message='public files do not match current' ;;
+  esac
+  case "$scenario" in ready|empty) ;; *) [[ "$status" -ne 0 ]] ;; esac
+  grep -Fq "$message" "$directory/output"
+  [[ ! -f "$directory/deploy.lock" ]]
+  printf 'PASS preflight %s\n' "$scenario"
+done

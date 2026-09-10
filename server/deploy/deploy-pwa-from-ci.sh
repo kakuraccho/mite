@@ -53,7 +53,7 @@ archive_digest="$(sha256sum "$archive")"
 archive_digest="${archive_digest%% *}"
 
 if ! "${ssh_command[@]}" \
-  "test -x $remote_script && $remote_script --check $script_digest"; then
+  "if test -x $remote_script; then $remote_script --check $script_digest; else printf '%s\n' 'Missing or non-executable $remote_script. Install server/deploy/mite-pwa-deploy.sh on the VPS.' >&2; exit 1; fi"; then
   printf '::error::Family PWA preflight failed. Complete the Apache and PWA VPS setup in docs/ci-cd.md.\n' >&2
   exit 1
 fi

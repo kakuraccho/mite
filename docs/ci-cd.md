@@ -37,7 +37,7 @@ GitHubでマージ前にCI成功を必須にする場合は、`dev`・`main`のb
 | 実行ファイル | `/opt/mite/mite-api` |
 | ローカルAPI | `http://127.0.0.1:3000` |
 | 公開API base URL | `https://priv.chi-llenge.com/mite` |
-| PWA公開URL | `https://priv.chi-llenge.com/mite/family-pwa/` |
+| PWA公開URL | `https://priv.chi-llenge.com/mite/pwa/` |
 | PWA配置先 | `/var/www/mite-family-pwa` |
 | HTTPS・静的配信 | 既存Apache 2.4 |
 
@@ -99,6 +99,8 @@ SSHユーザーがroot以外の場合は、`sudo visudo -f /etc/sudoers.d/mite-d
 
 ### 2. 家族向けPWAの初回VPS・Apache設定
 
+`/var/www/mite-public/mite/pwa/`へbuildを手動配置しただけでは、自動デプロイの準備は完了しない。以下のスクリプトとrelease directoryを追加し、公開URLは`/mite/pwa/`のままApacheのAliasで切り替える。
+
 初回だけ、対象commitの`server/deploy/mite-pwa-deploy.sh`をVPSの`/tmp/mite-pwa-deploy.sh`へ転送する。VPS上で、`MITE_PWA_DEPLOY_USER`をGitHub Environment secret `VPS_USER`と同じSSHユーザー名にして実行する。
 
 ```bash
@@ -109,7 +111,28 @@ sudo install -d -o "$MITE_PWA_DEPLOY_USER" -g "$MITE_PWA_DEPLOY_GROUP" -m 0755 /
 sudo install -d -o "$MITE_PWA_DEPLOY_USER" -g "$MITE_PWA_DEPLOY_GROUP" -m 0755 /var/www/mite-family-pwa/releases
 ```
 
-現在のHTTPS終端はApacheである。既存の`priv.chi-llenge.com:443` VirtualHostへ[`apache-family-pwa.conf.example`](../server/deploy/apache-family-pwa.conf.example)の内容を追加する。`/mite/`全体をGoサーバーへ渡す`ProxyPass`がある場合、`/mite/family-pwa/`の除外を必ずそれより前に置く。既存の証明書設定とAPIのProxyPassは変更しない。
+#### 既存の手動配置を引き継ぐ場合
+
+すでに`/var/www/mite-public/mite/pwa/`で動作している場合は、ApacheのAliasを有効にする前に、その公開ファイルを初期releaseへコピーする。次は`current`がまだない初回移行だけで実行する。元の手動配置は残し、40桁のゼロは手動配置の退避用IDとして使う。
+
+```bash
+(
+  set -e
+  MITE_PWA_SEED=/var/www/mite-family-pwa/releases/0000000000000000000000000000000000000000
+  test -f /var/www/mite-public/mite/pwa/index.html
+  test ! -e /var/www/mite-family-pwa/current
+  test ! -L /var/www/mite-family-pwa/current
+  sudo -u "$MITE_PWA_DEPLOY_USER" mkdir "$MITE_PWA_SEED"
+  sudo -u "$MITE_PWA_DEPLOY_USER" cp -R /var/www/mite-public/mite/pwa/. "$MITE_PWA_SEED/"
+  sudo -u "$MITE_PWA_DEPLOY_USER" ln -s releases/0000000000000000000000000000000000000000 /var/www/mite-family-pwa/current
+)
+```
+
+コピー後に以下のApache設定を行い、事前確認を通してからCIを実行する。初回の自動配信に失敗した場合も、この初期releaseが復元先になる。
+
+#### Apacheと事前確認
+
+現在のHTTPS終端はApacheである。既存の`priv.chi-llenge.com:443` VirtualHostへ[`apache-family-pwa.conf.example`](../server/deploy/apache-family-pwa.conf.example)の内容を追加する。`/mite/`全体をGoサーバーへ渡す`ProxyPass`がある場合、`/mite/pwa/`の除外を必ずそれより前に置く。既存の証明書設定とAPIのProxyPassは変更しない。
 
 ```bash
 sudo a2enmod headers
@@ -122,12 +145,22 @@ Goサーバーの既存環境ファイルでは、`CLIENT_ORIGINS`へpathを付�
 初回デプロイ前のpreflightはPWA directoryの所有権・書込権限、デプロイスクリプトのchecksum、公開PWAのOriginを付けた未認証リクエストへAPIが401を返すことを確認する。403なら`CLIENT_ORIGINS`の設定が不足している。Apacheを再読込した後、VPSの管理ユーザーで次を実行する。
 
 ```bash
-MITE_PWA_SCRIPT_SHA="$(sha256sum /usr/local/bin/mite-pwa-deploy)"
+MITE_PWA_SCRIPT_SHA="$(sha256sum /tmp/mite-pwa-deploy.sh)"
 MITE_PWA_SCRIPT_SHA="${MITE_PWA_SCRIPT_SHA%% *}"
 sudo -u "$MITE_PWA_DEPLOY_USER" /usr/local/bin/mite-pwa-deploy --check "$MITE_PWA_SCRIPT_SHA"
 ```
 
 PWAの`current`がまだない場合、PWA URLの404は初回デプロイまで正常である。デプロイスクリプトを変更したcommitをデプロイする前には、同じ手順でVPS上のコピーを更新する。
+
+事前確認が失敗した場合は、最後の`Family PWA preflight failed`より前に出るメッセージを確認する。`--check`へ渡すchecksumは、CIが配置するcommitのスクリプトから計算する。VPSに設置済みのファイル自身から計算すると、古いスクリプトのままでもローカルの確認だけ通ってしまう。
+
+| メッセージ | 対処 |
+| --- | --- |
+| `Missing or non-executable` | `/usr/local/bin/mite-pwa-deploy`を上記の`install`で設置する |
+| `deployment script checksum mismatch` | 配置対象commitのスクリプトを再設置する |
+| `deployment directory is not ready` | `VPS_USER`とdirectoryの所有者・書込権限、および`current`と`previous`のリンク先を確認する |
+| `API preflight failed` / `expected HTTP 401` | 公開APIへの疎通を確認する。403の場合は`CLIENT_ORIGINS`へPWAのoriginを追加してAPIを再起動する |
+| `public files do not match current` | ApacheのAliasが`/var/www/mite-family-pwa/current/`を指すことと、Apacheからファイルを読めることを確認する |
 
 ### 3. GitHubのEnvironmentと変数を設定する
 

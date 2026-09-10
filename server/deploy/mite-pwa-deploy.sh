@@ -4,7 +4,7 @@
 # family PWA release directory, while Apache reads the selected release.
 
 mite_pwa_directory=/var/www/mite-family-pwa
-mite_pwa_public_url=https://priv.chi-llenge.com/mite/family-pwa/
+mite_pwa_public_url=https://priv.chi-llenge.com/mite/pwa/
 mite_pwa_api_probe=https://priv.chi-llenge.com/mite/v1/support-requests
 mite_pwa_origin=https://priv.chi-llenge.com
 
@@ -36,7 +36,7 @@ mite_pwa_validate_tree() {
   [[ -z "$unexpected" ]] || return 1
   oversized="$(find "$root" -type f -size +10M -print -quit)"
   [[ -z "$oversized" ]] || return 1
-  grep -Fq '/mite/family-pwa/assets/' "$root/index.html" || return 1
+  grep -Fq '/mite/pwa/assets/' "$root/index.html" || return 1
   grep -Fq '"start_url": "./"' "$root/manifest.webmanifest" || return 1
   grep -Fq '"scope": "./"' "$root/manifest.webmanifest" || return 1
   grep -Fq 'self.registration.scope' "$root/sw.js" || return 1
@@ -57,10 +57,13 @@ mite_pwa_check_directory() {
 
 mite_pwa_api_ready() {
   local status
-  status="$(curl --noproxy '*' --silent --output /dev/null --write-out '%{http_code}' \
+  status="$(curl --noproxy '*' --silent --show-error --output /dev/null --write-out '%{http_code}' \
     --header "Origin: $mite_pwa_origin" --connect-timeout 5 --max-time 10 \
     "$mite_pwa_api_probe")" || return 1
-  [[ "$status" == 401 ]]
+  [[ "$status" == 401 ]] || {
+    printf 'Family PWA API check expected HTTP 401, got %s. For HTTP 403, add %s to CLIENT_ORIGINS and restart mite-api.\n' "$status" "$mite_pwa_origin" >&2
+    return 1
+  }
 }
 
 mite_pwa_ready() {
@@ -83,6 +86,29 @@ mite_pwa_wait_ready() {
     sleep 1
   done
   return 1
+}
+
+mite_pwa_preflight() {
+  local expected_digest="$1" directory="$2" public_url="$3"
+  mite_pwa_check_self "$expected_digest" || {
+    printf 'Family PWA deployment script checksum mismatch. Install server/deploy/mite-pwa-deploy.sh from the commit being deployed as /usr/local/bin/mite-pwa-deploy.\n' >&2
+    return 1
+  }
+  mite_pwa_check_directory "$directory" || {
+    printf 'Family PWA deployment directory is not ready: %s. The deployment user needs writable directories here and in releases/, with valid current/previous links if present.\n' "$directory" >&2
+    return 1
+  }
+  mite_pwa_api_ready || {
+    printf 'Family PWA API preflight failed: %s (Origin: %s).\n' "$mite_pwa_api_probe" "$mite_pwa_origin" >&2
+    return 1
+  }
+  if [[ -e "$directory/current" || -L "$directory/current" ]]; then
+    mite_pwa_ready "$directory" "$public_url" || {
+      printf 'Family PWA public files do not match current: %s. Check the Apache Alias and release read permissions.\n' "$public_url" >&2
+      return 1
+    }
+  fi
+  printf 'Family PWA preflight passed.\n'
 }
 
 mite_pwa_switch_link() {
@@ -214,12 +240,7 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
     exit 1
   fi
   if [[ "$#" -eq 2 && "$1" == --check ]]; then
-    mite_pwa_check_self "$2"
-    mite_pwa_check_directory "$mite_pwa_directory"
-    mite_pwa_api_ready
-    if [[ -e "$mite_pwa_directory/current" || -L "$mite_pwa_directory/current" ]]; then
-      mite_pwa_ready "$mite_pwa_directory" "$mite_pwa_public_url"
-    fi
+    mite_pwa_preflight "$2" "$mite_pwa_directory" "$mite_pwa_public_url"
     exit
   fi
   if [[ "$#" -ne 3 ]]; then
