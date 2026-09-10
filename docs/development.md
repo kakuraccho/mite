@@ -17,7 +17,7 @@ cd ..
 
 ## 検証
 
-Pull Requestと`dev`・`main`へのpushでは、GitHub Actionsがサーバー・共有APIとclientの整形を検証します。チェックの内容とVPSへのデプロイ設定は[サーバーのCI/CD](ci-cd.md)を参照してください。
+Pull Requestと`dev`・`main`へのpushでは、GitHub Actionsがサーバー・共有APIとclientの整形・Lint・型・テスト・buildを検証します。チェックの内容とVPSへのデプロイ設定は[MiteのCI/CD](ci-cd.md)を参照してください。
 
 ### API生成と共有APIクライアント
 
@@ -47,6 +47,16 @@ npm run build
 Electronの `main` と各 `preload` は `client/scripts/build-electron.mjs` で型チェック後、既存のViteを使ってCommonJSへバンドルします。`npm run dev:user`、`npm run dev:family` と配布用の `build:electron` は同じ処理を使います。`dist-electron/main/main.js` と `dist-electron/preload/*.js` が実行用の生成物です。
 
 `npm run build`は家族向けPWAも静的ファイルとして`client/apps/family-pwa/dist/`へ生成します。実端末のService WorkerとPush確認には、生成物とAPIをHTTPSで公開し、PWAのoriginをサーバーの`CLIENT_ORIGINS`へ追加してください。
+
+本番のサブパス向けPWAだけを再現する場合は次を実行します。家族用トークンはbuildへ含めません。
+
+```bash
+cd client
+VITE_API_BASE_URL=https://priv.chi-llenge.com/mite \
+VITE_PWA_BASE_PATH=/mite/family-pwa/ \
+VITE_DEMO_FAMILY_TOKEN= \
+npm run build -w @mite/family-pwa
+```
 
 `@mite/client-core` などのworkspaceはTypeScriptソースを公開しているため、Electronから直接読み込まず、必要なコードを実行用JavaScriptへ含めます。Electron・Node組み込みmodule・Koffiはバンドルの外に残し、既存のKoffi配布hookを維持します。sandbox付きpreloadはアプリ内moduleを `require` できないため、それぞれ単独のファイルにまとめます。根拠: [Vite library mode](https://vite.dev/guide/build.html#library-mode)、[Electron sandbox](https://www.electronjs.org/docs/latest/tutorial/sandbox)。
 

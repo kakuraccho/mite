@@ -2,13 +2,15 @@
   "name": "Mite 家族用",
   "short_name": "Mite",
   "description": "家族から支援状況を確認するための補助アプリ",
-  "start_url": "/",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#eef3f0",
   "theme_color": "#285548",
   "icons": [
     {
-      "src": "/icon.svg",
+      "src": "./icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"

@@ -1,5 +1,8 @@
-const CACHE_NAME = 'mite-family-v1'
-const APP_SHELL = ['/', '/manifest.webmanifest', '/icon.svg']
+const CACHE_PREFIX = 'mite-family-'
+const APP_ROOT = new URL('./', self.registration.scope)
+const CACHE_NAME = `${CACHE_PREFIX}v2:${APP_ROOT.pathname}`
+const appUrl = (path = '') => new URL(path, APP_ROOT).toString()
+const APP_SHELL = [appUrl(), appUrl('manifest.webmanifest'), appUrl('icon.svg')]
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -15,7 +18,7 @@ self.addEventListener('activate', (event) => {
       .then((keys) =>
         Promise.all(
           keys
-            .filter((key) => key !== CACHE_NAME)
+            .filter((key) => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME)
             .map((key) => caches.delete(key)),
         ),
       )
@@ -28,7 +31,7 @@ self.addEventListener('fetch', (event) => {
   if (
     event.request.method !== 'GET' ||
     requestUrl.origin !== self.location.origin ||
-    requestUrl.pathname.startsWith('/v1/')
+    !requestUrl.pathname.startsWith(APP_ROOT.pathname)
   )
     return
   event.respondWith(
@@ -47,7 +50,7 @@ self.addEventListener('fetch', (event) => {
       .catch(() =>
         caches
           .match(event.request)
-          .then((cached) => cached || caches.match('/')),
+          .then((cached) => cached || caches.match(appUrl())),
       ),
   )
 })
@@ -62,10 +65,10 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title || 'Miteからのお知らせ', {
       body: data.body || '確認してほしい支援情報があります。',
-      icon: '/icon.svg',
-      badge: '/icon.svg',
+      icon: appUrl('icon.svg'),
+      badge: appUrl('icon.svg'),
       tag: data.tag || 'mite-support',
-      data: { url: '/' },
+      data: { url: appUrl() },
     }),
   )
 })
@@ -76,11 +79,11 @@ self.addEventListener('notificationclick', (event) => {
     self.clients
       .matchAll({ type: 'window', includeUncontrolled: true })
       .then((clients) => {
-        const existing = clients.find(
-          (client) => new URL(client.url).origin === self.location.origin,
+        const existing = clients.find((client) =>
+          client.url.startsWith(self.registration.scope),
         )
         if (existing) return existing.focus()
-        return self.clients.openWindow('/')
+        return self.clients.openWindow(appUrl())
       }),
   )
 })
