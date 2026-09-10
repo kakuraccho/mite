@@ -1,0 +1,155 @@
+#!/bin/bash
+# Exercise family PWA installation and rollback against temporary files.
+set -euo pipefail
+
+script_directory="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+test_root="$(mktemp -d)"
+trap 'result=$?; if [[ "$result" != 0 && -f "${directory:-}/output" ]]; then cat "$directory/output"; fi; rm -rf -- "$test_root"' EXIT
+source "$script_directory/mite-pwa-deploy.sh"
+
+old_release=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+new_release=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+public_url=https://priv.chi-llenge.com/mite/family-pwa/
+
+create_build() {
+  local root="$1" label="$2"
+  mkdir -p "$root/assets"
+  printf '<!doctype html><script src="/mite/family-pwa/assets/app-%s.js"></script>\n' "$label" > "$root/index.html"
+  printf '{\n  "start_url": "./",\n  "scope": "./"\n}\n' > "$root/manifest.webmanifest"
+  printf 'const root = self.registration.scope\n' > "$root/sw.js"
+  printf '<svg>%s</svg>\n' "$label" > "$root/icon.svg"
+  printf '%s\n' "$label" > "$root/assets/app-$label.js"
+}
+
+prepare_directory() {
+  directory="$1"
+  mkdir -p "$directory/releases/$old_release"
+  create_build "$directory/releases/$old_release" old
+  ln -s "releases/$old_release" "$directory/current"
+}
+
+create_archive() {
+  local label="$1" fixture archive
+  fixture="$test_root/fixture-$label"
+  archive="$test_root/$label.tar.gz"
+  mkdir -p "$fixture"
+  create_build "$fixture" "$label"
+  tar -czf "$archive" -C "$fixture" .
+  printf '%s\n' "$archive"
+}
+
+scenario=success
+curl() {
+  local url="${*: -1}" target root
+  if [[ "$*" == *'--write-out'* ]]; then
+    [[ "$*" == *'Origin: https://priv.chi-llenge.com'* ]]
+    printf '401'
+    return
+  fi
+  target="$(readlink "$directory/current")"
+  root="$directory/$target"
+  if [[ "$scenario" == unhealthy-after && "$target" == "releases/$new_release" ]]; then
+    return 22
+  fi
+  case "$url" in
+    "$public_url") cat "$root/index.html" ;;
+    "${public_url}manifest.webmanifest") cat "$root/manifest.webmanifest" ;;
+    "${public_url}sw.js") cat "$root/sw.js" ;;
+    *) return 22 ;;
+  esac
+}
+sleep() { :; }
+
+archive="$(create_archive new)"
+digest="$(sha256sum "$archive")"
+digest="${digest%% *}"
+
+directory="$test_root/success"
+prepare_directory "$directory"
+mite_pwa_install "$directory" "$directory/deploy.lock" "$public_url" "$digest" "$new_release" < "$archive"
+[[ "$(readlink "$directory/current")" == "releases/$new_release" ]]
+[[ "$(readlink "$directory/previous")" == "releases/$old_release" ]]
+[[ "$(cat "$directory/releases/$new_release/.mite-archive.sha256")" == "$digest" ]]
+grep -q new "$directory/releases/$new_release/index.html"
+printf 'PASS successful update\n'
+
+# Replaying the same verified release is safe and keeps the current selection.
+mite_pwa_install "$directory" "$directory/deploy.lock" "$public_url" "$digest" "$new_release" < "$archive"
+[[ "$(readlink "$directory/current")" == "releases/$new_release" ]]
+printf 'PASS idempotent update\n'
+
+directory="$test_root/first"
+mkdir -p "$directory/releases"
+mite_pwa_install "$directory" "$directory/deploy.lock" "$public_url" "$digest" "$new_release" < "$archive"
+[[ "$(readlink "$directory/current")" == "releases/$new_release" ]]
+[[ ! -e "$directory/previous" && ! -L "$directory/previous" ]]
+printf 'PASS first deployment\n'
+
+directory="$test_root/checksum"
+prepare_directory "$directory"
+wrong_digest="$(printf 'wrong\n' | sha256sum)"
+wrong_digest="${wrong_digest%% *}"
+set +e
+mite_pwa_install "$directory" "$directory/deploy.lock" "$public_url" "$wrong_digest" "$new_release" < "$archive" > "$directory/output" 2>&1
+status="$?"
+set -e
+[[ "$status" -ne 0 ]]
+[[ "$(readlink "$directory/current")" == "releases/$old_release" ]]
+[[ ! -e "$directory/releases/$new_release" ]]
+printf 'PASS checksum rejection\n'
+
+directory="$test_root/unhealthy"
+prepare_directory "$directory"
+scenario=unhealthy-after
+set +e
+mite_pwa_install "$directory" "$directory/deploy.lock" "$public_url" "$digest" "$new_release" < "$archive" > "$directory/output" 2>&1
+status="$?"
+set -e
+[[ "$status" -ne 0 ]]
+scenario=success
+[[ "$(readlink "$directory/current")" == "releases/$old_release" ]]
+[[ ! -e "$directory/releases/$new_release" ]]
+mite_pwa_ready "$directory" "$public_url"
+printf 'PASS unhealthy release rollback\n'
+
+directory="$test_root/locked"
+prepare_directory "$directory"
+exec 8>"$directory/deploy.lock"
+flock -n 8
+set +e
+mite_pwa_install "$directory" "$directory/deploy.lock" "$public_url" "$digest" "$new_release" < "$archive" > "$directory/output" 2>&1
+status="$?"
+set -e
+[[ "$status" -ne 0 ]]
+exec 8>&-
+[[ "$(readlink "$directory/current")" == "releases/$old_release" ]]
+printf 'PASS deployment lock\n'
+
+directory="$test_root/symlink"
+prepare_directory "$directory"
+malicious_fixture="$test_root/malicious-fixture"
+create_build "$malicious_fixture" malicious
+ln -s /tmp "$malicious_fixture/escape"
+malicious_archive="$test_root/malicious.tar.gz"
+tar -czf "$malicious_archive" -C "$malicious_fixture" .
+malicious_digest="$(sha256sum "$malicious_archive")"
+malicious_digest="${malicious_digest%% *}"
+set +e
+mite_pwa_install "$directory" "$directory/deploy.lock" "$public_url" "$malicious_digest" cccccccccccccccccccccccccccccccccccccccc < "$malicious_archive" > "$directory/output" 2>&1
+status="$?"
+set -e
+[[ "$status" -ne 0 ]]
+[[ "$(readlink "$directory/current")" == "releases/$old_release" ]]
+printf 'PASS unsafe archive rejection\n'
+
+directory="$test_root/preflight"
+prepare_directory "$directory"
+mite_pwa_check_directory "$directory"
+mite_pwa_api_ready
+mite_pwa_ready "$directory" "$public_url"
+rm "$directory/current"
+ln -s ../../outside "$directory/current"
+if mite_pwa_check_directory "$directory" 2>/dev/null; then
+  exit 1
+fi
+printf 'PASS deployment preflight\n'

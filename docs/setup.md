@@ -138,6 +138,8 @@ npm run dev:pwa
 
 利用者側は`http://127.0.0.1:5173`、家族側は`http://127.0.0.1:5174`のVite開発サーバーをElectronで表示します。補助PWAは`http://localhost:5175`で開きます。Service WorkerとPushはlocalhost以外ではHTTPSが必要です。
 
+公開環境ではPWAを `https://priv.chi-llenge.com/mite/family-pwa/`、APIを `https://priv.chi-llenge.com/mite` としてbuild・配信します。Apacheの初回設定と自動デプロイは[サーバーのCI/CD](ci-cd.md#2-家族向けpwaの初回vpsapache設定)を参照してください。公開buildへ`VITE_DEMO_FAMILY_TOKEN`を設定してはいけません。
+
 ### Web Pushを有効にする
 
 `server/`で次を1回実行し、出力された2行を`server/.env`へ保存します。秘密鍵はサーバーだけに置き、Gitへ含めません。あわせて管理者の連絡先URIを設定してサーバーを再起動します。

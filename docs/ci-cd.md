@@ -1,21 +1,22 @@
-# サーバーのCI/CD
+# MiteのCI/CD
 
 [開発ガイド](development.md)へ戻る。
 
 ## CI
 
-GitHub Actionsの[Server CI/CD](../.github/workflows/server-ci.yml)で、すべてのPull Request、`dev`・`main`へのpush、手動実行時にサーバー・共有APIとclientの整形を検証する。
+GitHub Actionsの[Mite CI/CD](../.github/workflows/server-ci.yml)で、すべてのPull Request、`dev`・`main`へのpush、手動実行時にサーバー、共有API、Electronクライアントと家族向けPWAを検証する。
 
 | チェック名 | 内容 |
 | --- | --- |
 | Client formatting | `client/` の `npm run format:check`。LF改行を含むPrettierの整形規則を検証 |
+| Client lint, tests and builds | clientのLint、型チェック、全テスト、Electronと本番サブパス向けPWAのbuildを検証。公開buildへ家族用トークンを含めない |
 | Generated code and shared API | OpenAPI・sqlcの再生成、コミット済み生成物との一致、新規生成ファイルの追跡漏れ、共有APIの型チェック・Lint・ビルド |
-| Go tests and build | gofmt、race検査付きテスト、go vet、ビルド、DB適用とVPS更新の順序・失敗時の停止、VPSデプロイ・復元スクリプトのテスト |
+| Go tests and build | gofmt、race検査付きテスト、go vet、ビルド、DB・API・PWAデプロイの順序、checksum、排他制御、失敗時の停止と復元を検証 |
 | Supabase integration and HTTP WebSocket E2E | 一時的なSupabaseへのmigration適用、DB・Storage統合テスト、HTTP/WebSocket E2E |
 
 Goは`server/go.mod`のバージョン、Node.jsは24を使う。npm依存関係はルートの`package-lock.json`と`client/package-lock.json`、Goツールは`server/go.mod`・`server/go.sum`で固定する。ActionsもコミットSHAで固定する。
 
-clientの整形ジョブは`client/`で`npm ci --ignore-scripts`を実行する。整形にはElectron本体やネイティブmoduleのインストール処理は不要なため、これらのスクリプトを省略する。clientのLint・型チェック・テスト・ビルドはこのジョブの対象に含まれず、[開発ガイド](development.md#electronクライアント)に従って別途実行する。整形ジョブもデプロイの成功条件に含める。
+clientの整形ジョブは`client/`で`npm ci --ignore-scripts`を実行する。整形にはElectron本体やネイティブmoduleのインストール処理は不要なため、これらのスクリプトを省略する。別のclientジョブではルートの`@mite/api-client`をbuildしてからclient依存関係を取得し、Lint、型チェック、テストと全buildを実行する。PWAは本番のAPI URLとbase pathでbuildし、生成された参照先もテストする。両ジョブをデプロイの成功条件に含める。
 
 CI用のSupabaseはGitHub runner内に新規作成する。リポジトリのmigrationには固定デモユーザーと非公開Storageバケットの作成が含まれる。接続先はこの一時環境から取得し、未設定ならテスト開始前に失敗させる。実行後は一時環境を破棄する。共有・VPS側のDB接続情報をCIへ設定する必要はない。
 
@@ -23,7 +24,7 @@ CI用のSupabaseはGitHub runner内に新規作成する。リポジトリのmig
 
 Supabase起動時の出力にはローカルAPIキーが含まれるため、起動出力はrunner内の一時ファイルへ保存し、ログや成果物として公開しない。起動に失敗した場合はコンテナの稼働状態だけを表示する。Dockerが使えるローカル環境で`npm ci`、`npx --no-install supabase start`を実行して原因を確認する。
 
-GitHubでマージ前にCI成功を必須にする場合は、`dev`・`main`のbranch rulesetに上記4つをrequired status checksとして登録する。既存の3つを登録済みの場合も`Client formatting`の追加が必要になる。ワークフローを追加するだけではマージ制限は有効にならない。
+GitHubでマージ前にCI成功を必須にする場合は、`dev`・`main`のbranch rulesetに上記5つをrequired status checksとして登録する。ワークフローを追加するだけではマージ制限は有効にならない。
 
 ## CD
 
@@ -35,6 +36,10 @@ GitHubでマージ前にCI成功を必須にする場合は、`dev`・`main`のb
 | systemdサービス | `mite-api.service` |
 | 実行ファイル | `/opt/mite/mite-api` |
 | ローカルAPI | `http://127.0.0.1:3000` |
+| 公開API base URL | `https://priv.chi-llenge.com/mite` |
+| PWA公開URL | `https://priv.chi-llenge.com/mite/family-pwa/` |
+| PWA配置先 | `/var/www/mite-family-pwa` |
+| HTTPS・静的配信 | 既存Apache 2.4 |
 
 対象ブランチのCIがすべて成功すると、`Migrate Supabase and deploy to VPS`ジョブで次を順に実行する。対象ブランチはGitHubのRepository variableで指定し、未設定の場合はデプロイしない。PRからのデプロイは実行しない。
 
@@ -43,6 +48,8 @@ GitHubでマージ前にCI成功を必須にする場合は、`dev`・`main`のb
 3. Supabase Cloudへ`supabase db push --dry-run`で接続し、マイグレーション履歴の整合性と適用予定を確認する。
 4. `supabase db push --yes`で未適用のマイグレーションを適用する。接続先は`SUPABASE_DB_URL`で指定する。
 5. 成功した場合だけGoバイナリと対応するプロンプト版をSSHでVPSへ送り、既存サービスを更新する。
+6. 同じcommitから家族向けPWAを本番URL用にbuildし、checksum付きarchiveをVPSへ送る。
+7. PWAをcommitごとのdirectoryへ展開して`current` symlinkをatomicに切り替え、公開したindex、manifest、Service Workerがbuildと一致することを確認する。失敗時は直前のsymlinkへ戻す。
 
 [CI用デプロイスクリプト](../server/deploy/deploy-from-ci.sh)がこの順序を制御する。Supabase CLIは既存の`package-lock.json`に固定したバージョンを使い、VPSにはNode.jsやSupabase CLIを追加しない。両方の`db push`に`--skip-vault`を指定し、Vaultの同期は行わない。`--include-seed`、`--include-roles`、`--include-all`は指定しない。初期マイグレーション内の固定デモユーザーとStorageバケット作成は適用対象に含まれる。
 
@@ -59,6 +66,8 @@ VPSの[デプロイスクリプト](../server/deploy/mite-deploy.sh)は転送さ
 起動確認は最大30回まで行う。失敗や中断時には退避した実行ファイルとリリース設定を戻し、再起動と起動確認を行う。初回更新前にリリース設定ファイルがなければ、復元時には新しく作ったファイルを削除し、元の`.env`の設定へ戻す。復元に成功してもGitHubのデプロイ結果は失敗とする。正常に更新できた場合、直前の実行ファイルは`/opt/mite/mite-api.previous`へ1世代だけ残す。手動復元時は、そのバイナリに対応するプロンプト版を指定する。
 
 この確認はプロセスとHTTPの起動確認であり、実LiveKit・実Gemini・外部HTTPS/WSS経由のE2Eを保証しない。OS停止や強制終了で復元処理自体を実行できなかった場合は、VPSで手動確認が必要になる。
+
+PWAの配置は、root所有の`/usr/local/bin/mite-pwa-deploy`をsudoせずSSHユーザーとして実行する。SSHユーザーが書ける範囲は`/var/www/mite-family-pwa`だけとし、Apache設定とデプロイスクリプト自体はrootが管理する。CIはインストール済みスクリプトのSHA-256が対象commitと一致することを事前確認し、archiveのSHA-256、25MiB上限、必須ファイル、危険なpath・symlink、同一commitの内容不一致を検証する。認証付きAPIはPWA archiveやService Worker cacheへ含めない。
 
 ### 1. VPSへデプロイスクリプトを設置する
 
@@ -88,7 +97,39 @@ SSHユーザーがroot以外の場合は、`sudo visudo -f /etc/sudoers.d/mite-d
 
 `sudo visudo -cf /etc/sudoers.d/mite-deploy`で書式を確認する。このスクリプトはSHA-256と`v2`などのプロンプト版、または読取専用の`--check`だけを受け付ける。更新時は標準入力からバイナリを受け取り、固定の配置先・リリース設定・サービスだけを操作する。任意の環境変数、配置パス、シェルコマンドは受け付けない。既存の上記sudoers規則はそのまま使える。
 
-### 2. GitHubのEnvironmentと変数を設定する
+### 2. 家族向けPWAの初回VPS・Apache設定
+
+初回だけ、対象commitの`server/deploy/mite-pwa-deploy.sh`をVPSの`/tmp/mite-pwa-deploy.sh`へ転送する。VPS上で、`MITE_PWA_DEPLOY_USER`をGitHub Environment secret `VPS_USER`と同じSSHユーザー名にして実行する。
+
+```bash
+MITE_PWA_DEPLOY_USER=<SSHユーザー>
+MITE_PWA_DEPLOY_GROUP="$(id -gn "$MITE_PWA_DEPLOY_USER")"
+sudo install -o root -g root -m 0755 /tmp/mite-pwa-deploy.sh /usr/local/bin/mite-pwa-deploy
+sudo install -d -o "$MITE_PWA_DEPLOY_USER" -g "$MITE_PWA_DEPLOY_GROUP" -m 0755 /var/www/mite-family-pwa
+sudo install -d -o "$MITE_PWA_DEPLOY_USER" -g "$MITE_PWA_DEPLOY_GROUP" -m 0755 /var/www/mite-family-pwa/releases
+```
+
+現在のHTTPS終端はApacheである。既存の`priv.chi-llenge.com:443` VirtualHostへ[`apache-family-pwa.conf.example`](../server/deploy/apache-family-pwa.conf.example)の内容を追加する。`/mite/`全体をGoサーバーへ渡す`ProxyPass`がある場合、`/mite/family-pwa/`の除外を必ずそれより前に置く。既存の証明書設定とAPIのProxyPassは変更しない。
+
+```bash
+sudo a2enmod headers
+sudo apache2ctl configtest
+sudo systemctl reload apache2
+```
+
+Goサーバーの既存環境ファイルでは、`CLIENT_ORIGINS`へpathを付けず`https://priv.chi-llenge.com`を追加する。Web Pushを使う場合は`WEB_PUSH_VAPID_PUBLIC_KEY`、`WEB_PUSH_VAPID_PRIVATE_KEY`、`WEB_PUSH_SUBJECT`の3項目をすべて設定し、`mite-api.service`を再起動する。家族用トークン、VAPID秘密鍵、Supabase・LiveKit・Geminiの秘密値をApache設定、PWA build、GitHubログへ含めない。
+
+初回デプロイ前のpreflightはPWA directoryの所有権・書込権限、デプロイスクリプトのchecksum、公開PWAのOriginを付けた未認証リクエストへAPIが401を返すことを確認する。403なら`CLIENT_ORIGINS`の設定が不足している。Apacheを再読込した後、VPSの管理ユーザーで次を実行する。
+
+```bash
+MITE_PWA_SCRIPT_SHA="$(sha256sum /usr/local/bin/mite-pwa-deploy)"
+MITE_PWA_SCRIPT_SHA="${MITE_PWA_SCRIPT_SHA%% *}"
+sudo -u "$MITE_PWA_DEPLOY_USER" /usr/local/bin/mite-pwa-deploy --check "$MITE_PWA_SCRIPT_SHA"
+```
+
+PWAの`current`がまだない場合、PWA URLの404は初回デプロイまで正常である。デプロイスクリプトを変更したcommitをデプロイする前には、同じ手順でVPS上のコピーを更新する。
+
+### 3. GitHubのEnvironmentと変数を設定する
 
 リポジトリのSettings → Environmentsで`vps-mirai-server`を開き、Deployment branches and tagsを対象ブランチに制限する。次のEnvironment secretsを登録する。
 
@@ -121,9 +162,9 @@ Settings → Secrets and variables → Actions → Variablesには、次の**Rep
 
 既存のsystemd unitに上記のリリース設定の読込指定を追加する。`/etc/mite/`などに置いた既存の環境変数ファイルとHTTPS/WSSのリバースプロキシ設定はそのまま使う。LiveKit・Geminiの秘密情報とデモトークンをGitHubへ追加する必要はない。
 
-### 3. 初回デプロイと通常運用
+### 4. 初回デプロイと通常運用
 
-ワークフローをGitHubへ反映した後、Actions → Server CI/CD → Run workflowから、`VPS_DEPLOY_BRANCH`と同じブランチを選び、`deploy`を有効にして実行する。手動実行ボタンの表示には、ワークフローがリポジトリのデフォルトブランチに存在する必要がある。
+ワークフローをGitHubへ反映した後、Actions → Mite CI/CD → Run workflowから、`VPS_DEPLOY_BRANCH`と同じブランチを選び、`deploy`を有効にして実行する。手動実行ボタンの表示には、ワークフローがリポジトリのデフォルトブランチに存在する必要がある。API・DBの更新が成功した場合だけPWAを配置する。
 
 初回のCI・デプロイが通ったら、継続的に配置する場合は`VPS_AUTO_DEPLOY=true`にする。`deploy`を有効にしない手動実行はCIのみを行う。
 
@@ -159,6 +200,8 @@ sudo cat /opt/mite/mite-api.previous | sudo -n /usr/local/sbin/mite-deploy "$MIT
 旧バイナリはv1、新バイナリはv2の設定がなければ起動できない条件で検証する。リリース設定の初回作成・更新、設定配置の失敗、設定ファイルがなかった状態への復元、systemdの読込指定不足も確認する。
 
 `bash server/deploy/test-deploy-from-ci.sh`でCDの制御も確認する。GitHub・Supabase・SSHを模擬し、設定不足、古いコミット、SSH事前確認の失敗、dry-run失敗、マイグレーション失敗、VPS更新失敗を再現する。DB適用より前にVPSを更新しないこと、失敗後の処理を止めること、一時SSH鍵を削除することを検証する。
+
+`bash server/deploy/test-mite-pwa-deploy.sh`では一時directoryを使い、初回配置、再送、checksum不一致、公開確認失敗時のrollback、排他制御、危険なarchiveの拒否を確認する。`bash server/deploy/test-deploy-pwa-from-ci.sh`ではGitHubとSSHを模擬し、古いcommitの停止、preflight失敗、転送内容、秘密鍵の一時directory削除を確認する。実際のApacheや公開URLは変更しない。
 
 ## 参考
 
