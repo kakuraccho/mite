@@ -9,6 +9,7 @@ import (
 	"image/jpeg"
 	"io"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -18,8 +19,9 @@ import (
 )
 
 const (
-	guideAttemptTimeout = 55 * time.Second
-	guidePollInterval   = 500 * time.Millisecond
+	guideAttemptTimeout   = 180 * time.Second
+	guidePollInterval     = 500 * time.Millisecond
+	guideInputConcurrency = 4
 )
 
 type GuideGenerationFailure struct {
@@ -139,12 +141,32 @@ func (w *GuideWorker) RunOnce(ctx context.Context) (bool, error) {
 		generationContext = repository.GenerationContext{JobID: job.ID, BatchID: job.BatchID, JobRevision: job.Revision, SupportSessionID: session.ID, SupportRequestID: session.SupportRequestID, UserID: session.UserID, FamilyID: session.FamilyID}
 		return true, w.finishFailure(ctx, job, generationContext, domain.GuideGenerationAIInputUnavailable)
 	}
+	started := time.Now()
 	input, loadErr := w.loadInput(attemptCtx, generationContext)
+	preparedAt := time.Now()
+	phase := "input"
+	defer func() {
+		code := domain.GuideGenerationErrorCode("")
+		if loadErr != nil {
+			code = generationErrorCode(attemptCtx, loadErr)
+		}
+		inputBytes := 0
+		for _, image := range input.Images {
+			inputBytes += len(image.JPEG)
+		}
+		// Only timings and counts: never log image data, comments or provider errors.
+		w.logger.InfoContext(ctx, "guide generation attempt", "jobId", job.ID,
+			"attempt", job.Attempt, "phase", phase, "errorCode", code,
+			"imageCount", len(input.Images), "inputBytes", inputBytes,
+			"inputMs", preparedAt.Sub(started).Milliseconds(),
+			"generationMs", time.Since(preparedAt).Milliseconds())
+	}()
 	var output []domain.GeneratedGuide
 	if loadErr == nil {
 		if w.generator == nil {
 			loadErr = &GuideGenerationFailure{Code: domain.GuideGenerationAIUnavailable, Cause: errors.New("guide generator is not configured")}
 		} else {
+			phase = "generation"
 			output, loadErr = w.generator.Generate(attemptCtx, input)
 		}
 	}
@@ -174,19 +196,42 @@ func (w *GuideWorker) loadInput(ctx context.Context, generationContext repositor
 		return domain.GuideGenerationInput{}, &GuideGenerationFailure{Code: domain.GuideGenerationAIInputUnavailable, Cause: err}
 	}
 	indexes := domain.SelectGuideMaterialIndexes(len(materials))
-	images := make([]domain.GuideGenerationInputImage, 0, 1+len(indexes))
-	initial, err := w.loadAndPrepare(ctx, generationContext.InitialStorageKey)
-	if err != nil {
-		return domain.GuideGenerationInput{}, err
-	}
-	images = append(images, domain.GuideGenerationInputImage{Kind: domain.ArtifactPurposeRequestScreenshot, ArtifactID: generationContext.InitialScreenshotArtifactID, CapturedAt: generationContext.InitialCapturedAt.Time, Sequence: 0, JPEG: initial})
-	for _, index := range indexes {
+	images := make([]domain.GuideGenerationInputImage, 1+len(indexes))
+	keys := make([]string, len(images))
+	images[0] = domain.GuideGenerationInputImage{Kind: domain.ArtifactPurposeRequestScreenshot, ArtifactID: generationContext.InitialScreenshotArtifactID, CapturedAt: generationContext.InitialCapturedAt.Time, Sequence: 0}
+	keys[0] = generationContext.InitialStorageKey
+	for position, index := range indexes {
 		material := materials[index]
-		prepared, err := w.loadAndPrepare(ctx, material.StorageKey)
-		if err != nil {
-			return domain.GuideGenerationInput{}, err
-		}
-		images = append(images, domain.GuideGenerationInputImage{Kind: domain.ArtifactPurposeGuideMaterial, ArtifactID: material.ArtifactID, CapturedAt: material.CapturedAt.Time, Sequence: material.Sequence, JPEG: prepared})
+		images[position+1] = domain.GuideGenerationInputImage{Kind: domain.ArtifactPurposeGuideMaterial, ArtifactID: material.ArtifactID, CapturedAt: material.CapturedAt.Time, Sequence: material.Sequence}
+		keys[position+1] = material.StorageKey
+	}
+	// Bound both storage traffic and decoded image memory while preserving input order.
+	loadCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var workers sync.WaitGroup
+	var firstError error
+	var failOnce sync.Once
+	for workerIndex := range min(guideInputConcurrency, len(images)) {
+		workers.Go(func() {
+			for position := workerIndex; position < len(images); position += guideInputConcurrency {
+				if loadCtx.Err() != nil {
+					return
+				}
+				prepared, err := w.loadAndPrepare(loadCtx, keys[position])
+				if err != nil {
+					failOnce.Do(func() { firstError = err; cancel() })
+					return
+				}
+				images[position].JPEG = prepared
+			}
+		})
+	}
+	workers.Wait()
+	if firstError != nil {
+		return domain.GuideGenerationInput{}, firstError
+	}
+	if err := ctx.Err(); err != nil {
+		return domain.GuideGenerationInput{}, err
 	}
 	return domain.GuideGenerationInput{Comment: generationContext.Comment, Images: images}, nil
 }
@@ -204,6 +249,9 @@ func (w *GuideWorker) loadAndPrepare(ctx context.Context, key string) ([]byte, e
 	if err != nil || len(raw) == 0 || int64(len(raw)) > domain.MaxArtifactBytes {
 		return nil, &GuideGenerationFailure{Code: domain.GuideGenerationAIInputUnavailable, Cause: err}
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	prepared, err := prepareGuideImage(raw)
 	if err != nil {
 		return nil, &GuideGenerationFailure{Code: domain.GuideGenerationAIInputUnavailable, Cause: err}
@@ -220,6 +268,11 @@ func prepareGuideImage(raw []byte) ([]byte, error) {
 	width, height := bounds.Dx(), bounds.Dy()
 	if width < 1 || height < 1 {
 		return nil, errors.New("guide input image dimensions are invalid")
+	}
+	// Client captures already fit these limits. Keep the validated JPEG bytes,
+	// avoiding a redundant lossy encode for every image on every attempt.
+	if width <= 1920 && height <= 1080 && len(raw) <= domain.MaxAIInputImageBytes {
+		return raw, nil
 	}
 	targetWidth, targetHeight := fitDimensions(width, height, 1920, 1080)
 	current := source

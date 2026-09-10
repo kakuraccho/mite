@@ -77,7 +77,7 @@ export function KeyboardGuide({ keys }: { keys: string[] }) {
   const extraKeys = keys.filter((name) => !shown.has(name))
   return (
     <div className="desktop-keyboard-guide" aria-label="家族のキーボード操作">
-      <strong>家族が押しているキー</strong>
+      <strong>家族が案内しているキー</strong>
       <svg
         viewBox="0 0 1140 420"
         role="img"
@@ -144,7 +144,7 @@ export function KeyboardGuide({ keys }: { keys: string[] }) {
           })
         })}
       </svg>
-      <div className="desktop-guidance-keys" aria-label="押しているキー">
+      <div className="desktop-guidance-keys" aria-label="案内しているキー">
         {keys.map((name, index) => (
           <span key={name}>
             {index ? ' + ' : ''}

@@ -48,7 +48,7 @@ it('renders simultaneous keys and pressed mouse buttons in the independent deskt
       expiresAt: Date.now() + 2000,
     }),
   )
-  const chord = within(screen.getByLabelText('押しているキー'))
+  const chord = within(screen.getByLabelText('案内しているキー'))
   expect(chord.getByText('Ctrl').tagName).toBe('KBD')
   expect(chord.getByText('C').tagName).toBe('KBD')
   expect(
@@ -92,7 +92,7 @@ it('renders simultaneous keys and pressed mouse buttons in the independent deskt
   )
   expect(screen.queryByText('Ctrl')).toBeNull()
   expect(screen.getByLabelText('家族のマウス操作').textContent).toContain(
-    '左押しています',
+    '左ボタンの操作',
   )
   expect(screen.getByLabelText('家族のカーソル').style.left).toBe('25%')
   act(() =>

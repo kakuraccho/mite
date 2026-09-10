@@ -832,3 +832,48 @@ func TestDraftRejectsUnknownArtifactAndFamilyOnlyReads(t *testing.T) {
 func (tx *fakeGuideTx) ListDrafts(_ context.Context, _ domain.ID, _ bool) ([]domain.GuideDraft, error) {
 	return []domain.GuideDraft{tx.draft}, nil
 }
+
+func (tx *fakeGuideTx) CancelRun(_ context.Context, _ domain.ID, now pgtype.Timestamptz) (domain.GuideRun, error) {
+	tx.run.Status = domain.GuideRunCancelled
+	tx.run.UpdatedAt = now.Time
+	tx.run.Revision++
+	return tx.run, nil
+}
+
+func TestCancelGuideRunEndsOnlyOwnedInProgressRunAndReplays(t *testing.T) {
+	tx, _ := guideFixture()
+	tx.run = domain.GuideRun{ID: "run_cancel", GuideID: "guide_1", GuideVersionNumber: 1, UserID: "user_demo", Status: domain.GuideRunInProgress, CurrentStepNumber: 1, Revision: 1}
+	tx.stepCount = 3
+	s := newGuideServiceForTest(tx, nil)
+	command := CancelGuideRunCommand{Meta: userMeta("cancel"), RunID: tx.run.ID, ExpectedRevision: 1}
+	wrongOwner := command
+	wrongOwner.Meta.Actor.ID = "another_user"
+	wrongOwner.Meta.Key = "cancel-owner"
+	if _, err := s.CancelGuideRun(context.Background(), wrongOwner); err == nil {
+		t.Fatal("another user cancelled the run")
+	}
+	stale := command
+	stale.ExpectedRevision = 2
+	stale.Meta.Key = "cancel-stale"
+	if _, err := s.CancelGuideRun(context.Background(), stale); err == nil {
+		t.Fatal("stale revision cancelled the run")
+	}
+	run, err := s.CancelGuideRun(context.Background(), command)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.Status != domain.GuideRunCancelled || run.CurrentStepNumber != 1 || run.CompletedAt != nil || run.Revision != 2 {
+		t.Fatalf("run=%+v", run)
+	}
+	if replay, err := s.CancelGuideRun(context.Background(), command); err != nil || replay.Revision != 2 {
+		t.Fatalf("replay=%+v, err=%v", replay, err)
+	}
+	if _, err := s.UpdateGuideRun(context.Background(), UpdateGuideRunCommand{Actor: command.Meta.Actor, RunID: run.ID, ExpectedRevision: 2, Action: domain.GuideRunNext}); err == nil {
+		t.Fatal("cancelled run was resumed")
+	}
+	command.Meta.Key = "another-cancel"
+	command.ExpectedRevision = 2
+	if _, err := s.CancelGuideRun(context.Background(), command); err == nil {
+		t.Fatal("cancelled run cancelled again with another key")
+	}
+}

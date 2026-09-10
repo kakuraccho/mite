@@ -1694,3 +1694,94 @@ it('利用者も同じ支援の全ガイドのタイトル・ステップ数・�
     screen.queryByRole('button', { name: 'レビュー完了' }),
   ).not.toBeInTheDocument()
 })
+
+it('ends a guide partway with an idempotent cancellation and starts the next use from step one', async () => {
+  const storage = new MemoryStorage()
+  storage.setItem('mite.user.guideRunId', guideRun.id)
+  const detail = {
+    ...guide,
+    currentVersion: {
+      ...guide.currentVersion,
+      steps: [
+        guide.currentVersion.steps[0]!,
+        {
+          position: 2,
+          artifactId: 'artifact_02',
+          instruction: '二つ目の操作です',
+        },
+        {
+          position: 3,
+          artifactId: 'artifact_03',
+          instruction: '最後の操作です',
+        },
+      ],
+    },
+  }
+  const current = { ...guideRun, currentStepNumber: 2, revision: 2 }
+  const cancelGuideRun = vi
+    .fn()
+    .mockRejectedValueOnce(new Error('offline'))
+    .mockResolvedValue({ ...current, status: 'CANCELLED', revision: 3 })
+  const api = makeApi({
+    getGuideRun: vi.fn().mockResolvedValue(current),
+    getGuide: vi.fn().mockResolvedValue(detail),
+    listGuides: vi.fn().mockResolvedValue([guide]),
+    getArtifactContent: vi.fn().mockResolvedValue(new Blob(['image'])),
+    cancelGuideRun,
+    completeGuideRun: vi.fn(),
+    createGuideRun: vi.fn().mockResolvedValue({ ...guideRun, id: 'run_new' }),
+  })
+  const desktop = makeDesktop()
+  render(
+    <UserClient
+      api={api}
+      desktop={desktop}
+      runtime={runtime}
+      storage={storage}
+      createEventStream={eventStreamFactory}
+    />,
+  )
+  fireEvent.click(await screen.findByRole('button', { name: '途中で終了する' }))
+  await waitFor(() => expect(cancelGuideRun).toHaveBeenCalledOnce())
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: '途中で終了する' }),
+    ).not.toBeDisabled(),
+  )
+  expect(screen.getByText('二つ目の操作です')).toBeInTheDocument()
+  expect(storage.getItem('mite.user.guideRunId')).toBe(current.id)
+  fireEvent.click(screen.getByRole('button', { name: '途中で終了する' }))
+  fireEvent.click(
+    await screen.findByRole('button', { name: 'この手順を始める' }),
+  )
+  expect(await screen.findByText('戻るボタンを押します')).toBeInTheDocument()
+  expect(storage.getItem('mite.user.guideRunId')).toBe('run_new')
+  expect(cancelGuideRun.mock.calls[1]).toEqual(cancelGuideRun.mock.calls[0])
+  expect(api.completeGuideRun).not.toHaveBeenCalled()
+  expect(desktop.setOverlayMode).toHaveBeenLastCalledWith('GUIDE')
+})
+
+it('clears a cancelled run on restart instead of opening it', async () => {
+  const storage = new MemoryStorage()
+  storage.setItem('mite.user.guideRunId', guideRun.id)
+  const api = makeApi({
+    getGuideRun: vi
+      .fn()
+      .mockResolvedValue({ ...guideRun, status: 'CANCELLED' }),
+  })
+  render(
+    <UserClient
+      api={api}
+      desktop={makeDesktop()}
+      runtime={runtime}
+      storage={storage}
+      createEventStream={eventStreamFactory}
+    />,
+  )
+  await waitFor(() =>
+    expect(storage.getItem('mite.user.guideRunId')).toBeNull(),
+  )
+  expect(
+    screen.queryByRole('button', { name: '途中で終了する' }),
+  ).not.toBeInTheDocument()
+})

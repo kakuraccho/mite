@@ -98,6 +98,38 @@ func (q *Queries) AttachGuideMaterialBatchToSession(ctx context.Context, arg Att
 	return &i, err
 }
 
+const cancelGuideRunRow = `-- name: CancelGuideRunRow :one
+UPDATE guide_runs
+SET status = 'CANCELLED', updated_at = $1, revision = revision + 1
+WHERE id = $2 AND status = 'IN_PROGRESS'
+RETURNING id, guide_id, guide_version_number, user_id, status, current_step_number, support_request_id, started_at, completed_at, paused_at, updated_at, revision
+`
+
+type CancelGuideRunRowParams struct {
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	ID        string             `json:"id"`
+}
+
+func (q *Queries) CancelGuideRunRow(ctx context.Context, arg CancelGuideRunRowParams) (*GuideRun, error) {
+	row := q.db.QueryRow(ctx, cancelGuideRunRow, arg.UpdatedAt, arg.ID)
+	var i GuideRun
+	err := row.Scan(
+		&i.ID,
+		&i.GuideID,
+		&i.GuideVersionNumber,
+		&i.UserID,
+		&i.Status,
+		&i.CurrentStepNumber,
+		&i.SupportRequestID,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.PausedAt,
+		&i.UpdatedAt,
+		&i.Revision,
+	)
+	return &i, err
+}
+
 const claimGuideGenerationJob = `-- name: ClaimGuideGenerationJob :one
 WITH candidate AS (
     SELECT id

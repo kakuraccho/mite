@@ -611,3 +611,92 @@ body {
     max-height: 160px;
   }
 }
+
+.user-overlay-detail--guide {
+  display: flex;
+  flex-direction: column;
+  border: 2px solid var(--mite-green-200);
+  border-radius: 18px;
+  overflow: hidden;
+}
+.user-overlay-detail--guide[hidden] {
+  display: none;
+}
+.user-guide-window-header {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  background: var(--mite-green-50);
+  -webkit-app-region: drag;
+  user-select: none;
+}
+.user-guide-window-header button {
+  -webkit-app-region: no-drag;
+}
+.user-guide-window-header span {
+  font-size: 20px;
+}
+.user-overlay-detail--guide .mite-app-header {
+  display: none;
+}
+.user-overlay-detail--guide .user-overlay-shell {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.user-overlay-detail--guide .mite-app-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  padding: 12px;
+  overflow: auto;
+}
+.user-guide-runner {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: 16px;
+}
+.user-guide-runner .mite-screen-heading {
+  flex-shrink: 0;
+}
+.user-guide-runner .mite-screen-heading h1 {
+  font-size: 24px;
+}
+.user-guide-runner .mite-screen-heading p {
+  display: none;
+}
+.user-guide-runner .user-guide-step {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.user-guide-runner .user-guide-image,
+.user-guide-runner .user-image-fallback {
+  flex-shrink: 0;
+  height: clamp(100px, calc(100dvh - 450px), 230px);
+}
+.user-guide-runner .user-guide-step p {
+  font-size: 22px;
+}
+.user-guide-runner .user-actions {
+  flex-shrink: 0;
+  gap: 8px;
+  padding-bottom: 0;
+}
+.user-guide-runner .mite-button {
+  padding-inline: 12px;
+}
+.user-guide-step:focus-visible {
+  outline: 3px solid var(--mite-green-700);
+  outline-offset: 2px;
+}

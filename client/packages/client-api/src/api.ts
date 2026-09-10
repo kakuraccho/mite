@@ -5,6 +5,7 @@ import type {
   CallSupportRequestInput,
   CompleteGuideMaterialBatchInput,
   CompleteGuideRunInput,
+  CancelGuideRunInput,
   CreateGuideMaterialBatchInput,
   CreateGuideRunInput,
   CreateSupportRequestFromGuideRunInput,
@@ -136,6 +137,11 @@ export interface MiteApi {
   completeGuideRun(
     guideRunId: string,
     input: CompleteGuideRunInput,
+    operation: IdempotentOperation,
+  ): Promise<GuideRun>
+  cancelGuideRun(
+    guideRunId: string,
+    input: CancelGuideRunInput,
     operation: IdempotentOperation,
   ): Promise<GuideRun>
   requestSupportFromGuideRun(

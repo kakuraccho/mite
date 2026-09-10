@@ -66,7 +66,11 @@ describe('PrimaryScreenCapture', () => {
     expect(await capture.jpeg()).toEqual(Buffer.from('42'))
     expect(await capture.prepareScreenShare()).toEqual({
       name: '画面全体',
-      thumbnailDataUrl: 'data:image/jpeg;base64,42',
+    })
+    expect(primary.thumbnail.toDataURL).not.toHaveBeenCalled()
+    expect(desktopCapturer.getSources).toHaveBeenLastCalledWith({
+      types: ['screen'],
+      thumbnailSize: { width: 0, height: 0 },
     })
     expect(await capture.sharingSource()).toBe(primary)
     expect(await capture.jpeg(true)).toEqual(Buffer.from('42'))

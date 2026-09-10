@@ -27,6 +27,9 @@ const getSources = (withThumbnail: boolean) => {
       }
     }
   }
+  // Source identity lookup does not hide windows or generate images and need
+  // not wait for a slow still capture already in progress.
+  if (!withThumbnail) return capture()
   const current = thumbnailQueue.catch(() => {}).then(capture)
   thumbnailQueue = current
   return current
@@ -54,14 +57,13 @@ export class PrimaryScreenCapture {
 
   async prepareScreenShare() {
     this.#sharingTarget = null
-    const source = await this.#primarySource(true)
+    const source = await this.#primarySource(false)
     this.#sharingTarget = {
       sourceId: source.id,
       displayId: source.display_id,
     }
     return {
       name: '画面全体',
-      thumbnailDataUrl: source.thumbnail.toDataURL(),
     }
   }
 
