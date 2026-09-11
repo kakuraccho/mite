@@ -75,7 +75,7 @@ func TestSupportSessionServiceRejectsWrongPairAndRole(t *testing.T) {
 	if _, err := service.Get(context.Background(), domain.Actor{ID: "user_other", Role: domain.RoleUser}, "session_1"); testErrorCode(err) != domain.CodeForbidden {
 		t.Fatalf("Get code=%s err=%v", testErrorCode(err), err)
 	}
-	consent := domain.Consent{Audio: true, ScreenShare: true, PeriodicCapture: true, TextVersion: "v1"}
+	consent := domain.Consent{Audio: true, ScreenShare: true, PeriodicCapture: true, TextVersion: "v4"}
 	if _, err := service.Accept(context.Background(), domain.Actor{ID: "family_1", Role: domain.RoleFamily}, "session_1", 1, consent, "key", "request"); testErrorCode(err) != domain.CodeForbidden {
 		t.Fatalf("Accept code=%s err=%v", testErrorCode(err), err)
 	}
@@ -85,7 +85,7 @@ func TestSupportSessionServiceAccept(t *testing.T) {
 	store := ringingStore()
 	publisher := &supportSessionFakeEventPublisher{}
 	service := newTestSessionService(store, publisher, &fakeTokenIssuer{})
-	consent := domain.Consent{Audio: true, ScreenShare: true, PeriodicCapture: true, TextVersion: "v1"}
+	consent := domain.Consent{Audio: true, ScreenShare: true, PeriodicCapture: true, TextVersion: "v4"}
 	result, err := service.Accept(context.Background(), domain.Actor{ID: "user_1", Role: domain.RoleUser}, "session_1", 1, consent, "accept-key", "request-1")
 	if err != nil {
 		t.Fatal(err)
@@ -101,7 +101,7 @@ func TestSupportSessionServiceAccept(t *testing.T) {
 func TestSupportSessionServiceAcceptRequiresFullConsent(t *testing.T) {
 	store := ringingStore()
 	service := newTestSessionService(store, &supportSessionFakeEventPublisher{}, &fakeTokenIssuer{})
-	consent := domain.Consent{Audio: true, ScreenShare: false, PeriodicCapture: true, TextVersion: "v1"}
+	consent := domain.Consent{Audio: true, ScreenShare: false, PeriodicCapture: true, TextVersion: "v4"}
 	_, err := service.Accept(context.Background(), domain.Actor{ID: "user_1", Role: domain.RoleUser}, "session_1", 1, consent, "accept-key", "request-1")
 	if code, _ := domain.ErrorCodeOf(err); code != domain.CodeValidationError {
 		t.Fatalf("code=%s err=%v", code, err)
@@ -188,7 +188,7 @@ func TestSupportSessionServiceEndWithoutGuideCleansIntermediateData(t *testing.T
 	if result.Status != domain.SupportSessionEnded || result.Revision != 7 || result.EndReason == nil || *result.EndReason != domain.EndReasonGuideCancelled || result.GuideMaterialBatchID != nil || result.GuideGenerationJobID != nil || result.GuideDraftID != nil {
 		t.Fatalf("session=%+v", result)
 	}
-	if len(store.queuedArtifacts) != 1 || !store.deletedJobs[jobID] || !store.deletedBatches[batchID] || !store.deletedDrafts[draftID] {
+	if len(store.queuedArtifacts) != 1 || !store.deletedJobs[jobID] || !store.deletedBatches[batchID] || !store.deletedDrafts[session.ID] {
 		t.Fatalf("cleanup not completed: %+v", store)
 	}
 }
@@ -270,7 +270,7 @@ func TestSupportSessionServiceDoesNotPublishOnRollback(t *testing.T) {
 	store.failComplete = true
 	publisher := &supportSessionFakeEventPublisher{}
 	service := newTestSessionService(store, publisher, &fakeTokenIssuer{})
-	consent := domain.Consent{Audio: true, ScreenShare: true, PeriodicCapture: true, TextVersion: "v1"}
+	consent := domain.Consent{Audio: true, ScreenShare: true, PeriodicCapture: true, TextVersion: "v4"}
 	_, err := service.Accept(context.Background(), domain.Actor{ID: "user_1", Role: domain.RoleUser}, "session_1", 1, consent, "accept-key", "request-1")
 	if err == nil {
 		t.Fatal("expected error")
@@ -339,7 +339,7 @@ func activeStore() *fakeSessionStore {
 	request.Revision = 3
 	store.requests[request.ID] = request
 	session := store.sessions["session_1"]
-	consent := domain.Consent{Audio: true, ScreenShare: true, PeriodicCapture: true, TextVersion: "v1"}
+	consent := domain.Consent{Audio: true, ScreenShare: true, PeriodicCapture: true, TextVersion: "v4"}
 	started := sessionTestNow.Add(-time.Minute)
 	session.Status = domain.SupportSessionActive
 	session.Consent = &consent
@@ -544,7 +544,7 @@ func (t *fakeSessionTransaction) DeleteGuideMaterialBatch(_ context.Context, id 
 	t.deletedBatches[id] = true
 	return nil
 }
-func (t *fakeSessionTransaction) DeleteGuideDraft(_ context.Context, id domain.ID) error {
+func (t *fakeSessionTransaction) DeleteGuideDrafts(_ context.Context, id domain.ID) error {
 	t.deletedDrafts[id] = true
 	return nil
 }
@@ -593,4 +593,16 @@ func (t *fakeSessionTransaction) CompleteIdempotency(_ context.Context, scope do
 	}
 	t.idempotency[key] = completed
 	return nil
+}
+
+func (t *fakeSessionTransaction) EndSavedGuide(_ context.Context, id domain.ID, now time.Time) (domain.SupportSession, error) {
+	value := t.sessions[id]
+	value.Status = domain.SupportSessionEnded
+	reason := domain.EndReasonGuideSaved
+	value.EndReason = &reason
+	value.EndedAt = &now
+	value.UpdatedAt = now
+	value.Revision++
+	t.sessions[id] = value
+	return value, nil
 }

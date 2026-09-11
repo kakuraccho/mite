@@ -1,9 +1,12 @@
 package websocket
 
 import (
+	"bytes"
 	"context"
+	"net"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -57,6 +60,65 @@ func TestHubAuthenticatesAndPublishesOnlyToPair(t *testing.T) {
 	_ = conn.SetReadDeadline(time.Now().Add(50 * time.Millisecond))
 	if err := xwebsocket.JSON.Receive(conn, &received); err == nil {
 		t.Fatal("unexpected cross-pair event")
+	}
+}
+
+func TestHubSubscribesBeforeAuthenticationResponseCompletes(t *testing.T) {
+	hub := NewHub(fakeAuthenticator{"token": {ID: "user_1", Role: domain.RoleUser}}, map[string]struct{}{"http://allowed.example": {}})
+	authenticatedWritten := make(chan struct{})
+	resumeWrite := make(chan struct{})
+	releaseWrite := sync.OnceFunc(func() { close(resumeWrite) })
+	server := httptest.NewUnstartedServer(hub.Handler())
+	server.Listener = &authenticationWriteListener{Listener: server.Listener, afterWrite: func() {
+		close(authenticatedWritten)
+		<-resumeWrite
+	}}
+	server.Start()
+	defer server.Close()
+	conn := dialWebSocket(t, server.URL, "http://allowed.example")
+	defer conn.Close()
+	defer releaseWrite()
+	if err := xwebsocket.JSON.Send(conn, map[string]string{"type": "authenticate", "token": "token"}); err != nil {
+		t.Fatal(err)
+	}
+	var authenticated map[string]string
+	if err := xwebsocket.JSON.Receive(conn, &authenticated); err != nil {
+		t.Fatal(err)
+	}
+	if authenticated["type"] != "authenticated" {
+		t.Fatalf("first message = %v", authenticated)
+	}
+	select {
+	case <-authenticatedWritten:
+	case <-time.After(5 * time.Second):
+		t.Fatal("authentication response write was not intercepted")
+	}
+	// The client can act on the response before the server's Write returns.
+	// Keep that Write paused to make the subscription race deterministic.
+	hub.mu.RLock()
+	subscribed := len(hub.connections)
+	hub.mu.RUnlock()
+	if subscribed != 1 {
+		t.Fatalf("authenticated connection is not subscribed: connections = %d", subscribed)
+	}
+	event := domain.Event{EventID: "event_1", Type: domain.EventSupportSessionUpdated, EntityID: "session_1", Revision: 2, Data: []byte(`{}`), Audience: domain.UserPair{UserID: "user_1", FamilyID: "family_1"}}
+	published := make(chan error, 1)
+	go func() { published <- hub.Publish(context.Background(), event) }()
+	releaseWrite()
+	var received domain.Event
+	if err := xwebsocket.JSON.Receive(conn, &received); err != nil {
+		t.Fatal(err)
+	}
+	if received.EventID != event.EventID {
+		t.Fatalf("event = %+v", received)
+	}
+	select {
+	case err := <-published:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("event publication did not finish")
 	}
 }
 
@@ -133,5 +195,35 @@ func dialWebSocket(t *testing.T, serverURL, origin string) *xwebsocket.Conn {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := connection.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		_ = connection.Close()
+		t.Fatal(err)
+	}
 	return connection
+}
+
+type authenticationWriteListener struct {
+	net.Listener
+	afterWrite func()
+}
+
+func (l *authenticationWriteListener) Accept() (net.Conn, error) {
+	conn, err := l.Listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+	return &authenticationWriteConn{Conn: conn, afterWrite: l.afterWrite}, nil
+}
+
+type authenticationWriteConn struct {
+	net.Conn
+	afterWrite func()
+}
+
+func (c *authenticationWriteConn) Write(data []byte) (int, error) {
+	n, err := c.Conn.Write(data)
+	if err == nil && bytes.Contains(data, []byte(`"type":"authenticated"`)) {
+		c.afterWrite()
+	}
+	return n, err
 }

@@ -34,7 +34,7 @@ func TestGeminiGuideGeneratorRequestAndResponse(t *testing.T) {
 			t.Fatal("API key header is missing")
 		}
 		captured, _ = io.ReadAll(request.Body)
-		body := `{"status":"completed","steps":[{"type":"model_output","content":[{"type":"text","text":"{\"title\":\"設定\",\"steps\":[{\"sourceArtifactId\":\"art_1\",\"instruction\":\"設定を押す\"}]}"}]}]}`
+		body := `{"status":"completed","steps":[{"type":"model_output","content":[{"type":"text","text":"{\"guides\":[{\"title\":\"設定\",\"steps\":[{\"sourceArtifactId\":\"art_1\",\"instruction\":\"設定を押す\"}]}]}"}]}]}`
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
 	})}
 	generator, err := NewGeminiGuideGenerator("https://generativelanguage.googleapis.com/v1beta", "secret", GeminiModel, GeminiPromptVersion, client)
@@ -45,7 +45,7 @@ func TestGeminiGuideGeneratorRequestAndResponse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if output.Title != "設定" || len(output.Steps) != 1 || output.Steps[0].SourceArtifactID != "art_1" {
+	if len(output) != 1 || output[0].Title != "設定" || len(output[0].Steps) != 1 || output[0].Steps[0].SourceArtifactID != "art_1" {
 		t.Fatalf("output = %+v", output)
 	}
 	var request map[string]any
@@ -59,7 +59,7 @@ func TestGeminiGuideGeneratorRequestAndResponse(t *testing.T) {
 		t.Fatal("API key leaked into request body")
 	}
 	configuration := request["generation_config"].(map[string]any)
-	if configuration["thinking_level"] != "low" || configuration["max_output_tokens"] != float64(2048) {
+	if configuration["thinking_level"] != "low" || configuration["max_output_tokens"] != float64(8192) {
 		t.Fatalf("generation config = %#v", configuration)
 	}
 	responseFormat, ok := request["response_format"].(map[string]any)
@@ -140,5 +140,73 @@ func TestPrepareGuideImageResizesAndCompresses(t *testing.T) {
 	}
 	if config.Width > 1920 || config.Height > 1080 {
 		t.Fatalf("dimensions = %dx%d", config.Width, config.Height)
+	}
+}
+
+func TestParseGeminiResponseWithMultipleGuides(t *testing.T) {
+	output := `{"guides":[{"title":"ログインする","steps":[{"sourceArtifactId":"art_1","instruction":"ログインを押す"}]},{"title":"住所を変更する","steps":[{"sourceArtifactId":"art_2","instruction":"住所を入力する"}]}]}`
+	response, err := json.Marshal(map[string]any{"status": "completed", "steps": []any{map[string]any{"type": "model_output", "content": []any{map[string]any{"type": "text", "text": output}}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	guides, err := parseGeminiResponse(response)
+	if err != nil || len(guides) != 2 || guides[0].Title != "ログインする" || guides[1].Title != "住所を変更する" || guides[1].Steps[0].SourceArtifactID != "art_2" {
+		t.Fatalf("guides=%+v, err=%v", guides, err)
+	}
+}
+
+func TestPrepareGuideImageKeepsValidCaptureBytes(t *testing.T) {
+	raw := jpegFixture(t, 42)
+	prepared, err := prepareGuideImage(raw)
+	if err != nil || !bytes.Equal(raw, prepared) {
+		t.Fatalf("valid capture was reencoded: %v", err)
+	}
+	if _, err := prepareGuideImage(raw[:len(raw)/2]); err == nil {
+		t.Fatal("truncated JPEG accepted")
+	}
+}
+
+type failedGeminiBody struct{}
+
+func (failedGeminiBody) Read([]byte) (int, error) { return 0, context.DeadlineExceeded }
+func (failedGeminiBody) Close() error             { return nil }
+
+func TestGeminiTimeoutWhileReadingBody(t *testing.T) {
+	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Body: failedGeminiBody{}, Header: make(http.Header)}, nil
+	})}
+	generator, err := NewGeminiGuideGenerator("https://example.test/v1beta", "secret", GeminiModel, GeminiPromptVersion, client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = generator.Generate(context.Background(), domain.GuideGenerationInput{Images: []domain.GuideGenerationInputImage{{JPEG: []byte{1}}}})
+	var failure *GuideGenerationFailure
+	if !errors.As(err, &failure) || failure.Code != domain.GuideGenerationAITimeout {
+		t.Fatalf("error=%v", err)
+	}
+}
+
+func TestGeminiHas300SecondBudgetAndRespectsShorterParentDeadline(t *testing.T) {
+	for _, budget := range []time.Duration{600 * time.Second, 300 * time.Second, 20 * time.Second} {
+		ctx, cancel := context.WithTimeout(context.Background(), budget)
+		client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			deadline, ok := request.Context().Deadline()
+			remaining := time.Until(deadline)
+			want := min(budget, 300*time.Second)
+			if !ok || remaining > want || remaining < want-time.Second {
+				t.Errorf("HTTP budget=%v, want %v", remaining, want)
+			}
+			return nil, context.DeadlineExceeded
+		})}
+		generator, err := NewGeminiGuideGenerator("https://example.test/v1beta", "secret", GeminiModel, GeminiPromptVersion, client)
+		if err != nil {
+			cancel()
+			t.Fatal(err)
+		}
+		_, err = generator.Generate(ctx, domain.GuideGenerationInput{Images: []domain.GuideGenerationInputImage{{JPEG: []byte{1}}}})
+		if generationErrorCode(ctx, err) != domain.GuideGenerationAITimeout {
+			t.Errorf("error=%v", err)
+		}
+		cancel()
 	}
 }

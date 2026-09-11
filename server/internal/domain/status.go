@@ -6,15 +6,42 @@ const (
 	SupportRequestPending   SupportRequestStatus = "PENDING"
 	SupportRequestInSupport SupportRequestStatus = "IN_SUPPORT"
 	SupportRequestResolved  SupportRequestStatus = "RESOLVED"
+	SupportRequestCancelled SupportRequestStatus = "CANCELLED"
 )
 
 func (s SupportRequestStatus) Valid() bool {
-	return s == SupportRequestPending || s == SupportRequestInSupport || s == SupportRequestResolved
+	return s == SupportRequestPending || s == SupportRequestInSupport ||
+		s == SupportRequestResolved || s == SupportRequestCancelled
 }
 
 func (s SupportRequestStatus) CanTransitionTo(next SupportRequestStatus) bool {
-	return (s == SupportRequestPending && next == SupportRequestInSupport) ||
+	return (s == SupportRequestPending && (next == SupportRequestInSupport || next == SupportRequestCancelled)) ||
 		(s == SupportRequestInSupport && next == SupportRequestResolved)
+}
+
+type SupportAcknowledgementKind string
+
+const (
+	SupportAcknowledgementNow       SupportAcknowledgementKind = "NOW"
+	SupportAcknowledgementScheduled SupportAcknowledgementKind = "SCHEDULED"
+	SupportAcknowledgementUnknown   SupportAcknowledgementKind = "UNKNOWN"
+)
+
+func (k SupportAcknowledgementKind) Valid() bool {
+	return k == SupportAcknowledgementNow || k == SupportAcknowledgementScheduled ||
+		k == SupportAcknowledgementUnknown
+}
+
+type PresenceStatus string
+
+const (
+	PresenceConnecting PresenceStatus = "CONNECTING"
+	PresenceOnline     PresenceStatus = "ONLINE"
+	PresenceOffline    PresenceStatus = "OFFLINE"
+)
+
+func (s PresenceStatus) Valid() bool {
+	return s == PresenceConnecting || s == PresenceOnline || s == PresenceOffline
 }
 
 type SupportSessionStatus string
@@ -24,6 +51,7 @@ const (
 	SupportSessionActive          SupportSessionStatus = "ACTIVE"
 	SupportSessionGeneratingGuide SupportSessionStatus = "GENERATING_GUIDE"
 	SupportSessionReviewingGuide  SupportSessionStatus = "REVIEWING_GUIDE"
+	SupportSessionGuideSaved      SupportSessionStatus = "GUIDE_SAVED"
 	SupportSessionEnded           SupportSessionStatus = "ENDED"
 )
 
@@ -33,6 +61,7 @@ func (s SupportSessionStatus) Valid() bool {
 		SupportSessionActive,
 		SupportSessionGeneratingGuide,
 		SupportSessionReviewingGuide,
+		SupportSessionGuideSaved,
 		SupportSessionEnded:
 		return true
 	default:
@@ -49,6 +78,8 @@ func (s SupportSessionStatus) CanTransitionTo(next SupportSessionStatus) bool {
 	case SupportSessionGeneratingGuide:
 		return next == SupportSessionReviewingGuide || next == SupportSessionEnded
 	case SupportSessionReviewingGuide:
+		return next == SupportSessionEnded
+	case SupportSessionGuideSaved:
 		return next == SupportSessionEnded
 	default:
 		return false
@@ -113,15 +144,16 @@ type GuideRunStatus string
 const (
 	GuideRunInProgress       GuideRunStatus = "IN_PROGRESS"
 	GuideRunCompleted        GuideRunStatus = "COMPLETED"
+	GuideRunCancelled        GuideRunStatus = "CANCELLED"
 	GuideRunPausedForSupport GuideRunStatus = "PAUSED_FOR_SUPPORT"
 )
 
 func (s GuideRunStatus) Valid() bool {
-	return s == GuideRunInProgress || s == GuideRunCompleted || s == GuideRunPausedForSupport
+	return s == GuideRunInProgress || s == GuideRunCompleted || s == GuideRunCancelled || s == GuideRunPausedForSupport
 }
 
 func (s GuideRunStatus) CanTransitionTo(next GuideRunStatus) bool {
-	return s == GuideRunInProgress && (next == GuideRunCompleted || next == GuideRunPausedForSupport)
+	return s == GuideRunInProgress && (next == GuideRunCompleted || next == GuideRunCancelled || next == GuideRunPausedForSupport)
 }
 
 type GuideMaterialBatchStatus string
@@ -188,6 +220,8 @@ func CanEndSupportSession(status SupportSessionStatus, reason SupportSessionEndR
 		return reason == EndReasonGuideCancelled || reason == EndReasonNoMaterials
 	case SupportSessionReviewingGuide:
 		return reason == EndReasonGuideSaved || reason == EndReasonGuideCancelled
+	case SupportSessionGuideSaved:
+		return reason == EndReasonGuideSaved
 	default:
 		return false
 	}

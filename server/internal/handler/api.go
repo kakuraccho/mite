@@ -22,6 +22,7 @@ type SupportSessionAPI interface {
 	CallSupportRequest(context.Context, generated.CallSupportRequestRequestObject) (generated.CallSupportRequestResponseObject, error)
 	GetSupportSession(context.Context, generated.GetSupportSessionRequestObject) (generated.GetSupportSessionResponseObject, error)
 	AcceptSupportSession(context.Context, generated.AcceptSupportSessionRequestObject) (generated.AcceptSupportSessionResponseObject, error)
+	EndSupportSession(context.Context, generated.EndSupportSessionRequestObject) (generated.EndSupportSessionResponseObject, error)
 	EndSupportSessionWithoutGuide(context.Context, generated.EndSupportSessionWithoutGuideRequestObject) (generated.EndSupportSessionWithoutGuideResponseObject, error)
 	CreateLiveKitToken(context.Context, generated.CreateLiveKitTokenRequestObject) (generated.CreateLiveKitTokenResponseObject, error)
 	ResolveSupportSession(context.Context, generated.ResolveSupportSessionRequestObject) (generated.ResolveSupportSessionResponseObject, error)
@@ -30,6 +31,8 @@ type SupportSessionAPI interface {
 // GuideAPI is the HTTP boundary for material upload, generation, drafts,
 // guides, and guide runs.
 type GuideAPI interface {
+	ListSessionGuideDrafts(context.Context, generated.ListSessionGuideDraftsRequestObject) (generated.ListSessionGuideDraftsResponseObject, error)
+	CompleteGuideReview(context.Context, generated.CompleteGuideReviewRequestObject) (generated.CompleteGuideReviewResponseObject, error)
 	GetGuideDraft(context.Context, generated.GetGuideDraftRequestObject) (generated.GetGuideDraftResponseObject, error)
 	UpdateGuideDraft(context.Context, generated.UpdateGuideDraftRequestObject) (generated.UpdateGuideDraftResponseObject, error)
 	SaveGuideDraft(context.Context, generated.SaveGuideDraftRequestObject) (generated.SaveGuideDraftResponseObject, error)
@@ -43,9 +46,20 @@ type GuideAPI interface {
 	GetGuideRun(context.Context, generated.GetGuideRunRequestObject) (generated.GetGuideRunResponseObject, error)
 	UpdateGuideRun(context.Context, generated.UpdateGuideRunRequestObject) (generated.UpdateGuideRunResponseObject, error)
 	CompleteGuideRun(context.Context, generated.CompleteGuideRunRequestObject) (generated.CompleteGuideRunResponseObject, error)
+	CancelGuideRun(context.Context, generated.CancelGuideRunRequestObject) (generated.CancelGuideRunResponseObject, error)
 	CreateSupportRequestFromGuideRun(context.Context, generated.CreateSupportRequestFromGuideRunRequestObject) (generated.CreateSupportRequestFromGuideRunResponseObject, error)
 	ListGuides(context.Context, generated.ListGuidesRequestObject) (generated.ListGuidesResponseObject, error)
 	GetGuide(context.Context, generated.GetGuideRequestObject) (generated.GetGuideResponseObject, error)
+}
+
+type CompanionAPI interface {
+	GetCompanionStatus(context.Context, generated.GetCompanionStatusRequestObject) (generated.GetCompanionStatusResponseObject, error)
+	RecordPresenceHeartbeat(context.Context, generated.RecordPresenceHeartbeatRequestObject) (generated.RecordPresenceHeartbeatResponseObject, error)
+	DeletePushSubscription(context.Context, generated.DeletePushSubscriptionRequestObject) (generated.DeletePushSubscriptionResponseObject, error)
+	UpsertPushSubscription(context.Context, generated.UpsertPushSubscriptionRequestObject) (generated.UpsertPushSubscriptionResponseObject, error)
+	GetVapidPublicKey(context.Context, generated.GetVapidPublicKeyRequestObject) (generated.GetVapidPublicKeyResponseObject, error)
+	UpdateSupportRequestAcknowledgement(context.Context, generated.UpdateSupportRequestAcknowledgementRequestObject) (generated.UpdateSupportRequestAcknowledgementResponseObject, error)
+	CancelSupportRequest(context.Context, generated.CancelSupportRequestRequestObject) (generated.CancelSupportRequestResponseObject, error)
 }
 
 // API combines independently implemented feature lanes into the generated
@@ -54,6 +68,7 @@ type API struct {
 	ArtifactSupportAPI
 	SupportSessionAPI
 	GuideAPI
+	CompanionAPI
 }
 
 var _ generated.StrictServerInterface = API{}

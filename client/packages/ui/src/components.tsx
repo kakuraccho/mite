@@ -176,7 +176,11 @@ export function Notice({
       className={cx('mite-notice', `mite-notice--${tone}`, className)}
     >
       <span className="mite-notice__symbol" aria-hidden="true">
-        {tone === 'success' ? '✓' : tone === 'danger' ? '!' : 'i'}
+        {tone === 'success'
+          ? '✓'
+          : tone === 'danger' || tone === 'warning'
+            ? '!'
+            : 'i'}
       </span>
       <div>
         <strong>{title}</strong>

@@ -1,33 +1,12 @@
+@import './tokens.css';
+
 :root {
-  font-family:
-    Inter, 'Yu Gothic UI', 'Hiragino Kaku Gothic ProN', system-ui, sans-serif;
-  color: #22312c;
-  background: #eef3f0;
+  font-family: var(--mite-font);
+  color: var(--mite-ink);
+  background: var(--mite-background);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  --mite-ink: #22312c;
-  --mite-muted: #65726d;
-  --mite-green-950: #17372f;
-  --mite-green-900: #1d4439;
-  --mite-green-800: #285548;
-  --mite-green-700: #33705d;
-  --mite-green-600: #438872;
-  --mite-green-200: #c8ddd4;
-  --mite-green-100: #e5f0eb;
-  --mite-green-50: #f2f8f5;
-  --mite-cream: #fbfaf5;
-  --mite-gold: #d7a852;
-  --mite-gold-soft: #f5ead1;
-  --mite-danger: #a33f3f;
-  --mite-danger-soft: #faeaea;
-  --mite-warning: #8a5a14;
-  --mite-warning-soft: #fff3d8;
-  --mite-line: #dce3df;
-  --mite-shadow: 0 18px 50px rgb(26 49 41 / 14%);
-  --mite-soft-shadow: 0 10px 30px rgb(30 53 46 / 9%);
-  --mite-radius-sm: 10px;
-  --mite-radius-md: 16px;
-  --mite-radius-lg: 24px;
+  line-height: 1.6;
 }
 
 * {
@@ -43,14 +22,8 @@ body,
 }
 
 body {
-  min-height: 100vh;
-  background:
-    radial-gradient(
-      circle at 80% -10%,
-      rgb(218 235 227 / 82%),
-      transparent 36%
-    ),
-    #eef3f0;
+  min-height: 100dvh;
+  background: var(--mite-background);
 }
 
 button,
@@ -73,7 +46,7 @@ a:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible {
-  outline-color: #a95600;
+  outline-color: var(--mite-focus);
   outline-offset: 3px;
   box-shadow: 0 0 0 5px rgb(255 255 255 / 90%);
 }
@@ -84,7 +57,7 @@ button {
 
 button:disabled {
   cursor: not-allowed;
-  opacity: 0.5;
+  opacity: 0.6;
 }
 
 h1,
@@ -95,7 +68,7 @@ p {
 }
 
 .mite-app-shell {
-  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .mite-app-header {
@@ -103,14 +76,13 @@ p {
   z-index: 20;
   top: 0;
   display: grid;
-  grid-template-columns: minmax(190px, auto) 1fr auto;
+  grid-template-columns: minmax(150px, auto) minmax(0, 1fr) auto;
   align-items: center;
   gap: 24px;
   min-height: 76px;
   padding: 12px 28px;
-  border-bottom: 1px solid rgb(29 68 57 / 12%);
-  background: rgb(251 252 250 / 94%);
-  backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--mite-line);
+  background: var(--mite-surface);
 }
 
 .mite-brand {
@@ -128,7 +100,7 @@ p {
   color: white;
   background: var(--mite-green-800);
   font-size: 22px;
-  font-weight: 850;
+  font-weight: 700;
 }
 
 .mite-brand__copy {
@@ -139,14 +111,15 @@ p {
 
 .mite-brand__copy strong {
   color: var(--mite-green-950);
-  font-size: 18px;
+  font-size: 22px;
+  letter-spacing: 0.01em;
 }
 
 .mite-brand__copy small {
   margin-top: 4px;
   color: var(--mite-muted);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 400;
 }
 
 .mite-app-header__title h1 {
@@ -157,7 +130,7 @@ p {
 .mite-app-header__title p {
   margin: 3px 0 0;
   color: var(--mite-muted);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .mite-app-header__tools {
@@ -165,6 +138,7 @@ p {
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
 .mite-app-main {
@@ -181,32 +155,50 @@ p {
   gap: 10px;
   padding: 11px 20px;
   border: 1px solid transparent;
-  border-radius: 12px;
-  font-weight: 800;
+  border-radius: var(--mite-radius-sm);
+  font-weight: 700;
+  line-height: 1.5;
+  text-align: center;
   transition:
-    transform 120ms ease,
-    box-shadow 120ms ease,
-    background 120ms ease;
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    background-color 140ms ease;
 }
 
-.mite-button:not(:disabled):hover {
-  transform: translateY(-1px);
+.mite-button:not(:disabled):active {
+  box-shadow: inset 0 2px 3px rgb(0 0 0 / 12%);
+}
+
+.mite-button > span:last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.mite-button--secondary:not(:disabled):hover,
+.mite-button--quiet:not(:disabled):hover {
+  border-color: var(--mite-green-600);
+  background: var(--mite-green-100);
+}
+
+.mite-button--danger:not(:disabled):hover {
+  background: #852e2b;
 }
 
 .mite-button--primary {
   color: white;
   background: var(--mite-green-800);
-  box-shadow: 0 7px 18px rgb(40 85 72 / 22%);
+  box-shadow: 0 2px 0 var(--mite-green-950);
 }
 
-.mite-button--primary:not(:disabled):hover {
+.mite-button--primary:not(:disabled):hover,
+.mite-button--call:not(:disabled):hover {
   background: var(--mite-green-900);
 }
 
 .mite-button--secondary {
-  border-color: var(--mite-green-200);
+  border-color: var(--mite-input-line);
   color: var(--mite-green-900);
-  background: white;
+  background: var(--mite-surface);
 }
 
 .mite-button--quiet {
@@ -221,15 +213,15 @@ p {
 
 .mite-button--call {
   color: white;
-  background: #2f7d60;
-  box-shadow: 0 7px 18px rgb(47 125 96 / 24%);
+  background: var(--mite-green-800);
+  box-shadow: 0 2px 0 var(--mite-green-950);
 }
 
 .mite-button--large {
   min-height: 58px;
   padding: 15px 26px;
-  border-radius: 15px;
-  font-size: 17px;
+  border-radius: var(--mite-radius-md);
+  font-size: 18px;
 }
 
 .mite-button--block {
@@ -250,11 +242,11 @@ p {
   align-items: center;
   padding: 5px 11px;
   border: 1px solid var(--mite-line);
-  border-radius: 999px;
+  border-radius: 6px;
   color: var(--mite-muted);
   background: white;
-  font-size: 12px;
-  font-weight: 800;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .mite-status--waiting {
@@ -270,9 +262,9 @@ p {
 }
 
 .mite-status--success {
-  border-color: #add4bd;
-  color: #245c3c;
-  background: #e5f5eb;
+  border-color: var(--mite-green-200);
+  color: var(--mite-green-900);
+  background: var(--mite-green-100);
 }
 
 .mite-status--warning {
@@ -289,9 +281,9 @@ p {
 
 .mite-surface {
   padding: 28px;
-  border: 1px solid rgb(31 63 53 / 11%);
+  border: 1px solid var(--mite-line);
   border-radius: var(--mite-radius-lg);
-  background: rgb(255 255 253 / 96%);
+  background: var(--mite-surface);
 }
 
 .mite-surface--elevated {
@@ -309,8 +301,9 @@ p {
 .mite-screen-heading h2 {
   margin-bottom: 8px;
   color: var(--mite-ink);
-  font-size: clamp(25px, 3vw, 34px);
-  line-height: 1.25;
+  font-size: clamp(24px, 2.2vw, 30px);
+  line-height: 1.5;
+  letter-spacing: 0.015em;
 }
 
 .mite-screen-heading p {
@@ -320,13 +313,17 @@ p {
   line-height: 1.7;
 }
 
+.mite-screen-heading__aside {
+  flex-shrink: 0;
+}
+
 .mite-eyebrow {
   display: block;
   margin-bottom: 7px;
   color: var(--mite-green-700);
-  font-size: 12px;
-  font-weight: 850;
-  letter-spacing: 0.08em;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
 .mite-notice {
@@ -334,7 +331,7 @@ p {
   gap: 13px;
   padding: 16px 18px;
   border: 1px solid var(--mite-green-200);
-  border-radius: var(--mite-radius-md);
+  border-radius: var(--mite-radius-sm);
   background: var(--mite-green-50);
   line-height: 1.6;
 }
@@ -347,7 +344,7 @@ p {
   border-radius: 50%;
   color: white;
   background: var(--mite-green-700);
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .mite-notice strong {
@@ -356,8 +353,8 @@ p {
 }
 
 .mite-notice--success {
-  border-color: #add4bd;
-  background: #eaf7ef;
+  border-color: var(--mite-green-200);
+  background: var(--mite-green-50);
 }
 
 .mite-notice--warning {
@@ -384,7 +381,7 @@ p {
   min-height: 320px;
   place-items: center;
   align-content: center;
-  padding: 40px;
+  padding: 32px 24px;
   color: var(--mite-muted);
   text-align: center;
 }
@@ -411,18 +408,18 @@ p {
   height: 76px;
   margin-bottom: 18px;
   place-items: center;
-  border-radius: 26px;
-  color: white;
-  background: var(--mite-green-700);
+  border: 1px solid var(--mite-green-200);
+  border-radius: 50%;
+  color: var(--mite-green-800);
+  background: var(--mite-green-100);
   font-size: 34px;
-  font-weight: 900;
-  box-shadow: var(--mite-soft-shadow);
+  font-weight: 700;
 }
 
 .mite-empty-state h2 {
   margin-bottom: 0;
   color: var(--mite-ink);
-  font-size: 28px;
+  font-size: 26px;
 }
 
 .mite-empty-state__action {
@@ -452,7 +449,7 @@ p {
 
   .mite-surface {
     padding: 20px;
-    border-radius: 18px;
+    border-radius: var(--mite-radius-lg);
   }
 
   .mite-screen-heading {
@@ -468,5 +465,136 @@ p {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+  }
+}
+
+.mite-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgb(23 42 33 / 48%);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+.mite-modal {
+  width: min(960px, 100%);
+  max-height: calc(100dvh - 32px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--mite-surface);
+  color: var(--mite-ink);
+  border: 1px solid var(--mite-line);
+  border-radius: var(--mite-radius-lg);
+  box-shadow: var(--mite-shadow);
+}
+.mite-modal-header,
+.mite-modal-actions {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 24px;
+}
+.mite-modal-header h2 {
+  margin: 0;
+}
+.mite-modal-body {
+  padding: 8px 24px 24px;
+  overflow-y: auto;
+  min-height: 0;
+}
+.mite-modal-actions {
+  border-top: 1px solid var(--mite-line);
+  background: var(--mite-cream);
+  justify-content: flex-end;
+}
+
+.mite-modal-backdrop[hidden] {
+  display: none;
+}
+
+/* Preserve wrapping in narrow panels without shrinking labels. */
+.mite-brand,
+.mite-app-header__tools,
+.mite-screen-heading > div,
+.mite-notice > div {
+  min-width: 0;
+}
+
+.mite-status {
+  line-height: 1.5;
+}
+
+.mite-notice p:last-child {
+  margin-bottom: 0;
+}
+
+.mite-button__icon,
+.mite-notice__symbol,
+.mite-empty-state__symbol {
+  flex-shrink: 0;
+  font-family: 'Segoe UI Symbol', 'Noto Sans Symbols 2', sans-serif;
+  line-height: 1;
+}
+
+.mite-notice__symbol {
+  margin-top: 2px;
+}
+
+.mite-modal:focus-visible {
+  outline: 3px solid var(--mite-focus);
+  outline-offset: 3px;
+}
+
+.mite-modal-header {
+  border-bottom: 1px solid var(--mite-line);
+}
+
+.mite-modal-body {
+  padding-top: 20px;
+}
+
+.mite-modal-header h2 {
+  font-size: 24px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+input,
+textarea,
+select,
+progress,
+meter {
+  accent-color: var(--mite-green-800);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--mite-muted);
+  opacity: 1;
+}
+
+@media (max-width: 480px) {
+  .mite-app-header {
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .mite-app-header__tools {
+    gap: 8px;
+  }
+
+  .mite-modal-header,
+  .mite-modal-body,
+  .mite-modal-actions {
+    padding-inline: 16px;
+  }
+
+  .mite-surface {
+    padding: 16px;
   }
 }

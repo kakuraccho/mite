@@ -2,6 +2,7 @@ import type { BrowserWindow, Display } from 'electron'
 import type { AppBarAdapter } from './appbar'
 import {
   calculateOverlayBounds,
+  calculateGuideBounds,
   overlayCollapsedWidth,
   type OverlayRectangle,
   type UserOverlayLayout,
@@ -9,6 +10,17 @@ import {
 } from '../shared/overlay'
 
 type PrimaryDisplayProvider = () => Pick<Display, 'bounds' | 'workArea'>
+
+export function collapseOverlayOnBlur(
+  window: Pick<BrowserWindow, 'on' | 'webContents'>,
+  controller: UserOverlayController,
+) {
+  window.on('blur', () => {
+    if (controller.mode === 'GUIDE') return
+    controller.setMode('COLLAPSED')
+    window.webContents.send('overlay:collapsed')
+  })
+}
 
 const rectangle = (value: OverlayRectangle): OverlayRectangle => ({
   x: Math.round(value.x),
@@ -19,6 +31,11 @@ const rectangle = (value: OverlayRectangle): OverlayRectangle => ({
 
 export class UserOverlayController {
   #mode: UserOverlayMode = 'COLLAPSED'
+  #guideBounds: OverlayRectangle | null = null
+
+  get mode() {
+    return this.#mode
+  }
   #reservedBounds: OverlayRectangle | null = null
 
   constructor(
@@ -33,13 +50,34 @@ export class UserOverlayController {
   }
 
   setMode(mode: UserOverlayMode): UserOverlayLayout {
+    if (this.#mode === 'GUIDE') this.#guideBounds = this.window.getBounds()
     this.#mode = mode
+    this.window.setMovable(mode === 'GUIDE')
     return this.#applyBounds()
   }
 
   refresh(): UserOverlayLayout {
+    if (this.#mode === 'GUIDE') this.#guideBounds = this.window.getBounds()
     this.#reservePrimaryEdge()
     return this.#applyBounds()
+  }
+
+  keepGuideInWorkArea() {
+    if (this.#mode !== 'GUIDE') return
+    const current = this.window.getBounds()
+    this.#guideBounds = calculateGuideBounds(
+      this.primaryDisplay().workArea,
+      current,
+    )
+    if (
+      Object.keys(current).some(
+        (key) =>
+          current[key as keyof OverlayRectangle] !==
+          this.#guideBounds?.[key as keyof OverlayRectangle],
+      )
+    ) {
+      this.window.setBounds(this.#guideBounds, false)
+    }
   }
 
   dispose() {
@@ -69,11 +107,14 @@ export class UserOverlayController {
       ...rectangle(display.workArea),
       width: overlayCollapsedWidth,
     }
-    const bounds = calculateOverlayBounds(
-      reservedBounds,
-      display.bounds.width,
-      this.#mode,
-    )
+    const bounds =
+      this.#mode === 'GUIDE'
+        ? calculateGuideBounds(display.workArea, this.#guideBounds)
+        : calculateOverlayBounds(
+            reservedBounds,
+            display.bounds.width,
+            this.#mode,
+          )
     this.window.setBounds(bounds, false)
 
     return {

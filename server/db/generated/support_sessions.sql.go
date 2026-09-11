@@ -18,7 +18,7 @@ SET
     updated_at = $2,
     revision = revision + 1
 WHERE id = $1
-RETURNING id, user_id, family_id, initial_screenshot_artifact_id, comment, status, support_session_id, guide_context, created_at, updated_at, revision
+RETURNING id, user_id, family_id, initial_screenshot_artifact_id, comment, status, support_session_id, guide_context, created_at, updated_at, revision, acknowledged_at, acknowledgement_kind, estimated_support_at
 `
 
 type SessionActivateSupportRequestParams struct {
@@ -41,6 +41,9 @@ func (q *Queries) SessionActivateSupportRequest(ctx context.Context, arg Session
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Revision,
+		&i.AcknowledgedAt,
+		&i.AcknowledgementKind,
+		&i.EstimatedSupportAt,
 	)
 	return &i, err
 }
@@ -98,7 +101,7 @@ SET
     updated_at = $3,
     revision = revision + 1
 WHERE id = $1
-RETURNING id, user_id, family_id, initial_screenshot_artifact_id, comment, status, support_session_id, guide_context, created_at, updated_at, revision
+RETURNING id, user_id, family_id, initial_screenshot_artifact_id, comment, status, support_session_id, guide_context, created_at, updated_at, revision, acknowledged_at, acknowledgement_kind, estimated_support_at
 `
 
 type SessionAttachToSupportRequestParams struct {
@@ -122,6 +125,9 @@ func (q *Queries) SessionAttachToSupportRequest(ctx context.Context, arg Session
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Revision,
+		&i.AcknowledgedAt,
+		&i.AcknowledgementKind,
+		&i.EstimatedSupportAt,
 	)
 	return &i, err
 }
@@ -288,13 +294,13 @@ func (q *Queries) SessionDeleteGenerationJob(ctx context.Context, id string) err
 	return err
 }
 
-const sessionDeleteGuideDraft = `-- name: SessionDeleteGuideDraft :exec
+const sessionDeleteGuideDrafts = `-- name: SessionDeleteGuideDrafts :exec
 DELETE FROM guide_drafts
-WHERE id = $1
+WHERE support_session_id = $1
 `
 
-func (q *Queries) SessionDeleteGuideDraft(ctx context.Context, id string) error {
-	_, err := q.db.Exec(ctx, sessionDeleteGuideDraft, id)
+func (q *Queries) SessionDeleteGuideDrafts(ctx context.Context, supportSessionID string) error {
+	_, err := q.db.Exec(ctx, sessionDeleteGuideDrafts, supportSessionID)
 	return err
 }
 
@@ -316,6 +322,46 @@ WHERE batch_id = $1
 func (q *Queries) SessionDeleteGuideMaterials(ctx context.Context, batchID string) error {
 	_, err := q.db.Exec(ctx, sessionDeleteGuideMaterials, batchID)
 	return err
+}
+
+const sessionEndSavedGuide = `-- name: SessionEndSavedGuide :one
+UPDATE support_sessions
+SET status = 'ENDED', ended_at = $2, end_reason = 'GUIDE_SAVED',
+    updated_at = $2, revision = revision + 1
+WHERE id = $1
+RETURNING id, support_request_id, user_id, family_id, livekit_room_name, status, guide_decision, guide_material_batch_id, guide_generation_job_id, guide_draft_id, guide_id, consent, consented_at, started_at, ended_at, end_reason, created_at, updated_at, revision
+`
+
+type SessionEndSavedGuideParams struct {
+	ID      string             `json:"id"`
+	EndedAt pgtype.Timestamptz `json:"ended_at"`
+}
+
+func (q *Queries) SessionEndSavedGuide(ctx context.Context, arg SessionEndSavedGuideParams) (*SupportSession, error) {
+	row := q.db.QueryRow(ctx, sessionEndSavedGuide, arg.ID, arg.EndedAt)
+	var i SupportSession
+	err := row.Scan(
+		&i.ID,
+		&i.SupportRequestID,
+		&i.UserID,
+		&i.FamilyID,
+		&i.LivekitRoomName,
+		&i.Status,
+		&i.GuideDecision,
+		&i.GuideMaterialBatchID,
+		&i.GuideGenerationJobID,
+		&i.GuideDraftID,
+		&i.GuideID,
+		&i.Consent,
+		&i.ConsentedAt,
+		&i.StartedAt,
+		&i.EndedAt,
+		&i.EndReason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Revision,
+	)
+	return &i, err
 }
 
 const sessionEndWithoutGuide = `-- name: SessionEndWithoutGuide :one
@@ -381,7 +427,7 @@ func (q *Queries) SessionGetGenerationJobStatus(ctx context.Context, id string) 
 }
 
 const sessionGetSupportRequest = `-- name: SessionGetSupportRequest :one
-SELECT id, user_id, family_id, initial_screenshot_artifact_id, comment, status, support_session_id, guide_context, created_at, updated_at, revision
+SELECT id, user_id, family_id, initial_screenshot_artifact_id, comment, status, support_session_id, guide_context, created_at, updated_at, revision, acknowledged_at, acknowledgement_kind, estimated_support_at
 FROM support_requests
 WHERE id = $1
 `
@@ -401,6 +447,9 @@ func (q *Queries) SessionGetSupportRequest(ctx context.Context, id string) (*Sup
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Revision,
+		&i.AcknowledgedAt,
+		&i.AcknowledgementKind,
+		&i.EstimatedSupportAt,
 	)
 	return &i, err
 }
@@ -472,7 +521,7 @@ func (q *Queries) SessionListCleanupArtifacts(ctx context.Context, batchID strin
 }
 
 const sessionLockSupportRequest = `-- name: SessionLockSupportRequest :one
-SELECT id, user_id, family_id, initial_screenshot_artifact_id, comment, status, support_session_id, guide_context, created_at, updated_at, revision
+SELECT id, user_id, family_id, initial_screenshot_artifact_id, comment, status, support_session_id, guide_context, created_at, updated_at, revision, acknowledged_at, acknowledgement_kind, estimated_support_at
 FROM support_requests
 WHERE id = $1
 FOR UPDATE
@@ -493,6 +542,9 @@ func (q *Queries) SessionLockSupportRequest(ctx context.Context, id string) (*Su
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Revision,
+		&i.AcknowledgedAt,
+		&i.AcknowledgementKind,
+		&i.EstimatedSupportAt,
 	)
 	return &i, err
 }
@@ -568,7 +620,7 @@ SET
     updated_at = $2,
     revision = revision + 1
 WHERE id = $1
-RETURNING id, user_id, family_id, initial_screenshot_artifact_id, comment, status, support_session_id, guide_context, created_at, updated_at, revision
+RETURNING id, user_id, family_id, initial_screenshot_artifact_id, comment, status, support_session_id, guide_context, created_at, updated_at, revision, acknowledged_at, acknowledgement_kind, estimated_support_at
 `
 
 type SessionResolveSupportRequestParams struct {
@@ -591,6 +643,9 @@ func (q *Queries) SessionResolveSupportRequest(ctx context.Context, arg SessionR
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Revision,
+		&i.AcknowledgedAt,
+		&i.AcknowledgementKind,
+		&i.EstimatedSupportAt,
 	)
 	return &i, err
 }

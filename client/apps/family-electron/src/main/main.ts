@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, net, protocol, session } from 'electron'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { RuntimeConfig } from '@mite/client-core'
+import { rememberMaximizedState } from './window-state'
 import {
   familyProductionOrigin,
   familyScheme,
@@ -29,7 +30,7 @@ const runtimeConfig = (): RuntimeConfig => ({
   role: 'FAMILY',
   apiBaseUrl: process.env.MITE_API_BASE_URL ?? 'http://localhost:3000',
   demoToken: process.env.MITE_DEMO_TOKEN ?? '',
-  captureIntervalMs: 5_000,
+  captureIntervalMs: 10_000,
   captureMaxCount: 360,
   appVersion: app.getVersion(),
 })
@@ -65,6 +66,7 @@ const registerAppProtocol = () => {
 
 const createWindow = () => {
   const window = new BrowserWindow({
+    show: false,
     width: 1280,
     height: 820,
     minWidth: 960,
@@ -76,8 +78,15 @@ const createWindow = () => {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      // Keep the guidance heartbeat running while the family window is inactive.
+      backgroundThrottling: false,
     },
   })
+  rememberMaximizedState(
+    window,
+    path.join(app.getPath('userData'), 'window-state.json'),
+  )
+  window.once('ready-to-show', () => window.show())
 
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   window.webContents.on('will-navigate', (event, url) => {

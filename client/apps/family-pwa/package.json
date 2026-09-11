@@ -1,0 +1,17 @@
+{
+  "name": "@mite/family-pwa",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@mite/client-api": "*",
+    "@mite/client-core": "*",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  }
+}

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -18,9 +19,11 @@ import (
 
 const (
 	GeminiModel         = "gemini-3.8-flash"
-	GeminiPromptVersion = "v1"
-	geminiHTTPTimeout   = 50 * time.Second
+	GeminiPromptVersion = "v2"
+	geminiHTTPTimeout   = 300 * time.Second
 	geminiSystemPrompt  = `PC操作支援の連続画像から、高齢の利用者が後日一人で実行できる短いガイドを作る。
+異なる目的の操作が含まれる場合は、目的ごとに独立したガイドを生成順にguidesへ並べる。
+各ガイドは1〜8ステップにする。操作が1つの目的にまとまる場合はガイドを1件だけ作る。
 画像から確認できない操作を推測しない。
 1ステップには1操作だけを書く。
 「ここ」「これ」ではなく、画面上で見つけられる名称・色・位置を書く。
@@ -89,38 +92,44 @@ type geminiResponseFormat struct {
 	Schema   map[string]any `json:"schema"`
 }
 
-func (g *GeminiGuideGenerator) Generate(ctx context.Context, input domain.GuideGenerationInput) (domain.GeneratedGuide, error) {
+func (g *GeminiGuideGenerator) Generate(ctx context.Context, input domain.GuideGenerationInput) ([]domain.GeneratedGuide, error) {
 	requestValue, err := buildGeminiRequest(g.model, input)
 	if err != nil {
-		return domain.GeneratedGuide{}, err
+		return nil, err
 	}
 	body, err := json.Marshal(requestValue)
 	if err != nil {
-		return domain.GeneratedGuide{}, &GuideGenerationFailure{Code: domain.GuideGenerationAIInputUnavailable, Cause: err}
+		return nil, &GuideGenerationFailure{Code: domain.GuideGenerationAIInputUnavailable, Cause: err}
 	}
 	if len(body) > domain.MaxAIRequestBytes {
-		return domain.GeneratedGuide{}, &GuideGenerationFailure{Code: domain.GuideGenerationAIInputUnavailable, Cause: errors.New("Gemini request exceeds 90 MiB")}
+		return nil, &GuideGenerationFailure{Code: domain.GuideGenerationAIInputUnavailable, Cause: errors.New("Gemini request exceeds 90 MiB")}
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, g.endpoint, bytes.NewReader(body))
 	if err != nil {
-		return domain.GeneratedGuide{}, &GuideGenerationFailure{Code: domain.GuideGenerationAIUnavailable, Cause: err}
+		return nil, &GuideGenerationFailure{Code: domain.GuideGenerationAIUnavailable, Cause: err}
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("x-goog-api-key", g.apiKey)
 	response, err := g.client.Do(request)
 	if err != nil {
-		if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return domain.GeneratedGuide{}, &GuideGenerationFailure{Code: domain.GuideGenerationAITimeout, Cause: err}
+		if isGenerationTimeout(ctx, err) {
+			return nil, &GuideGenerationFailure{Code: domain.GuideGenerationAITimeout, Cause: err}
 		}
-		return domain.GeneratedGuide{}, &GuideGenerationFailure{Code: domain.GuideGenerationAIUnavailable, Cause: err}
+		return nil, &GuideGenerationFailure{Code: domain.GuideGenerationAIUnavailable, Cause: err}
 	}
 	defer func() { _ = response.Body.Close() }()
 	responseBody, err := io.ReadAll(io.LimitReader(response.Body, 4*1024*1024))
 	if err != nil {
-		return domain.GeneratedGuide{}, &GuideGenerationFailure{Code: domain.GuideGenerationAIUnavailable, Cause: err}
+		if isGenerationTimeout(ctx, err) {
+			return nil, &GuideGenerationFailure{Code: domain.GuideGenerationAITimeout, Cause: err}
+		}
+		return nil, &GuideGenerationFailure{Code: domain.GuideGenerationAIUnavailable, Cause: err}
+	}
+	if response.StatusCode == http.StatusRequestTimeout || response.StatusCode == http.StatusGatewayTimeout {
+		return nil, &GuideGenerationFailure{Code: domain.GuideGenerationAITimeout}
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return domain.GeneratedGuide{}, &GuideGenerationFailure{Code: domain.GuideGenerationAIUnavailable, Cause: fmt.Errorf("Gemini HTTP status %d", response.StatusCode)}
+		return nil, &GuideGenerationFailure{Code: domain.GuideGenerationAIUnavailable, Cause: fmt.Errorf("Gemini HTTP status %d", response.StatusCode)}
 	}
 	return parseGeminiResponse(responseBody)
 }
@@ -137,16 +146,20 @@ func buildGeminiRequest(model string, input domain.GuideGenerationInput) (gemini
 		metadata := fmt.Sprintf("kind=%s artifactId=%s capturedAt=%s sequence=%d", image.Kind, image.ArtifactID, image.CapturedAt.UTC().Format(time.RFC3339Nano), image.Sequence)
 		contents = append(contents, geminiContent{Type: "text", Text: metadata}, geminiContent{Type: "image", Data: base64.StdEncoding.EncodeToString(image.JPEG), MimeType: "image/jpeg"})
 	}
-	return geminiInteractionRequest{Model: model, SystemInstruction: geminiSystemPrompt, Input: contents, Store: false, Background: false, Stream: false, GenerationConfig: geminiGenerationConfig{ThinkingLevel: "low", MaxOutputTokens: 2048}, ResponseFormat: geminiResponseFormat{Type: "text", MimeType: "application/json", Schema: guideOutputSchema()}}, nil
+	return geminiInteractionRequest{Model: model, SystemInstruction: geminiSystemPrompt, Input: contents, Store: false, Background: false, Stream: false, GenerationConfig: geminiGenerationConfig{ThinkingLevel: "low", MaxOutputTokens: 8192}, ResponseFormat: geminiResponseFormat{Type: "text", MimeType: "application/json", Schema: guideOutputSchema()}}, nil
 }
 
 func guideOutputSchema() map[string]any {
-	return map[string]any{
+	guide := map[string]any{
 		"type": "object", "additionalProperties": false, "required": []string{"title", "steps"},
 		"properties": map[string]any{
 			"title": map[string]any{"type": "string"},
 			"steps": map[string]any{"type": "array", "minItems": 1, "maxItems": 8, "items": map[string]any{"type": "object", "additionalProperties": false, "required": []string{"sourceArtifactId", "instruction"}, "properties": map[string]any{"sourceArtifactId": map[string]any{"type": "string"}, "instruction": map[string]any{"type": "string"}}}},
 		},
+	}
+	return map[string]any{
+		"type": "object", "additionalProperties": false, "required": []string{"guides"},
+		"properties": map[string]any{"guides": map[string]any{"type": "array", "minItems": 1, "items": guide}},
 	}
 }
 
@@ -165,28 +178,28 @@ type geminiResponseStep struct {
 	} `json:"content"`
 }
 
-func parseGeminiResponse(data []byte) (domain.GeneratedGuide, error) {
+func parseGeminiResponse(data []byte) ([]domain.GeneratedGuide, error) {
 	var response geminiInteractionResponse
 	if err := json.Unmarshal(data, &response); err != nil {
-		return domain.GeneratedGuide{}, &GuideGenerationFailure{Code: domain.GuideGenerationAIIncompleteResponse, Cause: err}
+		return nil, &GuideGenerationFailure{Code: domain.GuideGenerationAIIncompleteResponse, Cause: err}
 	}
 	if response.Refusal != nil {
-		return domain.GeneratedGuide{}, &GuideGenerationFailure{Code: domain.GuideGenerationAIRefusal}
+		return nil, &GuideGenerationFailure{Code: domain.GuideGenerationAIRefusal}
 	}
 	if response.Status != "completed" {
-		return domain.GeneratedGuide{}, &GuideGenerationFailure{Code: domain.GuideGenerationAIIncompleteResponse}
+		return nil, &GuideGenerationFailure{Code: domain.GuideGenerationAIIncompleteResponse}
 	}
 	var texts []string
 	for _, step := range response.Steps {
 		if step.Refusal != nil || step.Type == "refusal" {
-			return domain.GeneratedGuide{}, &GuideGenerationFailure{Code: domain.GuideGenerationAIRefusal}
+			return nil, &GuideGenerationFailure{Code: domain.GuideGenerationAIRefusal}
 		}
 		if step.Type != "model_output" {
 			continue
 		}
 		for _, content := range step.Content {
 			if content.Type == "refusal" {
-				return domain.GeneratedGuide{}, &GuideGenerationFailure{Code: domain.GuideGenerationAIRefusal}
+				return nil, &GuideGenerationFailure{Code: domain.GuideGenerationAIRefusal}
 			}
 			if content.Type == "text" && strings.TrimSpace(content.Text) != "" {
 				texts = append(texts, content.Text)
@@ -194,28 +207,23 @@ func parseGeminiResponse(data []byte) (domain.GeneratedGuide, error) {
 		}
 	}
 	if len(texts) != 1 {
-		return domain.GeneratedGuide{}, &GuideGenerationFailure{Code: domain.GuideGenerationAIIncompleteResponse}
+		return nil, &GuideGenerationFailure{Code: domain.GuideGenerationAIIncompleteResponse}
 	}
 	var wire struct {
-		Title string `json:"title"`
-		Steps []struct {
-			SourceArtifactID domain.ID `json:"sourceArtifactId"`
-			Instruction      string    `json:"instruction"`
-		} `json:"steps"`
+		Guides []domain.GeneratedGuide `json:"guides"`
 	}
 	decoder := json.NewDecoder(strings.NewReader(texts[0]))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&wire); err != nil {
-		return domain.GeneratedGuide{}, &GuideGenerationFailure{Code: domain.GuideGenerationAIInvalidOutput, Cause: err}
+		return nil, &GuideGenerationFailure{Code: domain.GuideGenerationAIInvalidOutput, Cause: err}
 	}
 	if err := ensureJSONEOF(decoder); err != nil {
-		return domain.GeneratedGuide{}, &GuideGenerationFailure{Code: domain.GuideGenerationAIInvalidOutput, Cause: err}
+		return nil, &GuideGenerationFailure{Code: domain.GuideGenerationAIInvalidOutput, Cause: err}
 	}
-	steps := make([]domain.GeneratedGuideStep, len(wire.Steps))
-	for index, step := range wire.Steps {
-		steps[index] = domain.GeneratedGuideStep{SourceArtifactID: step.SourceArtifactID, Instruction: step.Instruction}
+	if len(wire.Guides) == 0 {
+		return nil, &GuideGenerationFailure{Code: domain.GuideGenerationAIInvalidOutput}
 	}
-	return domain.GeneratedGuide{Title: wire.Title, Steps: steps}, nil
+	return wire.Guides, nil
 }
 
 func ensureJSONEOF(decoder *json.Decoder) error {
@@ -229,3 +237,8 @@ func ensureJSONEOF(decoder *json.Decoder) error {
 }
 
 var _ GuideGenerator = (*GeminiGuideGenerator)(nil)
+
+func isGenerationTimeout(ctx context.Context, err error) bool {
+	var timeout net.Error
+	return errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &timeout) && timeout.Timeout())
+}

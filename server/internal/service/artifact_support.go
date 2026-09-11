@@ -458,6 +458,158 @@ func (s *ArtifactSupportService) GetSupportRequest(
 	return request, nil
 }
 
+type UpdateSupportRequestAcknowledgementInput struct {
+	Kind               domain.SupportAcknowledgementKind
+	EstimatedSupportAt *time.Time
+	ExpectedRevision   int64
+}
+
+func (s *ArtifactSupportService) UpdateSupportRequestAcknowledgement(ctx context.Context, actor domain.Actor, id domain.ID, input UpdateSupportRequestAcknowledgementInput) (domain.SupportRequest, error) {
+	if err := requireRole(actor, domain.RoleFamily); err != nil {
+		return domain.SupportRequest{}, err
+	}
+	if _, err := domain.NewID(string(id)); err != nil {
+		return domain.SupportRequest{}, err
+	}
+	if !input.Kind.Valid() || input.ExpectedRevision < 1 {
+		return domain.SupportRequest{}, domain.NewError(domain.CodeValidationError, "確認返答が不正")
+	}
+	now := s.now().UTC()
+	if input.Kind == domain.SupportAcknowledgementScheduled {
+		if input.EstimatedSupportAt == nil || !input.EstimatedSupportAt.After(now) {
+			return domain.SupportRequest{}, domain.NewError(domain.CodeValidationError, "対応予定時刻は未来を指定する")
+		}
+	} else if input.EstimatedSupportAt != nil {
+		return domain.SupportRequest{}, domain.NewError(domain.CodeValidationError, "この確認種別では対応予定時刻を指定しない")
+	}
+	var updated domain.SupportRequest
+	err := s.store.WithinTransaction(ctx, func(tx repository.ArtifactSupportTx) error {
+		request, found, err := tx.LockSupportRequest(ctx, id)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return domain.NewError(domain.CodeNotFound, "支援依頼が見つからない")
+		}
+		pair, found, err := tx.GetUserPair(ctx, actor.ID)
+		if err != nil {
+			return err
+		}
+		if !found || request.UserID != pair.UserID || request.FamilyID != pair.FamilyID {
+			return domain.NewError(domain.CodeForbidden, "支援依頼を更新する権限がない")
+		}
+		if request.Status != domain.SupportRequestPending || request.SupportSessionID != nil {
+			return domain.NewError(domain.CodeInvalidState, "開始前の支援依頼だけ確認返答できる")
+		}
+		if request.Revision != input.ExpectedRevision {
+			return domain.NewError(domain.CodeRevisionConflict, "支援依頼が更新されている")
+		}
+		kind := input.Kind
+		request.AcknowledgedAt = &now
+		request.AcknowledgementKind = &kind
+		request.EstimatedSupportAt = nil
+		if input.EstimatedSupportAt != nil {
+			estimated := input.EstimatedSupportAt.UTC()
+			request.EstimatedSupportAt = &estimated
+		}
+		request.UpdatedAt = now
+		updated, err = tx.UpdateSupportRequestAcknowledgement(ctx, request)
+		return err
+	})
+	if err != nil {
+		return domain.SupportRequest{}, normalizeRepositoryError(err)
+	}
+	eventID, err := s.newID("evt")
+	if err == nil {
+		s.publishSupportRequestUpdated(ctx, eventID, updated)
+	}
+	return updated, nil
+}
+
+func (s *ArtifactSupportService) CancelSupportRequest(ctx context.Context, actor domain.Actor, rawKey string, id domain.ID, expectedRevision int64) (IdempotentSupportRequestResult, error) {
+	if err := requireRole(actor, domain.RoleUser); err != nil {
+		return IdempotentSupportRequestResult{}, err
+	}
+	if _, err := domain.NewID(string(id)); err != nil {
+		return IdempotentSupportRequestResult{}, err
+	}
+	if expectedRevision < 1 {
+		return IdempotentSupportRequestResult{}, domain.NewError(domain.CodeValidationError, "expectedRevisionが不正")
+	}
+	key, err := domain.NewIdempotencyKey(rawKey)
+	if err != nil {
+		return IdempotentSupportRequestResult{}, err
+	}
+	hash, err := domain.HashCanonicalJSON(struct {
+		ExpectedRevision int64 `json:"expectedRevision"`
+	}{expectedRevision})
+	if err != nil {
+		return IdempotentSupportRequestResult{}, err
+	}
+	path := "/v1/support-requests/" + string(id) + "/cancel"
+	scope := domain.IdempotencyScope{ActorID: actor.ID, Method: http.MethodPost, Path: path, Key: key}
+	now := s.now().UTC()
+	var result IdempotentSupportRequestResult
+	var updated bool
+	err = s.store.WithinTransaction(ctx, func(tx repository.ArtifactSupportTx) error {
+		claim, decision, err := acquireIdempotency(ctx, tx, scope, hash, nil, now)
+		if err != nil {
+			return err
+		}
+		if decision == IdempotencyReplay {
+			result = IdempotentSupportRequestResult{ResponseStatus: *claim.ResponseStatus, ResponseBody: append(json.RawMessage(nil), claim.ResponseBody...), Replayed: true}
+			return nil
+		}
+		request, found, err := tx.LockSupportRequest(ctx, id)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return domain.NewError(domain.CodeNotFound, "支援依頼が見つからない")
+		}
+		pair, found, err := tx.GetUserPair(ctx, actor.ID)
+		if err != nil {
+			return err
+		}
+		if !found || request.UserID != pair.UserID || request.FamilyID != pair.FamilyID {
+			return domain.NewError(domain.CodeForbidden, "支援依頼を取り消す権限がない")
+		}
+		if request.Status != domain.SupportRequestPending || request.SupportSessionID != nil {
+			return domain.NewError(domain.CodeInvalidState, "開始前の支援依頼だけ取り消せる")
+		}
+		if request.Revision != expectedRevision {
+			return domain.NewError(domain.CodeRevisionConflict, "支援依頼が更新されている")
+		}
+		request.Status = domain.SupportRequestCancelled
+		request.UpdatedAt = now
+		request, err = tx.CancelSupportRequest(ctx, request)
+		if err != nil {
+			return err
+		}
+		body, err := encodeSupportRequestResponse(request)
+		if err != nil {
+			return err
+		}
+		if _, completed, err := tx.CompleteIdempotency(ctx, scope, http.StatusOK, body, now); err != nil {
+			return err
+		} else if !completed {
+			return internalError("SupportRequest取消のIdempotencyRecordを完了できない", nil)
+		}
+		result = IdempotentSupportRequestResult{SupportRequest: &request, ResponseStatus: http.StatusOK, ResponseBody: body}
+		updated = true
+		return nil
+	})
+	if err != nil {
+		return IdempotentSupportRequestResult{}, normalizeRepositoryError(err)
+	}
+	if updated && result.SupportRequest != nil {
+		if eventID, eventErr := s.newID("evt"); eventErr == nil {
+			s.publishSupportRequestUpdated(ctx, eventID, *result.SupportRequest)
+		}
+	}
+	return result, nil
+}
+
 func (s *ArtifactSupportService) authorizedPair(
 	ctx context.Context,
 	actor domain.Actor,
@@ -562,6 +714,26 @@ func (s *ArtifactSupportService) publishSupportRequestCreated(ctx context.Contex
 	}
 }
 
+func (s *ArtifactSupportService) publishSupportRequestUpdated(ctx context.Context, eventID domain.ID, request domain.SupportRequest) {
+	if s.publisher == nil {
+		return
+	}
+	data, err := encodeSupportRequest(request)
+	if err != nil {
+		s.logger.WarnContext(ctx, "support request event serialization failed", "entityId", request.ID, "errorCode", "EVENT_SERIALIZE_FAILED")
+		return
+	}
+	event := domain.Event{
+		EventID: eventID, Type: domain.EventSupportRequestUpdated, OccurredAt: request.UpdatedAt,
+		EntityID: request.ID, Revision: request.Revision, Data: data,
+		Audience: domain.UserPair{UserID: request.UserID, FamilyID: request.FamilyID},
+	}
+	if err := s.publisher.Publish(ctx, event); err != nil {
+		s.logger.WarnContext(ctx, "event delivery failed", "eventId", event.EventID, "eventType", event.Type,
+			"entityId", event.EntityID, "revision", event.Revision)
+	}
+}
+
 func validateArtifactJPEG(reader io.Reader) ([]byte, domain.RequestHash, int, int, error) {
 	if reader == nil {
 		return nil, "", 0, 0, domain.NewError(domain.CodeValidationError, "JPEGファイルが必要")
@@ -619,17 +791,20 @@ type guideContextJSON struct {
 }
 
 type supportRequestJSON struct {
-	ID                          string                      `json:"id"`
-	UserID                      string                      `json:"userId"`
-	FamilyID                    string                      `json:"familyId"`
-	InitialScreenshotArtifactID string                      `json:"initialScreenshotArtifactId"`
-	Comment                     string                      `json:"comment"`
-	Status                      domain.SupportRequestStatus `json:"status"`
-	SupportSessionID            *string                     `json:"supportSessionId"`
-	GuideContext                *guideContextJSON           `json:"guideContext"`
-	CreatedAt                   time.Time                   `json:"createdAt"`
-	UpdatedAt                   time.Time                   `json:"updatedAt"`
-	Revision                    int64                       `json:"revision"`
+	ID                          string                             `json:"id"`
+	UserID                      string                             `json:"userId"`
+	FamilyID                    string                             `json:"familyId"`
+	InitialScreenshotArtifactID string                             `json:"initialScreenshotArtifactId"`
+	Comment                     string                             `json:"comment"`
+	Status                      domain.SupportRequestStatus        `json:"status"`
+	SupportSessionID            *string                            `json:"supportSessionId"`
+	GuideContext                *guideContextJSON                  `json:"guideContext"`
+	AcknowledgedAt              *time.Time                         `json:"acknowledgedAt"`
+	AcknowledgementKind         *domain.SupportAcknowledgementKind `json:"acknowledgementKind"`
+	EstimatedSupportAt          *time.Time                         `json:"estimatedSupportAt"`
+	CreatedAt                   time.Time                          `json:"createdAt"`
+	UpdatedAt                   time.Time                          `json:"updatedAt"`
+	Revision                    int64                              `json:"revision"`
 }
 
 func encodeArtifactResponse(artifact domain.Artifact) (json.RawMessage, error) {
@@ -701,7 +876,9 @@ func supportRequestToJSON(request domain.SupportRequest) supportRequestJSON {
 		ID: string(request.ID), UserID: string(request.UserID), FamilyID: string(request.FamilyID),
 		InitialScreenshotArtifactID: string(request.InitialScreenshotArtifactID), Comment: request.Comment,
 		Status: request.Status, SupportSessionID: sessionID, GuideContext: contextValue,
-		CreatedAt: request.CreatedAt, UpdatedAt: request.UpdatedAt, Revision: request.Revision,
+		AcknowledgedAt: request.AcknowledgedAt, AcknowledgementKind: request.AcknowledgementKind,
+		EstimatedSupportAt: request.EstimatedSupportAt,
+		CreatedAt:          request.CreatedAt, UpdatedAt: request.UpdatedAt, Revision: request.Revision,
 	}
 }
 
@@ -774,7 +951,9 @@ func supportRequestFromJSON(value supportRequestJSON) domain.SupportRequest {
 		ID: domain.ID(value.ID), UserID: domain.ID(value.UserID), FamilyID: domain.ID(value.FamilyID),
 		InitialScreenshotArtifactID: domain.ID(value.InitialScreenshotArtifactID), Comment: value.Comment,
 		Status: value.Status, SupportSessionID: sessionID, GuideContext: contextValue,
-		CreatedAt: value.CreatedAt, UpdatedAt: value.UpdatedAt, Revision: value.Revision,
+		AcknowledgedAt: value.AcknowledgedAt, AcknowledgementKind: value.AcknowledgementKind,
+		EstimatedSupportAt: value.EstimatedSupportAt,
+		CreatedAt:          value.CreatedAt, UpdatedAt: value.UpdatedAt, Revision: value.Revision,
 	}
 }
 

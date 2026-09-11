@@ -167,3 +167,169 @@ describe('MarkingOverlay', () => {
     overlay.dispose()
   })
 })
+
+it('keeps the native window visible across movement and heartbeats, then hides when updates stop', () => {
+  const overlay = new MarkingOverlay(
+    'mite-user://app/index.html?view=marking',
+    '/marking-preload.js',
+  )
+  ready(overlay)
+  for (let i = 0; i < 8; i++) {
+    overlay.setMarks([])
+    overlay.setGuidance({
+      mode: 'CURSOR_MOUSE',
+      x: i / 10,
+      y: 0.5,
+      buttons: 1,
+      keys: [],
+      expiresAt: Date.now() + 2000,
+    })
+    vi.advanceTimersByTime(500)
+  }
+  expect(overlay.window.showInactive).toHaveBeenCalledOnce()
+  expect(overlay.window.hide).not.toHaveBeenCalled()
+  vi.advanceTimersByTime(1500)
+  expect(overlay.window.hide).toHaveBeenCalledOnce()
+  overlay.dispose()
+})
+
+it('expires pressed guidance independently of the hidden main renderer and clears on geometry changes', () => {
+  const overlay = new MarkingOverlay(
+    'mite-user://app/index.html?view=marking',
+    '/marking-preload.js',
+  )
+  ready(overlay)
+  const guidance = {
+    mode: 'CURSOR_MOUSE',
+    x: 0.25,
+    y: 0.75,
+    buttons: 1,
+    keys: [],
+    expiresAt: Date.now() + 2000,
+  }
+  overlay.setMarks([mark()])
+  overlay.setGuidance(guidance)
+  expect(overlay.window.webContents.send).toHaveBeenCalledWith(
+    'guidance:changed',
+    guidance,
+  )
+  expect(overlay.window.webContents.send).toHaveBeenLastCalledWith(
+    'marking:changed',
+    [],
+  )
+  expect(overlay.window.showInactive).toHaveBeenCalled()
+  vi.advanceTimersByTime(1999)
+  expect(overlay.window.webContents.send).toHaveBeenCalledWith(
+    'guidance:changed',
+    guidance,
+  )
+  vi.advanceTimersByTime(1)
+  expect(overlay.window.webContents.send).toHaveBeenCalledWith(
+    'guidance:changed',
+    null,
+  )
+  overlay.setGuidance({ ...guidance, expiresAt: Date.now() + 2000 })
+  overlay.refresh()
+  expect(overlay.window.webContents.send).toHaveBeenCalledWith(
+    'guidance:changed',
+    null,
+  )
+  expect(() => overlay.setGuidance({ ...guidance, buttons: 8 })).toThrow(
+    'Invalid guidance',
+  )
+  overlay.dispose()
+  expect(vi.getTimerCount()).toBe(0)
+})
+
+it.each(['CURSOR_MOUSE', 'KEYBOARD'] as const)(
+  'keeps a brief %s press for a second without delaying explicit clear or TTL',
+  (mode) => {
+    const overlay = new MarkingOverlay(
+      'mite-user://app/index.html?view=marking',
+      '/preload.js',
+    )
+    ready(overlay)
+    const press = {
+      mode,
+      x: 0.5,
+      y: 0.5,
+      buttons: mode === 'CURSOR_MOUSE' ? 1 : 0,
+      keys: mode === 'KEYBOARD' ? ['Ctrl', 'C'] : [],
+      expiresAt: Date.now() + 2000,
+    }
+    overlay.setGuidance(press)
+    vi.advanceTimersByTime(50)
+    const released = { ...press, buttons: 0, keys: [], x: 0.6 }
+    overlay.setGuidance(released)
+    expect(
+      vi
+        .mocked(overlay.window.webContents.send)
+        .mock.calls.filter(([event]) => event === 'guidance:changed')
+        .at(-1)?.[1],
+    ).toEqual({ ...press, x: 0.6 })
+    vi.advanceTimersByTime(450)
+    overlay.setGuidance(released) // heartbeat must not extend the minimum
+    vi.advanceTimersByTime(499)
+    expect(
+      vi
+        .mocked(overlay.window.webContents.send)
+        .mock.calls.filter(([event]) => event === 'guidance:changed')
+        .at(-1)?.[1],
+    ).toEqual({ ...press, x: 0.6 })
+    vi.advanceTimersByTime(1)
+    expect(overlay.window.webContents.send).toHaveBeenCalledWith(
+      'guidance:changed',
+      released,
+    )
+    overlay.setGuidance({ ...press, expiresAt: Date.now() + 2000 })
+    overlay.setGuidance(null)
+    expect(overlay.window.webContents.send).toHaveBeenCalledWith(
+      'guidance:changed',
+      null,
+    )
+    overlay.setGuidance({ ...press, expiresAt: Date.now() + 100 })
+    vi.advanceTimersByTime(100)
+    expect(
+      vi
+        .mocked(overlay.window.webContents.send)
+        .mock.calls.filter(([event]) => event === 'guidance:changed')
+        .at(-1)?.[1],
+    ).toBeNull()
+    overlay.dispose()
+  },
+)
+
+it('keeps a brief keyboard chord visible through partial releases', () => {
+  const overlay = new MarkingOverlay(
+    'mite-user://app/index.html?view=marking',
+    '/preload.js',
+  )
+  ready(overlay)
+  const press = {
+    mode: 'KEYBOARD',
+    x: 0.5,
+    y: 0.5,
+    buttons: 0,
+    keys: ['Ctrl'],
+    expiresAt: Date.now() + 2000,
+  }
+  overlay.setGuidance(press)
+  vi.advanceTimersByTime(50)
+  overlay.setGuidance({ ...press, keys: ['Ctrl', 'C'] })
+  vi.advanceTimersByTime(50)
+  overlay.setGuidance(press)
+  expect(
+    vi
+      .mocked(overlay.window.webContents.send)
+      .mock.calls.filter(([event]) => event === 'guidance:changed')
+      .at(-1)?.[1],
+  ).toMatchObject({ keys: ['Ctrl', 'C'] })
+  vi.advanceTimersByTime(950)
+  expect(
+    vi
+      .mocked(overlay.window.webContents.send)
+      .mock.calls.filter(([event]) => event === 'guidance:changed')
+      .at(-1)?.[1],
+  ).toMatchObject({ keys: ['Ctrl'] })
+  overlay.dispose()
+})

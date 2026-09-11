@@ -80,7 +80,7 @@ npx supabase status -o env
 
 ローカルでは`SUPABASE_STORAGE_BUCKET=mite-artifacts`を使います。Supabaseの再起動やreset後は、再度コマンドで現在の値を確認し、`server/.env`を更新してください。以前に`export`などで同じ環境変数を設定している場合は、`.env`より優先されるため解除してください。書式の詳細や環境変数へ直接設定する手順は[サーバー設定の補足](#サーバー設定の補足)を参照してください。
 
-`server/.env.example`のLiveKitとGeminiのプレースホルダーでもサーバープロセス自体は起動できますが、音声・画面共有・マーキングとAIガイド生成は利用できません。これらを確認するときは、LiveKit CloudとGemini APIの有効な認証情報をサーバーだけに設定してください。
+`server/.env.example`のLiveKitとGeminiのプレースホルダーでもサーバープロセス自体は起動できますが、音声・画面共有・マーキングと実AIガイド生成は利用できません。これらを確認するときは、LiveKit CloudとGemini APIの有効な認証情報をサーバーだけに設定してください。Geminiのキーなしで複数ガイドのレビューを試す場合は、後述の[開発用ガイド生成](#geminiのキーなしで複数ガイドを試す)を使います。
 
 ### 3. サーバーを起動する
 
@@ -95,24 +95,26 @@ go run ./cmd/api
 
 ### 4. クライアント環境変数を設定する
 
-別のターミナルで、利用者側と家族側それぞれの`.env.local`を作成します。既にファイルがある場合はコピーせず、必要な値を更新してください。
+別のターミナルで、利用者側・家族側と家族向けPWAの`.env.local`を作成します。既にファイルがある場合はコピーせず、必要な値を更新してください。
 
 ```bash
 # リポジトリルート
 cp client/apps/user-electron/.env.example client/apps/user-electron/.env.local
 cp client/apps/family-electron/.env.example client/apps/family-electron/.env.local
+cp client/apps/family-pwa/.env.example client/apps/family-pwa/.env.local
 ```
 
-各ファイルの`MITE_DEMO_TOKEN`を次のようにサーバーと一致させます。
+Electronの各ファイルでは`MITE_DEMO_TOKEN`を、PWAでは初回画面で入力する家族用トークンを、次のようにサーバーと一致させます。
 
 | クライアント | 対応するサーバー環境変数 |
 | ------------ | ------------------------ |
 | 利用者側     | `DEMO_USER_TOKEN`        |
 | 家族側       | `DEMO_FAMILY_TOKEN`      |
+| 家族向けPWA  | `DEMO_FAMILY_TOKEN`      |
 
-ローカルでは`MITE_API_BASE_URL=http://localhost:3000`を使用します。`.env.local`はGit管理されず、次の開発コマンドだけが読み込みます。Supabase、LiveKit、Geminiの秘密情報をクライアントへ設定しないでください。
+Electronでは`MITE_API_BASE_URL=http://localhost:3000`、PWAでは`VITE_API_BASE_URL=http://localhost:3000`を使用します。PWAの家族用トークンは初回画面で端末へ保存でき、`VITE_DEMO_FAMILY_TOKEN`はローカル開発用の任意の初期値です。`.env.local`はGit管理されません。Supabase、LiveKit、GeminiおよびVAPID秘密鍵をクライアントへ設定しないでください。
 
-### 5. 両クライアントを起動する
+### 5. クライアントとPWAを起動する
 
 利用者側と家族側を別々のターミナルで起動します。
 
@@ -128,9 +130,55 @@ cd client
 npm run dev:family
 ```
 
-利用者側は`http://127.0.0.1:5173`、家族側は`http://127.0.0.1:5174`のVite開発サーバーをElectronで表示します。
+```bash
+# ターミナル3
+cd client
+npm run dev:pwa
+```
+
+利用者側は`http://127.0.0.1:5173`、家族側は`http://127.0.0.1:5174`のVite開発サーバーをElectronで表示します。補助PWAは`http://localhost:5175`で開きます。Service WorkerとPushはlocalhost以外ではHTTPSが必要です。
+
+公開環境ではPWAを `https://priv.chi-llenge.com/mite/pwa/`、APIを `https://priv.chi-llenge.com/mite` としてbuild・配信します。Apacheの初回設定と自動デプロイは[サーバーのCI/CD](ci-cd.md#2-家族向けpwaの初回vpsapache設定)を参照してください。公開buildへ`VITE_DEMO_FAMILY_TOKEN`を設定してはいけません。
+
+### Web Pushを有効にする
+
+`server/`で次を1回実行し、出力された2行を`server/.env`へ保存します。秘密鍵はサーバーだけに置き、Gitへ含めません。あわせて管理者の連絡先URIを設定してサーバーを再起動します。
+
+```bash
+cd server
+go run ./cmd/vapid-keygen
+```
+
+```dotenv
+WEB_PUSH_SUBJECT=mailto:admin@example.com
+```
+
+3項目をすべて未設定にするとPushだけが無効になり、状態確認と返答は利用できます。一部だけ設定した場合は設定漏れとしてサーバーが起動しません。
 
 利用者側は通常のメインウィンドウを持ちません。Windowsではプライマリ画面の左端をAppBarとして使用します。LinuxではOSの作業領域を予約せず、画面位置とサイズ変更だけを疑似動作させます。
+
+### Geminiのキーなしで複数ガイドを試す
+
+第2項で作成した `server/.env` の次の2項目を変更します。既存ファイルをコピーし直す必要はありません。
+
+```dotenv
+MITE_ENV=development
+AI_PROVIDER=mock
+```
+
+`AI_BASE_URL`、`GEMINI_API_KEY`、`AI_MODEL`、`AI_PROMPT_VERSION` は、このモードでは未設定・空欄でも起動できます。既存値が残っていても使いません。プロセスの環境変数が `.env` より優先されるため、以前に `AI_PROVIDER` や `MITE_ENV` を設定していた場合はそちらも更新してください。
+
+Goサーバーを停止して、第3項の `go run ./cmd/api` で再起動します。起動ログに `using mock guide generator for development` が表示されます。DBには `20260910000100_cancel_guide_run.sql` までのmigrationを適用しておきます。
+
+1. Windowsで両クライアントを起動し、相談・支援を開始します。
+2. 画面全体を5秒以上共有し、定期取得画像を1枚以上残します。mockでも画像が0件の場合はガイドを作成しません。
+3. 家族側で「支援を解決済みにする」から「ガイドを作る」を選びます。
+4. `【動作確認用】画面を確認する`（2ステップ）と `【動作確認用】手順を見直す`（3ステップ）が表示されます。画像は今回の支援で登録した画像で、説明文は固定です。
+5. 2件目を開いてタイトルや説明を編集し、保存完了後に「レビュー完了」を押します。全件が確定して通話と支援が終了し、利用者のガイド一覧へ2件とも表示されることを確認します。別の支援では2件目を開かずに確定できることも確認できます。
+
+DBとSupabase Storageは通常どおり必要です。画面共有には有効なLiveKit設定が必要で、mockはLiveKitや画像取得を代替しません。LiveKitも未設定の場合は、[サーバー手動検証ガイド](../server/MANUAL_TESTING.md)の第3.3節でmockを設定し、第6章から第8章のREST操作で支援とJPEG材料を登録すると、第9章のレビュー・一括確定を確認できます。WSLでもこのAPI確認は可能です。
+
+Geminiによる生成へ戻すときは `AI_PROVIDER=gemini` に変更し、4項目のAI設定に有効な値を入れてサーバーを再起動します。`MITE_ENV` はローカル開発では `development` のままで構いません。既存の動作確認用ガイドは自動では再生成されないため、新しい支援で試します。
 
 ### WSLでスクリーンショットが真っ黒になる場合
 

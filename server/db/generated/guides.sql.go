@@ -98,6 +98,38 @@ func (q *Queries) AttachGuideMaterialBatchToSession(ctx context.Context, arg Att
 	return &i, err
 }
 
+const cancelGuideRunRow = `-- name: CancelGuideRunRow :one
+UPDATE guide_runs
+SET status = 'CANCELLED', updated_at = $1, revision = revision + 1
+WHERE id = $2 AND status = 'IN_PROGRESS'
+RETURNING id, guide_id, guide_version_number, user_id, status, current_step_number, support_request_id, started_at, completed_at, paused_at, updated_at, revision
+`
+
+type CancelGuideRunRowParams struct {
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	ID        string             `json:"id"`
+}
+
+func (q *Queries) CancelGuideRunRow(ctx context.Context, arg CancelGuideRunRowParams) (*GuideRun, error) {
+	row := q.db.QueryRow(ctx, cancelGuideRunRow, arg.UpdatedAt, arg.ID)
+	var i GuideRun
+	err := row.Scan(
+		&i.ID,
+		&i.GuideID,
+		&i.GuideVersionNumber,
+		&i.UserID,
+		&i.Status,
+		&i.CurrentStepNumber,
+		&i.SupportRequestID,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.PausedAt,
+		&i.UpdatedAt,
+		&i.Revision,
+	)
+	return &i, err
+}
+
 const claimGuideGenerationJob = `-- name: ClaimGuideGenerationJob :one
 WITH candidate AS (
     SELECT id
@@ -401,6 +433,7 @@ const createGuideDraftRow = `-- name: CreateGuideDraftRow :one
 INSERT INTO guide_drafts (
     id,
     support_session_id,
+    position,
     title,
     steps,
     status,
@@ -412,17 +445,19 @@ INSERT INTO guide_drafts (
     $2,
     $3,
     $4,
+    $5,
     'EDITING',
     1,
-    $5,
-    $5
+    $6,
+    $6
 )
-RETURNING id, support_session_id, title, steps, status, revision, created_at, updated_at
+RETURNING id, support_session_id, title, steps, status, revision, created_at, updated_at, position, guide_id
 `
 
 type CreateGuideDraftRowParams struct {
 	ID               string             `json:"id"`
 	SupportSessionID string             `json:"support_session_id"`
+	Position         int32              `json:"position"`
 	Title            string             `json:"title"`
 	Steps            json.RawMessage    `json:"steps"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
@@ -432,6 +467,7 @@ func (q *Queries) CreateGuideDraftRow(ctx context.Context, arg CreateGuideDraftR
 	row := q.db.QueryRow(ctx, createGuideDraftRow,
 		arg.ID,
 		arg.SupportSessionID,
+		arg.Position,
 		arg.Title,
 		arg.Steps,
 		arg.CreatedAt,
@@ -446,6 +482,8 @@ func (q *Queries) CreateGuideDraftRow(ctx context.Context, arg CreateGuideDraftR
 		&i.Revision,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Position,
+		&i.GuideID,
 	)
 	return &i, err
 }
@@ -766,7 +804,7 @@ INSERT INTO support_requests (
     $7,
     1
 )
-RETURNING id, user_id, family_id, initial_screenshot_artifact_id, comment, status, support_session_id, guide_context, created_at, updated_at, revision
+RETURNING id, user_id, family_id, initial_screenshot_artifact_id, comment, status, support_session_id, guide_context, created_at, updated_at, revision, acknowledged_at, acknowledgement_kind, estimated_support_at
 `
 
 type CreateGuideSupportRequestParams struct {
@@ -802,6 +840,9 @@ func (q *Queries) CreateGuideSupportRequest(ctx context.Context, arg CreateGuide
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Revision,
+		&i.AcknowledgedAt,
+		&i.AcknowledgementKind,
+		&i.EstimatedSupportAt,
 	)
 	return &i, err
 }
@@ -970,25 +1011,25 @@ const finishGuideSession = `-- name: FinishGuideSession :one
 UPDATE support_sessions
 SET
     status = 'ENDED',
+    ended_at = $1,
+    end_reason = 'GUIDE_SAVED',
     guide_material_batch_id = NULL,
     guide_generation_job_id = NULL,
-    guide_id = $1,
-    ended_at = $2,
-    end_reason = 'GUIDE_SAVED',
-    updated_at = $2,
+    guide_id = $2,
+    updated_at = $1,
     revision = revision + 1
 WHERE id = $3
 RETURNING id, support_request_id, user_id, family_id, livekit_room_name, status, guide_decision, guide_material_batch_id, guide_generation_job_id, guide_draft_id, guide_id, consent, consented_at, started_at, ended_at, end_reason, created_at, updated_at, revision
 `
 
 type FinishGuideSessionParams struct {
-	GuideID *string            `json:"guide_id"`
-	EndedAt pgtype.Timestamptz `json:"ended_at"`
-	ID      string             `json:"id"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	GuideID   *string            `json:"guide_id"`
+	ID        string             `json:"id"`
 }
 
 func (q *Queries) FinishGuideSession(ctx context.Context, arg FinishGuideSessionParams) (*SupportSession, error) {
-	row := q.db.QueryRow(ctx, finishGuideSession, arg.GuideID, arg.EndedAt, arg.ID)
+	row := q.db.QueryRow(ctx, finishGuideSession, arg.UpdatedAt, arg.GuideID, arg.ID)
 	var i SupportSession
 	err := row.Scan(
 		&i.ID,
@@ -1086,7 +1127,7 @@ func (q *Queries) GetGuideContextStep(ctx context.Context, arg GetGuideContextSt
 }
 
 const getGuideDraftRow = `-- name: GetGuideDraftRow :one
-SELECT id, support_session_id, title, steps, status, revision, created_at, updated_at
+SELECT id, support_session_id, title, steps, status, revision, created_at, updated_at, position, guide_id
 FROM guide_drafts
 WHERE id = $1
 `
@@ -1103,6 +1144,8 @@ func (q *Queries) GetGuideDraftRow(ctx context.Context, id string) (*GuideDraft,
 		&i.Revision,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Position,
+		&i.GuideID,
 	)
 	return &i, err
 }
@@ -1408,13 +1451,14 @@ func (q *Queries) GetGuideRunRow(ctx context.Context, id string) (*GuideRun, err
 }
 
 const getGuideSessionByDraftID = `-- name: GetGuideSessionByDraftID :one
-SELECT id, support_request_id, user_id, family_id, livekit_room_name, status, guide_decision, guide_material_batch_id, guide_generation_job_id, guide_draft_id, guide_id, consent, consented_at, started_at, ended_at, end_reason, created_at, updated_at, revision
-FROM support_sessions
-WHERE guide_draft_id = $1
+SELECT session.id, session.support_request_id, session.user_id, session.family_id, session.livekit_room_name, session.status, session.guide_decision, session.guide_material_batch_id, session.guide_generation_job_id, session.guide_draft_id, session.guide_id, session.consent, session.consented_at, session.started_at, session.ended_at, session.end_reason, session.created_at, session.updated_at, session.revision
+FROM support_sessions session
+JOIN guide_drafts draft ON draft.support_session_id = session.id
+WHERE draft.id = $1
 `
 
-func (q *Queries) GetGuideSessionByDraftID(ctx context.Context, guideDraftID *string) (*SupportSession, error) {
-	row := q.db.QueryRow(ctx, getGuideSessionByDraftID, guideDraftID)
+func (q *Queries) GetGuideSessionByDraftID(ctx context.Context, id string) (*SupportSession, error) {
+	row := q.db.QueryRow(ctx, getGuideSessionByDraftID, id)
 	var i SupportSession
 	err := row.Scan(
 		&i.ID,
@@ -1599,7 +1643,9 @@ SELECT a.id
 FROM artifacts a
 JOIN guide_materials material ON material.artifact_id = a.id
 JOIN guide_material_batches batch ON batch.id = material.batch_id
+JOIN support_sessions session ON session.id = batch.support_session_id
 WHERE batch.support_session_id = $1
+  AND a.owner_user_id = session.user_id
   AND a.purpose = 'GUIDE_MATERIAL'
   AND NOT EXISTS (
       SELECT 1 FROM artifact_deletion_tasks task WHERE task.artifact_id = a.id
@@ -1797,6 +1843,43 @@ func (q *Queries) ListGuideVersionSteps(ctx context.Context, arg ListGuideVersio
 	return items, nil
 }
 
+const listSessionGuideDraftRows = `-- name: ListSessionGuideDraftRows :many
+SELECT id, support_session_id, title, steps, status, revision, created_at, updated_at, position, guide_id FROM guide_drafts
+WHERE support_session_id = $1
+ORDER BY position
+`
+
+func (q *Queries) ListSessionGuideDraftRows(ctx context.Context, supportSessionID string) ([]*GuideDraft, error) {
+	rows, err := q.db.Query(ctx, listSessionGuideDraftRows, supportSessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*GuideDraft{}
+	for rows.Next() {
+		var i GuideDraft
+		if err := rows.Scan(
+			&i.ID,
+			&i.SupportSessionID,
+			&i.Title,
+			&i.Steps,
+			&i.Status,
+			&i.Revision,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Position,
+			&i.GuideID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUnusedGuideArtifacts = `-- name: ListUnusedGuideArtifacts :many
 SELECT a.id, a.storage_key
 FROM artifacts a
@@ -1837,7 +1920,7 @@ func (q *Queries) ListUnusedGuideArtifacts(ctx context.Context, arg ListUnusedGu
 }
 
 const lockGuideDraftRow = `-- name: LockGuideDraftRow :one
-SELECT id, support_session_id, title, steps, status, revision, created_at, updated_at
+SELECT id, support_session_id, title, steps, status, revision, created_at, updated_at, position, guide_id
 FROM guide_drafts
 WHERE id = $1
 FOR UPDATE
@@ -1855,6 +1938,8 @@ func (q *Queries) LockGuideDraftRow(ctx context.Context, id string) (*GuideDraft
 		&i.Revision,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Position,
+		&i.GuideID,
 	)
 	return &i, err
 }
@@ -1985,6 +2070,44 @@ func (q *Queries) LockGuideSupportSession(ctx context.Context, id string) (*Supp
 		&i.Revision,
 	)
 	return &i, err
+}
+
+const lockSessionGuideDraftRows = `-- name: LockSessionGuideDraftRows :many
+SELECT id, support_session_id, title, steps, status, revision, created_at, updated_at, position, guide_id FROM guide_drafts
+WHERE support_session_id = $1
+ORDER BY position
+FOR UPDATE
+`
+
+func (q *Queries) LockSessionGuideDraftRows(ctx context.Context, supportSessionID string) ([]*GuideDraft, error) {
+	rows, err := q.db.Query(ctx, lockSessionGuideDraftRows, supportSessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*GuideDraft{}
+	for rows.Next() {
+		var i GuideDraft
+		if err := rows.Scan(
+			&i.ID,
+			&i.SupportSessionID,
+			&i.Title,
+			&i.Steps,
+			&i.Status,
+			&i.Revision,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Position,
+			&i.GuideID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const moveGuideRunRow = `-- name: MoveGuideRunRow :one
@@ -2229,19 +2352,21 @@ const saveGuideDraftRow = `-- name: SaveGuideDraftRow :one
 UPDATE guide_drafts
 SET
     status = 'SAVED',
-    updated_at = $1,
+    guide_id = $1,
+    updated_at = $2,
     revision = revision + 1
-WHERE id = $2
-RETURNING id, support_session_id, title, steps, status, revision, created_at, updated_at
+WHERE id = $3
+RETURNING id, support_session_id, title, steps, status, revision, created_at, updated_at, position, guide_id
 `
 
 type SaveGuideDraftRowParams struct {
+	GuideID   *string            `json:"guide_id"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 	ID        string             `json:"id"`
 }
 
 func (q *Queries) SaveGuideDraftRow(ctx context.Context, arg SaveGuideDraftRowParams) (*GuideDraft, error) {
-	row := q.db.QueryRow(ctx, saveGuideDraftRow, arg.UpdatedAt, arg.ID)
+	row := q.db.QueryRow(ctx, saveGuideDraftRow, arg.GuideID, arg.UpdatedAt, arg.ID)
 	var i GuideDraft
 	err := row.Scan(
 		&i.ID,
@@ -2252,6 +2377,8 @@ func (q *Queries) SaveGuideDraftRow(ctx context.Context, arg SaveGuideDraftRowPa
 		&i.Revision,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Position,
+		&i.GuideID,
 	)
 	return &i, err
 }
@@ -2341,7 +2468,7 @@ SET
     updated_at = $3,
     revision = revision + 1
 WHERE id = $4
-RETURNING id, support_session_id, title, steps, status, revision, created_at, updated_at
+RETURNING id, support_session_id, title, steps, status, revision, created_at, updated_at, position, guide_id
 `
 
 type UpdateGuideDraftRowParams struct {
@@ -2368,6 +2495,8 @@ func (q *Queries) UpdateGuideDraftRow(ctx context.Context, arg UpdateGuideDraftR
 		&i.Revision,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Position,
+		&i.GuideID,
 	)
 	return &i, err
 }

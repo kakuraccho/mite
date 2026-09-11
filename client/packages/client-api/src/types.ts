@@ -10,6 +10,12 @@ export type Artifact = Schema<'Artifact'>
 export type SupportRequestStatus = Schema<'SupportRequestStatus'>
 export type SupportRequestGuideContext = Schema<'GuideContext'>
 export type SupportRequest = Schema<'SupportRequest'>
+export type SupportAcknowledgementKind = Schema<'SupportAcknowledgementKind'>
+export type UserPresence = Schema<'UserPresence'>
+export type CompanionStatus = Schema<'CompanionStatusResponse'>['data']
+export type UpdateSupportRequestAcknowledgementInput =
+  Schema<'UpdateSupportRequestAcknowledgementRequest'>
+export type PushSubscriptionInput = Schema<'PushSubscriptionRequest'>
 export type SupportSessionStatus = Schema<'SupportSessionStatus'>
 export type GuideDecision = Schema<'GuideDecision'>
 export type SupportSessionEndReason = Schema<'SupportSessionEndReason'>
@@ -48,6 +54,7 @@ export type SaveGuideDraftInput = Schema<'SaveGuideDraftRequest'>
 export type CreateGuideRunInput = Schema<'CreateGuideRunRequest'>
 export type UpdateGuideRunInput = Schema<'UpdateGuideRunRequest'>
 export type CompleteGuideRunInput = Schema<'CompleteGuideRunRequest'>
+export type CancelGuideRunInput = Schema<'CancelGuideRunRequest'>
 export type CreateSupportRequestFromGuideRunInput =
   Schema<'CreateSupportRequestFromGuideRunRequest'>
 export type EndSupportSessionWithoutGuideInput =
@@ -85,3 +92,6 @@ export interface MiteEvent<TData = unknown> {
 export interface DataEnvelope<TData> {
   data: TData
 }
+
+export type EndSupportSessionInput = Schema<'EndSupportSessionRequest'>
+export type CompleteGuideReviewInput = Schema<'CompleteGuideReviewRequest'>

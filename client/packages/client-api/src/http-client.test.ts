@@ -12,6 +12,67 @@ const jsonResponse = (body: unknown, init: ResponseInit = {}) =>
   })
 
 describe('HttpMiteApi', () => {
+  it.each(['json', 'image', 'empty'] as const)(
+    '共通の認証・エラー処理を%s応答でも使う',
+    async (kind) => {
+      const fetch = vi.fn<typeof globalThis.fetch>(async () =>
+        jsonResponse(
+          {
+            error: {
+              code: 'EXTERNAL_SERVICE_UNAVAILABLE',
+              message: 'しばらく待ってください',
+              requestId: 'retry-request',
+            },
+          },
+          { status: 503, headers: { 'retry-after': '3' } },
+        ),
+      )
+      const api = new HttpMiteApi({
+        baseUrl: 'https://example.test/mite',
+        token: 'test-token',
+        fetch,
+      })
+      const request =
+        kind === 'json'
+          ? api.getCompanionStatus()
+          : kind === 'image'
+            ? api.getArtifactContent('image/1')
+            : api.deletePushSubscription('https://push.example/subscription')
+      await expect(request).rejects.toMatchObject({
+        name: 'MiteApiError',
+        status: 503,
+        code: 'EXTERNAL_SERVICE_UNAVAILABLE',
+        retryAfterSeconds: 3,
+      })
+      expect(
+        new Headers(fetch.mock.calls[0]?.[1]?.headers).get('Authorization'),
+      ).toBe('Bearer test-token')
+    },
+  )
+
+  it('Push購読解除の204をJSONとして読み込まず、本文と認証を送る', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(
+      async () => new Response(null, { status: 204 }),
+    )
+    const api = new HttpMiteApi({
+      baseUrl: 'https://example.test/mite',
+      token: 'test-token',
+      fetch,
+    })
+    await expect(
+      api.deletePushSubscription('https://push.example/subscription'),
+    ).resolves.toBeUndefined()
+    const [url, init] = fetch.mock.calls[0]!
+    expect(url).toBe('https://example.test/mite/v1/push-subscriptions')
+    expect(init?.method).toBe('DELETE')
+    expect(JSON.parse(init?.body as string)).toEqual({
+      endpoint: 'https://push.example/subscription',
+    })
+    expect(new Headers(init?.headers).get('Content-Type')).toBe(
+      'application/json',
+    )
+  })
+
   it('認証と保存済みの冪等キーを状態変更リクエストへ付ける', async () => {
     const supportRequest = {
       id: 'request_01',
@@ -81,4 +142,169 @@ describe('HttpMiteApi', () => {
       retryAfterSeconds: 2,
     } satisfies Partial<MiteApiError>)
   })
+
+  it('heartbeat・確認返答・取消を専用の契約で送る', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async () =>
+      jsonResponse({ data: { status: 'ONLINE' } }),
+    )
+    const api = new HttpMiteApi({
+      baseUrl: 'https://api.example.com',
+      token: 'user-token',
+      fetch,
+    })
+
+    await api.recordPresenceHeartbeat()
+    await api.updateSupportRequestAcknowledgement('request/1', {
+      acknowledgementKind: 'UNKNOWN',
+      estimatedSupportAt: null,
+      expectedRevision: 2,
+    })
+    await api.cancelSupportRequest('request/1', 3, {
+      idempotencyKey: 'cancel-key',
+    })
+
+    expect(fetch.mock.calls[0]?.[0]).toBe(
+      'https://api.example.com/v1/presence/heartbeat',
+    )
+    expect(fetch.mock.calls[1]?.[0]).toBe(
+      'https://api.example.com/v1/support-requests/request%2F1/acknowledgement',
+    )
+    expect(fetch.mock.calls[2]?.[0]).toBe(
+      'https://api.example.com/v1/support-requests/request%2F1/cancel',
+    )
+    expect(
+      new Headers(fetch.mock.calls[2]?.[1]?.headers).get('idempotency-key'),
+    ).toBe('cancel-key')
+  })
+})
+
+it('支援の全下書き一覧と全件確定を正しいパス・本文・キーで送る', async () => {
+  const fetch = vi
+    .fn<typeof globalThis.fetch>()
+    .mockResolvedValueOnce(
+      jsonResponse({ data: { items: [{ id: 'draft_1' }, { id: 'draft_2' }] } }),
+    )
+    .mockResolvedValueOnce(
+      jsonResponse({
+        data: {
+          guides: [{ id: 'guide_1' }, { id: 'guide_2' }],
+          supportSession: { status: 'ENDED' },
+        },
+      }),
+    )
+  const api = new HttpMiteApi({
+    baseUrl: 'http://localhost:3000',
+    token: 'test-token',
+    fetch,
+  })
+  expect(await api.listSessionGuideDrafts('session/1')).toHaveLength(2)
+  expect(fetch.mock.calls[0]![0]).toBe(
+    'http://localhost:3000/v1/support-sessions/session%2F1/guide-drafts',
+  )
+  const input = {
+    expectedSessionRevision: 6,
+    drafts: [
+      { id: 'draft_1', expectedRevision: 2 },
+      { id: 'draft_2', expectedRevision: 3 },
+    ],
+  }
+  expect(
+    (
+      await api.completeGuideReview('session/1', input, {
+        idempotencyKey: 'review-key',
+      })
+    ).guides,
+  ).toHaveLength(2)
+  const [url, init] = fetch.mock.calls[1]!
+  expect(url).toBe(
+    'http://localhost:3000/v1/support-sessions/session%2F1/complete-guide-review',
+  )
+  expect(init?.method).toBe('POST')
+  expect(JSON.parse(init?.body as string)).toEqual(input)
+  expect(new Headers(init?.headers).get('Idempotency-Key')).toBe('review-key')
+})
+
+it('shares concurrent artifact requests and reuses recently loaded bytes only within the same API instance', async () => {
+  const fetch = vi.fn(async () => new Response(new Blob(['image'])))
+  const options = {
+    baseUrl: 'https://example.test',
+    token: 'one',
+    fetch: fetch as typeof globalThis.fetch,
+  }
+  const api = new HttpMiteApi(options)
+  const [first, second] = await Promise.all([
+    api.getArtifactContent('a'),
+    api.getArtifactContent('a'),
+  ])
+  expect(first).toBe(second)
+  expect(await api.getArtifactContent('a')).toBe(first)
+  expect(fetch).toHaveBeenCalledOnce()
+  await new HttpMiteApi({ ...options, token: 'two' }).getArtifactContent('a')
+  expect(fetch).toHaveBeenCalledTimes(2)
+})
+
+it('retries failed artifact loads and expires cached images after a minute', async () => {
+  const fetch = vi
+    .fn<typeof globalThis.fetch>()
+    .mockRejectedValueOnce(new Error('offline'))
+    .mockImplementation(async () => new Response(new Blob(['image'])))
+  const api = new HttpMiteApi({
+    baseUrl: 'https://example.test',
+    token: 'one',
+    fetch,
+  })
+  await expect(api.getArtifactContent('a')).rejects.toThrow('offline')
+  const first = await api.getArtifactContent('a')
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 60_001)
+  try {
+    expect(await api.getArtifactContent('a')).not.toBe(first)
+  } finally {
+    clock.mockRestore()
+  }
+  expect(fetch).toHaveBeenCalledTimes(3)
+})
+
+it('evicts least recently used artifact bytes when the memory budget is reached', async () => {
+  const fetch = vi.fn(
+    async () =>
+      ({
+        ok: true,
+        blob: async () => ({ size: 12 * 1024 * 1024 }),
+      }) as Response,
+  )
+  const api = new HttpMiteApi({
+    baseUrl: 'https://example.test',
+    token: 'one',
+    fetch: fetch as typeof globalThis.fetch,
+  })
+  await api.getArtifactContent('a')
+  await api.getArtifactContent('b')
+  await api.getArtifactContent('a')
+  await api.getArtifactContent('c')
+  expect(fetch).toHaveBeenCalledTimes(3)
+  await api.getArtifactContent('b')
+  expect(fetch).toHaveBeenCalledTimes(4)
+})
+
+it('sends early guide termination to the cancellation endpoint with its revision and retry key', async () => {
+  const fetch = vi.fn(async () =>
+    jsonResponse({ data: { id: 'run_1', status: 'CANCELLED', revision: 3 } }),
+  )
+  const api = new HttpMiteApi({
+    baseUrl: 'https://example.test',
+    token: 'one',
+    fetch: fetch as typeof globalThis.fetch,
+  })
+  expect(
+    await api.cancelGuideRun(
+      'run/1',
+      { expectedRevision: 2 },
+      { idempotencyKey: 'cancel-key' },
+    ),
+  ).toMatchObject({ status: 'CANCELLED' })
+  const [url, options] = fetch.mock.calls[0] as unknown as [string, RequestInit]
+  expect(url).toBe('https://example.test/v1/guide-runs/run%2F1/cancel')
+  expect(options.method).toBe('POST')
+  expect(JSON.parse(options.body as string)).toEqual({ expectedRevision: 2 })
+  expect(new Headers(options.headers).get('Idempotency-Key')).toBe('cancel-key')
 })

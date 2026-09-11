@@ -96,7 +96,7 @@ const createBatch = async (
       session.id,
       {
         expectedSessionRevision: session.revision,
-        captureIntervalSeconds: 5,
+        captureIntervalSeconds: 10,
         capturedFrom: first?.capturedAt ?? null,
         capturedTo: last?.capturedAt ?? null,
         expectedItemCount: manifest.captures.length,

@@ -341,7 +341,7 @@ func (s *SupportSessionService) EndWithoutGuide(
 			}
 		}
 		if locked.GuideDraftID != nil {
-			if deleteErr := tx.DeleteGuideDraft(ctx, *locked.GuideDraftID); deleteErr != nil {
+			if deleteErr := tx.DeleteGuideDrafts(ctx, locked.ID); deleteErr != nil {
 				return deleteErr
 			}
 		}
@@ -382,8 +382,8 @@ func (s *SupportSessionService) CreateLiveKitToken(ctx context.Context, actor do
 	if err := sessionPair(session).Authorize(actor, domain.RoleUser, domain.RoleFamily); err != nil {
 		return LiveKitConnection{}, err
 	}
-	if session.Status != domain.SupportSessionActive {
-		return LiveKitConnection{}, domain.NewError(domain.CodeInvalidState, "ACTIVEの支援セッションだけがLiveKitへ接続できる")
+	if !session.Status.AllowsLiveKit() {
+		return LiveKitConnection{}, domain.NewError(domain.CodeInvalidState, "通話可能な支援セッションだけがLiveKitへ接続できる")
 	}
 	if s.issuer == nil {
 		return LiveKitConnection{}, domain.NewError(domain.CodeExternalServiceUnavailable, "LiveKitトークンを発行できない")

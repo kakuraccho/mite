@@ -33,6 +33,7 @@ type workerTx struct {
 	generation repository.GenerationContext
 	materials  []repository.GenerationMaterial
 	draft      domain.GuideDraft
+	drafts     []domain.GuideDraft
 	contextErr error
 }
 
@@ -82,6 +83,7 @@ func (tx *workerTx) GetJob(_ context.Context, id domain.ID, _ bool) (domain.Guid
 }
 func (tx *workerTx) CreateDraft(_ context.Context, value domain.GuideDraft) (domain.GuideDraft, error) {
 	tx.draft = value
+	tx.drafts = append(tx.drafts, value)
 	return value, nil
 }
 func (tx *workerTx) SucceedJob(_ context.Context, _ domain.ID, revision int64, draftID domain.ID, now pgtype.Timestamptz) (domain.GuideGenerationJob, error) {
@@ -128,14 +130,18 @@ func (tx *workerTx) RecoverJobs(_ context.Context, now pgtype.Timestamptz) ([]do
 }
 
 type fakeGenerator struct {
-	input  domain.GuideGenerationInput
-	output domain.GeneratedGuide
-	err    error
+	input   domain.GuideGenerationInput
+	output  domain.GeneratedGuide
+	outputs []domain.GeneratedGuide
+	err     error
 }
 
-func (generator *fakeGenerator) Generate(_ context.Context, input domain.GuideGenerationInput) (domain.GeneratedGuide, error) {
+func (generator *fakeGenerator) Generate(_ context.Context, input domain.GuideGenerationInput) ([]domain.GeneratedGuide, error) {
 	generator.input = input
-	return generator.output, generator.err
+	if generator.outputs != nil {
+		return generator.outputs, generator.err
+	}
+	return []domain.GeneratedGuide{generator.output}, generator.err
 }
 
 func workerFixture(t *testing.T, materialCount int) (*GuideWorker, *workerTx, *fakeGenerator) {
@@ -235,3 +241,105 @@ func TestGuideWorkerRecovery(t *testing.T) {
 }
 
 var _ GuideGenerator = (*fakeGenerator)(nil)
+
+func TestGuideWorkerCreatesAllDraftsOrRejectsWholeOutput(t *testing.T) {
+	for _, invalid := range []bool{false, true} {
+		t.Run(strconv.FormatBool(invalid), func(t *testing.T) {
+			worker, tx, generator := workerFixture(t, 1)
+			nextID := 0
+			worker.newID = func(prefix string) domain.ID { nextID++; return domain.ID(prefix + strconv.Itoa(nextID)) }
+			first := generator.output
+			second := domain.GeneratedGuide{Title: "別の目的", Steps: []domain.GeneratedGuideStep{{SourceArtifactID: "initial", Instruction: "戻るを押す"}}}
+			if invalid {
+				second.Steps[0].SourceArtifactID = "not_an_input"
+			}
+			generator.outputs = []domain.GeneratedGuide{first, second}
+			if processed, err := worker.RunOnce(context.Background()); err != nil || !processed {
+				t.Fatalf("run: %t, %v", processed, err)
+			}
+			if invalid {
+				if len(tx.drafts) != 0 || tx.job.Status != domain.GuideGenerationJobFailed || *tx.job.ErrorCode != domain.GuideGenerationAIInvalidOutput {
+					t.Fatalf("partially accepted invalid output: %+v", tx)
+				}
+			} else if len(tx.drafts) != 2 || tx.drafts[0].Position != 1 || tx.drafts[1].Position != 2 || tx.drafts[1].SupportSessionID != tx.session.ID || *tx.session.GuideDraftID != tx.drafts[0].ID {
+				t.Fatalf("grouped drafts: %+v", tx.drafts)
+			}
+		})
+	}
+}
+
+type controlledGuideStorage struct {
+	repository.ObjectStorage
+	started chan string
+	release chan struct{}
+}
+
+func (s *controlledGuideStorage) Get(ctx context.Context, key string) (repository.StoredObject, error) {
+	select {
+	case s.started <- key:
+	case <-ctx.Done():
+		return repository.StoredObject{}, ctx.Err()
+	}
+	select {
+	case <-s.release:
+	case <-ctx.Done():
+		return repository.StoredObject{}, ctx.Err()
+	}
+	return s.ObjectStorage.Get(ctx, key)
+}
+
+func TestGuideInputLoadsConcurrentlyAndPreservesSequence(t *testing.T) {
+	worker, tx, _ := workerFixture(t, 8)
+	storage := &controlledGuideStorage{ObjectStorage: worker.storage, started: make(chan string, 9), release: make(chan struct{})}
+	worker.storage = storage
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	type result struct {
+		input domain.GuideGenerationInput
+		err   error
+	}
+	done := make(chan result, 1)
+	go func() { input, err := worker.loadInput(ctx, tx.generation); done <- result{input, err} }()
+	for range guideInputConcurrency {
+		select {
+		case <-storage.started:
+		case <-ctx.Done():
+			t.Fatal("image downloads were serialized")
+		}
+	}
+	select {
+	case <-storage.started:
+		t.Fatal("unbounded parallel image downloads")
+	default:
+	}
+	close(storage.release)
+	loaded := <-done
+	if loaded.err != nil {
+		t.Fatal(loaded.err)
+	}
+	for position, image := range loaded.input.Images {
+		if image.Sequence != position || len(image.JPEG) == 0 {
+			t.Fatalf("image %d lost its sequence/data", position)
+		}
+	}
+}
+
+func TestGuideInputCancellationStopsPendingDownloads(t *testing.T) {
+	worker, tx, _ := workerFixture(t, 8)
+	storage := &controlledGuideStorage{ObjectStorage: worker.storage, started: make(chan string, 9), release: make(chan struct{})}
+	worker.storage = storage
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { _, err := worker.loadInput(ctx, tx.generation); done <- err }()
+	<-storage.started
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("error=%v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("downloads did not stop after cancellation")
+	}
+}

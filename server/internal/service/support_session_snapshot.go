@@ -8,6 +8,8 @@ import (
 )
 
 type supportRequestSnapshot struct {
+	AcknowledgedAt              *time.Time            `json:"acknowledgedAt"`
+	AcknowledgementKind         *string               `json:"acknowledgementKind"`
 	Comment                     string                `json:"comment"`
 	CreatedAt                   time.Time             `json:"createdAt"`
 	FamilyID                    string                `json:"familyId"`
@@ -18,6 +20,7 @@ type supportRequestSnapshot struct {
 	Status                      string                `json:"status"`
 	SupportSessionID            *string               `json:"supportSessionId"`
 	UpdatedAt                   time.Time             `json:"updatedAt"`
+	EstimatedSupportAt          *time.Time            `json:"estimatedSupportAt"`
 	UserID                      string                `json:"userId"`
 }
 
@@ -86,6 +89,7 @@ func requestSnapshot(value domain.SupportRequest) supportRequestSnapshot {
 		Comment: value.Comment, CreatedAt: value.CreatedAt, FamilyID: string(value.FamilyID), ID: string(value.ID),
 		InitialScreenshotArtifactID: string(value.InitialScreenshotArtifactID), Revision: value.Revision,
 		Status: string(value.Status), SupportSessionID: idStringPointer(value.SupportSessionID), UpdatedAt: value.UpdatedAt, UserID: string(value.UserID),
+		AcknowledgedAt: value.AcknowledgedAt, AcknowledgementKind: acknowledgementKindStringPointer(value.AcknowledgementKind), EstimatedSupportAt: value.EstimatedSupportAt,
 	}
 	if value.GuideContext != nil {
 		result.GuideContext = &guideContextSnapshot{
@@ -124,7 +128,7 @@ func sessionEnvelope(session domain.SupportSession) sessionResponseEnvelope {
 }
 
 func (value supportRequestSnapshot) domainValue() domain.SupportRequest {
-	result := domain.SupportRequest{ID: domain.ID(value.ID), UserID: domain.ID(value.UserID), FamilyID: domain.ID(value.FamilyID), InitialScreenshotArtifactID: domain.ID(value.InitialScreenshotArtifactID), Comment: value.Comment, Status: domain.SupportRequestStatus(value.Status), SupportSessionID: stringIDPointer(value.SupportSessionID), CreatedAt: value.CreatedAt, UpdatedAt: value.UpdatedAt, Revision: value.Revision}
+	result := domain.SupportRequest{ID: domain.ID(value.ID), UserID: domain.ID(value.UserID), FamilyID: domain.ID(value.FamilyID), InitialScreenshotArtifactID: domain.ID(value.InitialScreenshotArtifactID), Comment: value.Comment, Status: domain.SupportRequestStatus(value.Status), SupportSessionID: stringIDPointer(value.SupportSessionID), AcknowledgedAt: value.AcknowledgedAt, AcknowledgementKind: stringAcknowledgementKindPointer(value.AcknowledgementKind), EstimatedSupportAt: value.EstimatedSupportAt, CreatedAt: value.CreatedAt, UpdatedAt: value.UpdatedAt, Revision: value.Revision}
 	if value.GuideContext != nil {
 		result.GuideContext = &domain.GuideContext{GuideRunID: domain.ID(value.GuideContext.GuideRunID), GuideID: domain.ID(value.GuideContext.GuideID), GuideVersionNumber: value.GuideContext.GuideVersionNumber, StepNumber: value.GuideContext.StepNumber, GuideTitle: value.GuideContext.GuideTitle, StepInstruction: value.GuideContext.StepInstruction, StepArtifactID: domain.ID(value.GuideContext.StepArtifactID)}
 	}
@@ -158,6 +162,20 @@ func stringIDPointer(value *string) *domain.ID {
 		return nil
 	}
 	converted := domain.ID(*value)
+	return &converted
+}
+func acknowledgementKindStringPointer(value *domain.SupportAcknowledgementKind) *string {
+	if value == nil {
+		return nil
+	}
+	converted := string(*value)
+	return &converted
+}
+func stringAcknowledgementKindPointer(value *string) *domain.SupportAcknowledgementKind {
+	if value == nil {
+		return nil
+	}
+	converted := domain.SupportAcknowledgementKind(*value)
 	return &converted
 }
 func guideDecisionStringPointer(value *domain.GuideDecision) *string {

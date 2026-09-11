@@ -229,6 +229,12 @@ func supportRequestToGenerated(request domain.SupportRequest) generated.SupportR
 			StepArtifactId: string(request.GuideContext.StepArtifactID),
 		}
 	}
+	result.AcknowledgedAt = request.AcknowledgedAt
+	if request.AcknowledgementKind != nil {
+		kind := generated.SupportAcknowledgementKind(*request.AcknowledgementKind)
+		result.AcknowledgementKind = &kind
+	}
+	result.EstimatedSupportAt = request.EstimatedSupportAt
 	return result
 }
 
@@ -278,6 +284,28 @@ func (response rawJSONResponse) VisitListSupportRequestsResponse(w http.Response
 }
 
 func (response rawJSONResponse) VisitGetSupportRequestResponse(w http.ResponseWriter) error {
+	return response.write(w)
+}
+
+func (response rawJSONResponse) VisitGetCompanionStatusResponse(w http.ResponseWriter) error {
+	return response.write(w)
+}
+func (response rawJSONResponse) VisitRecordPresenceHeartbeatResponse(w http.ResponseWriter) error {
+	return response.write(w)
+}
+func (response rawJSONResponse) VisitGetVapidPublicKeyResponse(w http.ResponseWriter) error {
+	return response.write(w)
+}
+func (response rawJSONResponse) VisitUpsertPushSubscriptionResponse(w http.ResponseWriter) error {
+	return response.write(w)
+}
+func (response rawJSONResponse) VisitDeletePushSubscriptionResponse(w http.ResponseWriter) error {
+	return response.write(w)
+}
+func (response rawJSONResponse) VisitUpdateSupportRequestAcknowledgementResponse(w http.ResponseWriter) error {
+	return response.write(w)
+}
+func (response rawJSONResponse) VisitCancelSupportRequestResponse(w http.ResponseWriter) error {
 	return response.write(w)
 }
 

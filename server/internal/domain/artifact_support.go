@@ -70,6 +70,25 @@ func (r SupportRequest) Validate() error {
 			return err
 		}
 	}
+	if r.AcknowledgedAt == nil {
+		if r.AcknowledgementKind != nil || r.EstimatedSupportAt != nil {
+			return NewError(CodeValidationError, "SupportRequestの確認返答が不正")
+		}
+	} else {
+		if r.AcknowledgementKind == nil || !r.AcknowledgementKind.Valid() {
+			return NewError(CodeValidationError, "SupportRequestの確認種別が不正")
+		}
+		if *r.AcknowledgementKind == SupportAcknowledgementScheduled {
+			if r.EstimatedSupportAt == nil {
+				return NewError(CodeValidationError, "SupportRequestの対応予定時刻がない")
+			}
+		} else if r.EstimatedSupportAt != nil {
+			return NewError(CodeValidationError, "SupportRequestの対応予定時刻が不正")
+		}
+	}
+	if r.Status == SupportRequestCancelled && r.SupportSessionID != nil {
+		return NewError(CodeValidationError, "取り消したSupportRequestにセッションがある")
+	}
 	if r.CreatedAt.IsZero() || r.UpdatedAt.IsZero() || r.UpdatedAt.Before(r.CreatedAt) {
 		return NewError(CodeValidationError, "SupportRequest日時が不正")
 	}

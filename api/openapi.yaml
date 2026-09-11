@@ -15,6 +15,8 @@ tags:
   - name: Artifacts
   - name: SupportRequests
   - name: SupportSessions
+  - name: Companion
+  - name: PushSubscriptions
   - name: GuideMaterials
   - name: GuideGeneration
   - name: GuideDrafts
@@ -143,6 +145,160 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
 
+  /v1/support-requests/{id}/acknowledgement:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    patch:
+      tags: [SupportRequests, Companion]
+      operationId: updateSupportRequestAcknowledgement
+      summary: 家族が依頼を確認し対応目安を返す
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSupportRequestAcknowledgementRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportRequestResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/support-requests/{id}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      tags: [SupportRequests, Companion]
+      operationId: cancelSupportRequest
+      summary: 利用者が未開始の支援依頼を取り消す
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelSupportRequestRequest'
+      responses:
+        '200':
+          description: 取消成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportRequestResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/presence/heartbeat:
+    post:
+      tags: [Companion]
+      operationId: recordPresenceHeartbeat
+      summary: 利用者PCの接続heartbeatを記録する
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmptyRequest'
+      responses:
+        '200':
+          description: 記録成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserPresenceResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/companion/status:
+    get:
+      tags: [Companion]
+      operationId: getCompanionStatus
+      summary: 家族向けに利用者PCの接続状況を返す
+      responses:
+        '200':
+          description: 取得成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompanionStatusResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/push-subscriptions/vapid-public-key:
+    get:
+      tags: [PushSubscriptions]
+      operationId: getVapidPublicKey
+      summary: Push購読用のVAPID公開鍵を返す
+      responses:
+        '200':
+          description: 取得成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VapidPublicKeyResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/push-subscriptions:
+    put:
+      tags: [PushSubscriptions]
+      operationId: upsertPushSubscription
+      summary: 家族端末のPush購読を登録または更新する
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PushSubscriptionRequest'
+      responses:
+        '200':
+          description: 登録成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PushSubscriptionStateResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    delete:
+      tags: [PushSubscriptions]
+      operationId: deletePushSubscription
+      summary: 家族端末のPush購読を解除する
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeletePushSubscriptionRequest'
+      responses:
+        '204':
+          description: 解除成功
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
   /v1/support-requests/{id}/call:
     parameters:
       - $ref: '#/components/parameters/ResourceId'
@@ -227,6 +383,7 @@ paths:
       tags: [SupportSessions]
       operationId: createLiveKitToken
       summary: LiveKit接続用トークンを取得する
+      description: ACTIVE、GENERATING_GUIDE、REVIEWING_GUIDE、GUIDE_SAVEDで参加・再接続できる。
       requestBody:
         required: true
         content:
@@ -305,6 +462,37 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/support-sessions/{id}/end:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      tags: [SupportSessions]
+      operationId: endSupportSession
+      summary: 旧版のGUIDE_SAVEDセッションを終了する
+      deprecated: true
+      description: 家族のみ。旧版のGUIDE_SAVEDからENDEDへ遷移する互換API。新しい保存では直接ENDEDになる。保存したガイドと画像を保持する。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EndSupportSessionRequest'
+      responses:
+        '200':
+          description: 通話終了成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportSessionResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
         '500': { $ref: '#/components/responses/InternalError' }
 
   /v1/support-sessions/{id}/end-without-guide:
@@ -469,6 +657,55 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
         '500': { $ref: '#/components/responses/InternalError' }
 
+  /v1/support-sessions/{id}/guide-drafts:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    get:
+      tags: [GuideDrafts]
+      operationId: listSessionGuideDrafts
+      summary: 支援に紐づくすべての下書きを生成順で返す
+      responses:
+        '200':
+          description: 取得成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuideDraftListResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/support-sessions/{id}/complete-guide-review:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      tags: [GuideDrafts, Guides]
+      operationId: completeGuideReview
+      summary: 支援の全下書きを1回で確定してレビューを完了する
+      description: 家族だけが実行できる。全下書きのIDとrevision、および支援のrevisionを検証し、全件保存と支援終了を同一トランザクションで行う。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteGuideReviewRequest'
+      responses:
+        '201':
+          description: 全件保存成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuideReviewCompletedResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
   /v1/guide-drafts/{id}:
     parameters:
       - $ref: '#/components/parameters/ResourceId'
@@ -517,7 +754,9 @@ paths:
     post:
       tags: [GuideDrafts, Guides]
       operationId: saveGuideDraft
-      summary: ガイド下書きをガイドとして保存する
+      summary: 下書きが1件の支援を保存する（旧クライアント互換）
+      deprecated: true
+      description: 複数の下書きがある場合は409 INVALID_STATE。新しいクライアントはcompleteGuideReviewを使う。
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -662,6 +901,35 @@ paths:
       responses:
         '200':
           description: 完了成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuideRunResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/guide-runs/{id}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      tags: [GuideRuns]
+      operationId: cancelGuideRun
+      summary: ガイド利用を途中で終了する
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelGuideRunRequest'
+      responses:
+        '200':
+          description: 途中終了成功
           content:
             application/json:
               schema:
@@ -824,10 +1092,16 @@ components:
       enum: [USER, FAMILY]
     SupportRequestStatus:
       type: string
-      enum: [PENDING, IN_SUPPORT, RESOLVED]
+      enum: [PENDING, IN_SUPPORT, RESOLVED, CANCELLED]
+    SupportAcknowledgementKind:
+      type: string
+      enum: [NOW, SCHEDULED, UNKNOWN]
+    PresenceStatus:
+      type: string
+      enum: [CONNECTING, ONLINE, OFFLINE]
     SupportSessionStatus:
       type: string
-      enum: [RINGING, ACTIVE, GENERATING_GUIDE, REVIEWING_GUIDE, ENDED]
+      enum: [RINGING, ACTIVE, GENERATING_GUIDE, REVIEWING_GUIDE, GUIDE_SAVED, ENDED]
     GuideDecision:
       type: string
       enum: [CREATE, SKIP]
@@ -858,7 +1132,7 @@ components:
       enum: [EDITING, SAVED]
     GuideRunStatus:
       type: string
-      enum: [IN_PROGRESS, COMPLETED, PAUSED_FOR_SUPPORT]
+      enum: [IN_PROGRESS, COMPLETED, CANCELLED, PAUSED_FOR_SUPPORT]
     GuideRunAction:
       type: string
       enum: [NEXT, PREVIOUS]
@@ -954,6 +1228,9 @@ components:
         - status
         - supportSessionId
         - guideContext
+        - acknowledgedAt
+        - acknowledgementKind
+        - estimatedSupportAt
         - createdAt
         - updatedAt
         - revision
@@ -971,9 +1248,33 @@ components:
           allOf:
             - $ref: '#/components/schemas/GuideContext'
           nullable: true
+        acknowledgedAt: { type: string, format: date-time, nullable: true }
+        acknowledgementKind:
+          allOf:
+            - $ref: '#/components/schemas/SupportAcknowledgementKind'
+          nullable: true
+        estimatedSupportAt: { type: string, format: date-time, nullable: true }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
         revision: { type: integer, format: int64, minimum: 1 }
+
+    UserPresence:
+      type: object
+      additionalProperties: false
+      required:
+        - userId
+        - status
+        - connectedSince
+        - lastSeenAt
+        - updatedAt
+        - revision
+      properties:
+        userId: { type: string }
+        status: { $ref: '#/components/schemas/PresenceStatus' }
+        connectedSince: { type: string, format: date-time, nullable: true }
+        lastSeenAt: { type: string, format: date-time, nullable: true }
+        updatedAt: { type: string, format: date-time, nullable: true }
+        revision: { type: integer, format: int64, minimum: 0 }
 
     Consent:
       type: object
@@ -985,7 +1286,8 @@ components:
         periodicCapture: { type: boolean }
         textVersion:
           type: string
-          enum: [v1]
+          enum: [v1, v2, v3, v4]
+          description: v1・v2・v3は過去の同意。新しい応答は10秒撮影、生成・レビュー中の音声通話継続と共有停止、全件保存と同時の支援終了を説明するv4を使う。
 
     SupportSession:
       type: object
@@ -1023,8 +1325,8 @@ components:
           nullable: true
         guideMaterialBatchId: { type: string, nullable: true }
         guideGenerationJobId: { type: string, nullable: true }
-        guideDraftId: { type: string, nullable: true }
-        guideId: { type: string, nullable: true }
+        guideDraftId: { type: string, nullable: true, description: 生成順で先頭の下書きID。全件は支援の下書き一覧APIで取得する }
+        guideId: { type: string, nullable: true, description: 生成順で先頭の保存済みガイドID }
         consent:
           allOf:
             - $ref: '#/components/schemas/Consent'
@@ -1060,7 +1362,7 @@ components:
         id: { type: string }
         supportSessionId: { type: string }
         status: { $ref: '#/components/schemas/GuideMaterialBatchStatus' }
-        captureIntervalSeconds: { type: integer, enum: [5] }
+        captureIntervalSeconds: { type: integer, enum: [5, 10], description: 新規は10。5は変更前の履歴。 }
         expectedItemCount: { type: integer, minimum: 1, maximum: 360 }
         receivedItemCount: { type: integer, minimum: 0, maximum: 360 }
         capturedFrom: { type: string, format: date-time }
@@ -1103,7 +1405,7 @@ components:
         batchId: { type: string }
         status: { $ref: '#/components/schemas/GuideGenerationJobStatus' }
         attempt: { type: integer, minimum: 0, maximum: 3 }
-        guideDraftId: { type: string, nullable: true }
+        guideDraftId: { type: string, nullable: true, description: 生成順で先頭の下書きID。全件は支援の下書き一覧APIで取得する }
         errorCode:
           allOf:
             - $ref: '#/components/schemas/GuideGenerationErrorCode'
@@ -1243,6 +1545,38 @@ components:
           type: string
           maxLength: 500
           default: ''
+    UpdateSupportRequestAcknowledgementRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedRevision, acknowledgementKind, estimatedSupportAt]
+      properties:
+        expectedRevision: { type: integer, format: int64, minimum: 1 }
+        acknowledgementKind:
+          $ref: '#/components/schemas/SupportAcknowledgementKind'
+        estimatedSupportAt:
+          type: string
+          format: date-time
+          nullable: true
+    CancelSupportRequestRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedRevision]
+      properties:
+        expectedRevision: { type: integer, format: int64, minimum: 1 }
+    PushSubscriptionRequest:
+      type: object
+      additionalProperties: false
+      required: [endpoint, p256dh, auth]
+      properties:
+        endpoint: { type: string, format: uri, maxLength: 2048 }
+        p256dh: { type: string, minLength: 1, maxLength: 256 }
+        auth: { type: string, minLength: 1, maxLength: 256 }
+    DeletePushSubscriptionRequest:
+      type: object
+      additionalProperties: false
+      required: [endpoint]
+      properties:
+        endpoint: { type: string, format: uri, maxLength: 2048 }
     CallSupportRequestRequest:
       type: object
       additionalProperties: false
@@ -1255,7 +1589,18 @@ components:
       required: [expectedSessionRevision, consent]
       properties:
         expectedSessionRevision: { type: integer, format: int64, minimum: 1 }
-        consent: { $ref: '#/components/schemas/Consent' }
+        consent:
+          allOf:
+            - $ref: '#/components/schemas/Consent'
+            - type: object
+              properties:
+                textVersion: { type: string, enum: [v4] }
+    EndSupportSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedSessionRevision]
+      properties:
+        expectedSessionRevision: { type: integer, format: int64, minimum: 1 }
     EmptyRequest:
       type: object
       additionalProperties: false
@@ -1278,7 +1623,7 @@ components:
         - expectedItemCount
       properties:
         expectedSessionRevision: { type: integer, format: int64, minimum: 1 }
-        captureIntervalSeconds: { type: integer, enum: [5] }
+        captureIntervalSeconds: { type: integer, enum: [10] }
         capturedFrom: { type: string, format: date-time, nullable: true }
         capturedTo: { type: string, format: date-time, nullable: true }
         expectedItemCount: { type: integer, minimum: 0, maximum: 360 }
@@ -1316,6 +1661,23 @@ components:
           minItems: 1
           maxItems: 8
           items: { $ref: '#/components/schemas/GuideStep' }
+    GuideDraftRevision:
+      type: object
+      additionalProperties: false
+      required: [id, expectedRevision]
+      properties:
+        id: { type: string, minLength: 1 }
+        expectedRevision: { type: integer, format: int64, minimum: 1 }
+    CompleteGuideReviewRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedSessionRevision, drafts]
+      properties:
+        expectedSessionRevision: { type: integer, format: int64, minimum: 1 }
+        drafts:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/GuideDraftRevision' }
     SaveGuideDraftRequest:
       type: object
       additionalProperties: false
@@ -1335,6 +1697,8 @@ components:
       properties:
         expectedRevision: { type: integer, format: int64, minimum: 1 }
         action: { $ref: '#/components/schemas/GuideRunAction' }
+    CancelGuideRunRequest:
+      $ref: '#/components/schemas/CompleteGuideRunRequest'
     CompleteGuideRunRequest:
       type: object
       additionalProperties: false
@@ -1385,6 +1749,46 @@ components:
               type: array
               maxItems: 20
               items: { $ref: '#/components/schemas/SupportRequest' }
+    UserPresenceResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/UserPresence' }
+    CompanionStatusResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [user, presence]
+          properties:
+            user: { $ref: '#/components/schemas/User' }
+            presence: { $ref: '#/components/schemas/UserPresence' }
+    VapidPublicKeyResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [publicKey]
+          properties:
+            publicKey: { type: string, minLength: 1 }
+    PushSubscriptionStateResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [enabled]
+          properties:
+            enabled: { type: boolean, enum: [true] }
     CallSupportRequestResponse:
       type: object
       additionalProperties: false
@@ -1493,6 +1897,34 @@ components:
       required: [data]
       properties:
         data: { $ref: '#/components/schemas/GuideDraft' }
+    GuideDraftListResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/GuideDraft' }
+    GuideReviewCompletedResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [guides, supportSession]
+          properties:
+            guides:
+              type: array
+              minItems: 1
+              items: { $ref: '#/components/schemas/GuideDetail' }
+            supportSession: { $ref: '#/components/schemas/SupportSession' }
     GuideSavedResponse:
       type: object
       additionalProperties: false

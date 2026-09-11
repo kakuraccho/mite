@@ -12,14 +12,17 @@ import type {
   CallSupportRequestInput,
   CompleteGuideMaterialBatchInput,
   CompleteGuideRunInput,
+  CancelGuideRunInput,
   CreateGuideMaterialBatchInput,
   CreateGuideRunInput,
   CreateSupportRequestFromGuideRunInput,
   CreateSupportRequestInput,
   DataEnvelope,
   EndSupportSessionWithoutGuideInput,
+  EndSupportSessionInput,
   GuideDetail,
   GuideDraft,
+  CompleteGuideReviewInput,
   GuideGenerationJob,
   GuideMaterial,
   GuideMaterialBatch,
@@ -34,6 +37,10 @@ import type {
   SupportSession,
   UpdateGuideDraftInput,
   UpdateGuideRunInput,
+  UserPresence,
+  CompanionStatus,
+  UpdateSupportRequestAcknowledgementInput,
+  PushSubscriptionInput,
 } from './types'
 
 export interface HttpMiteApiOptions {
@@ -41,6 +48,10 @@ export interface HttpMiteApiOptions {
   token: string
   fetch?: typeof globalThis.fetch
 }
+
+const artifactCacheMaxBytes = 32 * 1024 * 1024
+const artifactCacheMaxEntries = 32
+const artifactCacheLifetimeMs = 60_000
 
 const encodeId = (id: string) => encodeURIComponent(id)
 
@@ -60,6 +71,11 @@ export class HttpMiteApi implements MiteApi {
   readonly #baseUrl: string
   readonly #token: string
   readonly #fetch: typeof globalThis.fetch
+  // Scope cached bytes to this API instance (and therefore its endpoint/token).
+  // Keep them in memory only; authenticated HTTP responses remain no-store.
+  readonly #artifacts = new Map<string, { blob: Blob; expiresAt: number }>()
+  readonly #artifactRequests = new Map<string, Promise<Blob>>()
+  #artifactBytes = 0
 
   constructor(options: HttpMiteApiOptions) {
     this.#baseUrl = options.baseUrl.replace(/\/$/, '')
@@ -67,13 +83,68 @@ export class HttpMiteApi implements MiteApi {
     this.#fetch = options.fetch ?? globalThis.fetch.bind(globalThis)
   }
 
-  async #request<TData>(
+  recordPresenceHeartbeat(): Promise<UserPresence> {
+    return this.#request('/v1/presence/heartbeat', {
+      method: 'POST',
+      body: '{}',
+    })
+  }
+
+  getCompanionStatus(): Promise<CompanionStatus> {
+    return this.#request('/v1/companion/status')
+  }
+
+  updateSupportRequestAcknowledgement(
+    supportRequestId: string,
+    input: UpdateSupportRequestAcknowledgementInput,
+  ): Promise<SupportRequest> {
+    return this.#request(
+      `/v1/support-requests/${encodeId(supportRequestId)}/acknowledgement`,
+      { method: 'PATCH', body: JSON.stringify(input) },
+    )
+  }
+
+  cancelSupportRequest(
+    supportRequestId: string,
+    expectedRevision: number,
+    operation: IdempotentOperation,
+  ): Promise<SupportRequest> {
+    return this.#request(
+      `/v1/support-requests/${encodeId(supportRequestId)}/cancel`,
+      { method: 'POST', body: JSON.stringify({ expectedRevision }) },
+      operation,
+    )
+  }
+
+  async getVapidPublicKey(): Promise<string> {
+    const data = await this.#request<{ publicKey: string }>(
+      '/v1/push-subscriptions/vapid-public-key',
+    )
+    return data.publicKey
+  }
+
+  async upsertPushSubscription(input: PushSubscriptionInput): Promise<boolean> {
+    const data = await this.#request<{ enabled: boolean }>(
+      '/v1/push-subscriptions',
+      { method: 'PUT', body: JSON.stringify(input) },
+    )
+    return data.enabled
+  }
+
+  async deletePushSubscription(endpoint: string): Promise<void> {
+    await this.#send('/v1/push-subscriptions', {
+      method: 'DELETE',
+      body: JSON.stringify({ endpoint }),
+    })
+  }
+
+  async #send(
     path: string,
     init: RequestInit = {},
     operation?: IdempotentOperation,
-  ): Promise<TData> {
+  ): Promise<Response> {
     const headers = new Headers(init.headers)
-    headers.set('Accept', 'application/json')
+    if (!headers.has('Accept')) headers.set('Accept', 'application/json')
     headers.set('Authorization', `Bearer ${this.#token}`)
     if (operation) headers.set('Idempotency-Key', operation.idempotencyKey)
     if (typeof init.body === 'string') {
@@ -85,12 +156,8 @@ export class HttpMiteApi implements MiteApi {
       headers,
     })
 
-    const contentType = response.headers.get('content-type') ?? ''
-    const body: unknown = contentType.includes('application/json')
-      ? await response.json()
-      : null
-
     if (!response.ok) {
+      const body: unknown = await response.json().catch(() => null)
       if (isApiErrorBody(body)) {
         const retryAfter = response.headers.get('retry-after')
         const retryAfterSeconds = retryAfter ? Number(retryAfter) : null
@@ -102,6 +169,20 @@ export class HttpMiteApi implements MiteApi {
       }
       throw new Error(`Mite API request failed with HTTP ${response.status}`)
     }
+
+    return response
+  }
+
+  async #request<TData>(
+    path: string,
+    init: RequestInit = {},
+    operation?: IdempotentOperation,
+  ): Promise<TData> {
+    const response = await this.#send(path, init, operation)
+    const contentType = response.headers.get('content-type') ?? ''
+    const body: unknown = contentType.includes('application/json')
+      ? await response.json()
+      : null
 
     if (!body || typeof body !== 'object' || !('data' in body)) {
       throw new Error('Mite API returned an invalid success response')
@@ -126,15 +207,51 @@ export class HttpMiteApi implements MiteApi {
   }
 
   async getArtifactContent(artifactId: string): Promise<Blob> {
-    const response = await this.#fetch(
-      `${this.#baseUrl}/v1/artifacts/${encodeId(artifactId)}/content`,
-      { headers: { Authorization: `Bearer ${this.#token}` } },
-    )
-    if (!response.ok) {
-      const body: unknown = await response.json().catch(() => null)
-      if (isApiErrorBody(body)) throw new MiteApiError(response.status, body)
-      throw new Error(`Artifact request failed with HTTP ${response.status}`)
+    const now = Date.now()
+    for (const [id, entry] of this.#artifacts) {
+      if (entry.expiresAt <= now) {
+        this.#artifactBytes -= entry.blob.size
+        this.#artifacts.delete(id)
+      }
     }
+    const cached = this.#artifacts.get(artifactId)
+    if (cached) {
+      this.#artifacts.delete(artifactId)
+      this.#artifacts.set(artifactId, cached)
+      return cached.blob
+    }
+    const pending = this.#artifactRequests.get(artifactId)
+    if (pending) return pending
+    const request = this.#fetchArtifactContent(artifactId)
+      .then((blob) => {
+        if (blob.size <= artifactCacheMaxBytes) {
+          while (
+            this.#artifacts.size >= artifactCacheMaxEntries ||
+            this.#artifactBytes + blob.size > artifactCacheMaxBytes
+          ) {
+            const oldest = this.#artifacts.entries().next().value
+            if (!oldest) break
+            this.#artifacts.delete(oldest[0])
+            this.#artifactBytes -= oldest[1].blob.size
+          }
+          this.#artifacts.set(artifactId, {
+            blob,
+            expiresAt: Date.now() + artifactCacheLifetimeMs,
+          })
+          this.#artifactBytes += blob.size
+        }
+        return blob
+      })
+      .finally(() => this.#artifactRequests.delete(artifactId))
+    this.#artifactRequests.set(artifactId, request)
+    return request
+  }
+
+  async #fetchArtifactContent(artifactId: string): Promise<Blob> {
+    const response = await this.#send(
+      `/v1/artifacts/${encodeId(artifactId)}/content`,
+      { headers: { Accept: 'image/jpeg' } },
+    )
     return response.blob()
   }
 
@@ -286,6 +403,25 @@ export class HttpMiteApi implements MiteApi {
     )
   }
 
+  async listSessionGuideDrafts(sessionId: string): Promise<GuideDraft[]> {
+    const data = await this.#request<{ items: GuideDraft[] }>(
+      `/v1/support-sessions/${encodeId(sessionId)}/guide-drafts`,
+    )
+    return data.items
+  }
+
+  completeGuideReview(
+    sessionId: string,
+    input: CompleteGuideReviewInput,
+    operation: IdempotentOperation,
+  ): Promise<{ guides: GuideDetail[]; supportSession: SupportSession }> {
+    return this.#request(
+      `/v1/support-sessions/${encodeId(sessionId)}/complete-guide-review`,
+      { method: 'POST', body: JSON.stringify(input) },
+      operation,
+    )
+  }
+
   getGuideDraft(draftId: string): Promise<GuideDraft> {
     return this.#request(`/v1/guide-drafts/${encodeId(draftId)}`)
   }
@@ -358,6 +494,18 @@ export class HttpMiteApi implements MiteApi {
     )
   }
 
+  cancelGuideRun(
+    guideRunId: string,
+    input: CancelGuideRunInput,
+    operation: IdempotentOperation,
+  ): Promise<GuideRun> {
+    return this.#request(
+      `/v1/guide-runs/${encodeId(guideRunId)}/cancel`,
+      { method: 'POST', body: JSON.stringify(input) },
+      operation,
+    )
+  }
+
   requestSupportFromGuideRun(
     guideRunId: string,
     input: CreateSupportRequestFromGuideRunInput,
@@ -377,6 +525,17 @@ export class HttpMiteApi implements MiteApi {
   ): Promise<SupportSession> {
     return this.#request(
       `/v1/support-sessions/${encodeId(supportSessionId)}/end-without-guide`,
+      { method: 'POST', body: JSON.stringify(input) },
+      operation,
+    )
+  }
+  endSupportSession(
+    supportSessionId: string,
+    input: EndSupportSessionInput,
+    operation: IdempotentOperation,
+  ): Promise<SupportSession> {
+    return this.#request(
+      `/v1/support-sessions/${encodeId(supportSessionId)}/end`,
       { method: 'POST', body: JSON.stringify(input) },
       operation,
     )

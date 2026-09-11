@@ -5,13 +5,16 @@ import type {
   CallSupportRequestInput,
   CompleteGuideMaterialBatchInput,
   CompleteGuideRunInput,
+  CancelGuideRunInput,
   CreateGuideMaterialBatchInput,
   CreateGuideRunInput,
   CreateSupportRequestFromGuideRunInput,
   CreateSupportRequestInput,
   EndSupportSessionWithoutGuideInput,
+  EndSupportSessionInput,
   GuideDetail,
   GuideDraft,
+  CompleteGuideReviewInput,
   GuideGenerationJob,
   GuideMaterial,
   GuideMaterialBatch,
@@ -26,6 +29,10 @@ import type {
   SupportSession,
   UpdateGuideDraftInput,
   UpdateGuideRunInput,
+  UserPresence,
+  CompanionStatus,
+  UpdateSupportRequestAcknowledgementInput,
+  PushSubscriptionInput,
 } from './types'
 
 export interface IdempotentOperation {
@@ -48,6 +55,20 @@ export interface GuideMaterialUploadInput {
 }
 
 export interface MiteApi {
+  recordPresenceHeartbeat(): Promise<UserPresence>
+  getCompanionStatus(): Promise<CompanionStatus>
+  updateSupportRequestAcknowledgement(
+    supportRequestId: string,
+    input: UpdateSupportRequestAcknowledgementInput,
+  ): Promise<SupportRequest>
+  cancelSupportRequest(
+    supportRequestId: string,
+    expectedRevision: number,
+    operation: IdempotentOperation,
+  ): Promise<SupportRequest>
+  getVapidPublicKey(): Promise<string>
+  upsertPushSubscription(input: PushSubscriptionInput): Promise<boolean>
+  deletePushSubscription(endpoint: string): Promise<void>
   uploadArtifact(
     input: ArtifactUploadInput,
     operation: IdempotentOperation,
@@ -104,6 +125,12 @@ export interface MiteApi {
     input: RetryGuideGenerationJobInput,
     operation: IdempotentOperation,
   ): Promise<GuideGenerationJob>
+  listSessionGuideDrafts(sessionId: string): Promise<GuideDraft[]>
+  completeGuideReview(
+    sessionId: string,
+    input: CompleteGuideReviewInput,
+    operation: IdempotentOperation,
+  ): Promise<{ guides: GuideDetail[]; supportSession: SupportSession }>
   getGuideDraft(draftId: string): Promise<GuideDraft>
   updateGuideDraft(
     draftId: string,
@@ -130,11 +157,21 @@ export interface MiteApi {
     input: CompleteGuideRunInput,
     operation: IdempotentOperation,
   ): Promise<GuideRun>
+  cancelGuideRun(
+    guideRunId: string,
+    input: CancelGuideRunInput,
+    operation: IdempotentOperation,
+  ): Promise<GuideRun>
   requestSupportFromGuideRun(
     guideRunId: string,
     input: CreateSupportRequestFromGuideRunInput,
     operation: IdempotentOperation,
   ): Promise<{ guideRun: GuideRun; supportRequest: SupportRequest }>
+  endSupportSession(
+    supportSessionId: string,
+    input: EndSupportSessionInput,
+    operation: IdempotentOperation,
+  ): Promise<SupportSession>
   endSupportSessionWithoutGuide(
     supportSessionId: string,
     input: EndSupportSessionWithoutGuideInput,

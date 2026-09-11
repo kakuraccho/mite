@@ -144,6 +144,32 @@ SELECT *
 FROM support_requests
 WHERE id = $1;
 
+-- name: LockArtifactSupportRequestByID :one
+SELECT *
+FROM support_requests
+WHERE id = $1
+FOR UPDATE;
+
+-- name: UpdateSupportRequestAcknowledgement :one
+UPDATE support_requests
+SET
+    acknowledged_at = sqlc.arg(acknowledged_at),
+    acknowledgement_kind = sqlc.arg(acknowledgement_kind),
+    estimated_support_at = sqlc.narg(estimated_support_at),
+    updated_at = sqlc.arg(updated_at),
+    revision = revision + 1
+WHERE id = sqlc.arg(id)
+RETURNING *;
+
+-- name: CancelPendingSupportRequest :one
+UPDATE support_requests
+SET
+    status = 'CANCELLED',
+    updated_at = sqlc.arg(updated_at),
+    revision = revision + 1
+WHERE id = sqlc.arg(id)
+RETURNING *;
+
 -- name: ListSupportRequestsForPair :many
 SELECT *
 FROM support_requests

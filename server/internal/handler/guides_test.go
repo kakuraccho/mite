@@ -41,11 +41,11 @@ func guideHandlerContext() context.Context {
 func TestGuideHandlerCreateMaterialBatch(t *testing.T) {
 	now := time.Date(2026, 9, 4, 1, 2, 3, 0, time.UTC)
 	stub := &guideUseCasesStub{batchResult: service.GuideMaterialBatchCreated{
-		Batch:          domain.GuideMaterialBatch{ID: "batch_test", SupportSessionID: "session_test", Status: domain.GuideMaterialBatchUploading, CaptureIntervalSeconds: 5, ExpectedItemCount: 2, CapturedFrom: now, CapturedTo: now.Add(5 * time.Second), CreatedAt: now, UpdatedAt: now, Revision: 1},
+		Batch:          domain.GuideMaterialBatch{ID: "batch_test", SupportSessionID: "session_test", Status: domain.GuideMaterialBatchUploading, CaptureIntervalSeconds: 10, ExpectedItemCount: 2, CapturedFrom: now, CapturedTo: now.Add(5 * time.Second), CreatedAt: now, UpdatedAt: now, Revision: 1},
 		SupportSession: domain.SupportSession{ID: "session_test", UserID: "user_demo", FamilyID: "family_demo", Status: domain.SupportSessionGeneratingGuide, CreatedAt: now, UpdatedAt: now, Revision: 2},
 	}}
 	handler := NewGuideHandler(stub)
-	body := generated.CreateGuideMaterialBatchJSONRequestBody{ExpectedSessionRevision: 1, CaptureIntervalSeconds: 5, ExpectedItemCount: 2, CapturedFrom: &now, CapturedTo: timePointer(now.Add(5 * time.Second))}
+	body := generated.CreateGuideMaterialBatchJSONRequestBody{ExpectedSessionRevision: 1, CaptureIntervalSeconds: 10, ExpectedItemCount: 2, CapturedFrom: &now, CapturedTo: timePointer(now.Add(5 * time.Second))}
 	response, err := handler.CreateGuideMaterialBatch(guideHandlerContext(), generated.CreateGuideMaterialBatchRequestObject{Id: "session_test", Params: generated.CreateGuideMaterialBatchParams{IdempotencyKey: "idem-batch"}, Body: &body})
 	if err != nil {
 		t.Fatalf("CreateGuideMaterialBatch: %v", err)
@@ -72,7 +72,7 @@ func TestGuideHandlerCreateMaterialMultipart(t *testing.T) {
 	now := time.Date(2026, 9, 4, 1, 2, 3, 0, time.UTC)
 	stub := &guideUseCasesStub{materialStatus: 201, materialResult: service.GuideMaterialCreated{
 		Material: domain.GuideMaterial{ID: "material_test", BatchID: "batch_test", ClientCaptureID: "capture_test", ArtifactID: "artifact_test", Sequence: 1, CapturedAt: now, CreatedAt: now},
-		Batch:    domain.GuideMaterialBatch{ID: "batch_test", SupportSessionID: "session_test", Status: domain.GuideMaterialBatchUploading, CaptureIntervalSeconds: 5, ExpectedItemCount: 1, ReceivedItemCount: 1, CapturedFrom: now, CapturedTo: now, CreatedAt: now, UpdatedAt: now, Revision: 2},
+		Batch:    domain.GuideMaterialBatch{ID: "batch_test", SupportSessionID: "session_test", Status: domain.GuideMaterialBatchUploading, CaptureIntervalSeconds: 10, ExpectedItemCount: 1, ReceivedItemCount: 1, CapturedFrom: now, CapturedTo: now, CreatedAt: now, UpdatedAt: now, Revision: 2},
 	}}
 	handler := NewGuideHandler(stub)
 	reader := newGuideMultipartReader(t, []multipartField{{"clientCaptureId", "capture_test"}, {"sequence", "1"}, {"capturedAt", now.Format(time.RFC3339)}, {"file", "jpeg-bytes"}})

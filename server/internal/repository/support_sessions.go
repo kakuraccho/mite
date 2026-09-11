@@ -34,11 +34,12 @@ type SupportSessionTransaction interface {
 	GenerationJobStatus(context.Context, domain.ID) (domain.GuideGenerationJobStatus, error)
 	CleanupArtifacts(context.Context, domain.ID) ([]CleanupArtifact, error)
 	QueueArtifactDeletion(context.Context, domain.ID, CleanupArtifact, time.Time) error
+	EndSavedGuide(context.Context, domain.ID, time.Time) (domain.SupportSession, error)
 	EndWithoutGuide(context.Context, domain.ID, domain.SupportSessionEndReason, time.Time) (domain.SupportSession, error)
 	DeleteGenerationJob(context.Context, domain.ID) error
 	DeleteGuideMaterials(context.Context, domain.ID) error
 	DeleteGuideMaterialBatch(context.Context, domain.ID) error
-	DeleteGuideDraft(context.Context, domain.ID) error
+	DeleteGuideDrafts(context.Context, domain.ID) error
 	BeginIdempotency(context.Context, domain.IdempotencyScope, domain.RequestHash, time.Time) (bool, error)
 	LockIdempotency(context.Context, domain.IdempotencyScope) (domain.IdempotencyRecord, bool, error)
 	TakeOverIdempotency(context.Context, domain.IdempotencyScope, time.Time) (domain.IdempotencyRecord, bool, error)
@@ -232,8 +233,8 @@ func (t *postgresSupportSessionTransaction) DeleteGuideMaterials(ctx context.Con
 func (t *postgresSupportSessionTransaction) DeleteGuideMaterialBatch(ctx context.Context, id domain.ID) error {
 	return t.queries.SessionDeleteGuideMaterialBatch(ctx, string(id))
 }
-func (t *postgresSupportSessionTransaction) DeleteGuideDraft(ctx context.Context, id domain.ID) error {
-	return t.queries.SessionDeleteGuideDraft(ctx, string(id))
+func (t *postgresSupportSessionTransaction) DeleteGuideDrafts(ctx context.Context, id domain.ID) error {
+	return t.queries.SessionDeleteGuideDrafts(ctx, string(id))
 }
 
 func (t *postgresSupportSessionTransaction) BeginIdempotency(ctx context.Context, scope domain.IdempotencyScope, hash domain.RequestHash, now time.Time) (bool, error) {
@@ -297,7 +298,9 @@ func sessionRequestFromDB(value *dbgen.SupportRequest) (domain.SupportRequest, e
 		ID: domain.ID(value.ID), UserID: domain.ID(value.UserID), FamilyID: domain.ID(value.FamilyID),
 		InitialScreenshotArtifactID: domain.ID(value.InitialScreenshotArtifactID), Comment: value.Comment,
 		Status: domain.SupportRequestStatus(value.Status), SupportSessionID: stringPointerToID(value.SupportSessionID),
-		CreatedAt: value.CreatedAt.Time, UpdatedAt: value.UpdatedAt.Time, Revision: value.Revision,
+		AcknowledgedAt: optionalTime(value.AcknowledgedAt), AcknowledgementKind: stringPointerToAcknowledgementKind(value.AcknowledgementKind),
+		EstimatedSupportAt: optionalTime(value.EstimatedSupportAt),
+		CreatedAt:          value.CreatedAt.Time, UpdatedAt: value.UpdatedAt.Time, Revision: value.Revision,
 	}
 	if len(value.GuideContext) > 0 {
 		var raw struct {
@@ -359,4 +362,12 @@ func sessionRepositoryError(operation string, err error) error {
 		return domain.NewError(domain.CodeNotFound, "対象が存在しない")
 	}
 	return fmt.Errorf("%s: %w", operation, err)
+}
+
+func (t *postgresSupportSessionTransaction) EndSavedGuide(ctx context.Context, id domain.ID, now time.Time) (domain.SupportSession, error) {
+	row, err := t.queries.SessionEndSavedGuide(ctx, dbgen.SessionEndSavedGuideParams{ID: string(id), EndedAt: pgTimestamp(now)})
+	if err != nil {
+		return domain.SupportSession{}, sessionRepositoryError("end saved guide session", err)
+	}
+	return sessionFromDB(row)
 }

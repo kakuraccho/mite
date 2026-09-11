@@ -16,11 +16,12 @@ Miteは、PC操作の途中で次に何をすればよいか分からなくな�
 
 ## 現在の開発状況
 
-MVP実装仕様に基づき、利用者・家族向けElectronクライアント、API契約、共有APIクライアント、DBスキーマおよびGoサーバーのA/B/Cフローを実装しています。ローカル統合確認後、Windows実機と外部サービスを使った最終E2Eへ進みます。
+MVP実装仕様に基づき、利用者・家族向けElectronクライアント、家族向け補助PWA、API契約、共有APIクライアント、DBスキーマおよびGoサーバーのA/B/Cフローを実装しています。ローカル統合確認後、Windows・スマートフォン実機と外部サービスを使った最終E2Eへ進みます。
 
 ## MVPの構成
 
 - 利用者側と家族側で、それぞれ独立したWindows向けElectronアプリを提供する
+- 家族は補助PWAから利用者PCの接続状態、支援待ちの内容と返答を確認し、Web Pushを受け取れる
 - 利用者本人が操作し、家族は音声、画面共有、マーキングで支援する
 - 相談画像と画面共有はプライマリ画面全体を使い、相談画像は送信前にボタンで撮り直せる
 - 支援中の画面からガイドの下書きを生成し、家族が確認・編集して保存する
@@ -31,13 +32,14 @@ MVP実装仕様に基づき、利用者・家族向けElectronクライアント
 | 対象                       | 技術                                  |
 | -------------------------- | ------------------------------------- |
 | クライアント               | Electron、React、TypeScript、Vite     |
+| 家族向け補助PWA            | React、TypeScript、Vite、Web Push     |
 | サーバー                   | Go 1.26系、Chi v5                     |
 | API契約                    | OpenAPI 3.0.3                         |
 | データ・画像保存           | Supabase PostgreSQL、Supabase Storage |
 | 音声・画面共有・マーキング | LiveKit Cloud                         |
 | ガイド生成                 | Gemini API                            |
 
-MVPでは固定の1対1とデモ用Bearerトークンを使用します。遠隔操作、カメラ映像、通話録音、本格的なアカウント機能、外部プッシュ通知は対象外です。
+MVPでは固定の1対1とデモ用Bearerトークンを使用します。遠隔操作、カメラ映像、通話録音、本格的なアカウント機能は対象外です。Web Pushは家族向け補助PWAの一般的な通知に限り、相談内容や画像を通知本文へ含めません。
 
 ## ドキュメント
 
@@ -45,9 +47,12 @@ MVPでは固定の1対1とデモ用Bearerトークンを使用します。遠隔
 | ---- | ------------ |
 | 初回セットアップ・環境変数の設定・ローカル起動 | [セットアップガイド](docs/setup.md) |
 | コード生成・テスト・ビルド・Windows配布 | [開発ガイド](docs/development.md) |
+| 自動検証・VPSへのAPIとPWAのデプロイ設定 | [MiteのCI/CD](docs/ci-cd.md) |
 | API接続・再送・復旧・E2E確認 | [サーバー・クライアント接続ガイド](docs/server-client-integration.md) |
 | REST APIとWebSocketの手動確認 | [サーバー手動検証ガイド](server/MANUAL_TESTING.md) |
 | MVPの範囲・API・状態・画面・受け入れ条件 | [MVP実装仕様書](docs/specification.md) |
+| 実利用フィードバックへの対応・自動検証結果 | [対応記録](docs/family-support-improvements.md) |
+| devへの取り込み確認・ブランチ整理・保守検証・残る実機確認 | [保守記録](docs/maintenance-audit.md) |
 | 対象ユーザー・課題・提供価値 | [プロダクトシート](docs/PS.md) |
 
 実装時の判断はMVP実装仕様書を優先してください。
@@ -57,7 +62,7 @@ MVPでは固定の1対1とデモ用Bearerトークンを使用します。遠隔
 ```text
 .
 ├── api/        # OpenAPIによるAPI契約
-├── client/     # 利用者・家族向けElectronクライアント
+├── client/     # 利用者・家族向けElectronクライアントと家族向けPWA
 ├── packages/   # 共有APIクライアント
 ├── docs/       # プロダクトに関する仕様・資料
 ├── mock/       # 画面・動作検証用のプロトタイプ
@@ -65,7 +70,7 @@ MVPでは固定の1対1とデモ用Bearerトークンを使用します。遠隔
 └── supabase/   # PostgreSQL migrationとseed
 ```
 
-ルートと`client/`は別のnpm workspaceです。ルートはAPI生成と共有APIクライアント、`client/`は2つのElectronアプリとクライアント共通packageを管理します。
+ルートと`client/`は別のnpm workspaceです。ルートはAPI生成と共有APIクライアント、`client/`は2つのElectronアプリ、家族向けPWAとクライアント共通packageを管理します。
 
 ## 起動する
 
@@ -78,12 +83,16 @@ MVPでは固定の1対1とデモ用Bearerトークンを使用します。遠隔
 | Goサーバー | `server/` | `go run ./cmd/api` |
 | 利用者側アプリ | `client/` | `npm run dev:user` |
 | 家族側アプリ | `client/` | `npm run dev:family` |
+| 家族向けPWA | `client/` | `npm run dev:pwa` |
+
+VPSの初回設定とデプロイ後、家族向けPWAは[https://priv.chi-llenge.com/mite/pwa/](https://priv.chi-llenge.com/mite/pwa/)で開きます。初回公開手順は[MiteのCI/CD](docs/ci-cd.md#2-家族向けpwaの初回vpsapache設定)を参照してください。
 
 WSLから起動した利用者アプリではWindows画面全体を撮影・共有できません。黒いスクリーンショットになる場合は、[Windows側での起動手順](docs/setup.md#wslでスクリーンショットが真っ黒になる場合)を参照してください。
 
 ## 既知の未確認事項
 
 - Windows AppBarの登録、他アプリの最大化との共存、DPI・表示設定変更、タスクバーとの競合および終了時の予約解除は、Windows 11実機での確認が必要です。
-- 全画面撮影・共有時にプライマリ画面だけが使われ、Mite自身のパネルやマーキングが写らないことは、Windows 11実機での確認が必要です。[確認手順](docs/development.md#全画面撮影と共有の確認)を参照してください。Linuxでは静止画取得時にMiteを一時的に隠しますが、共有映像からの除外は対応していません。
+- 全画面撮影・共有時にプライマリ画面だけが使われ、Mite自身のパネルや丸・マウス・キーの案内が写らないことは、Windows 11実機での確認が必要です。[確認手順](docs/development.md#全画面撮影と共有の確認)を参照してください。Linuxでは静止画取得時にMiteを一時的に隠しますが、共有映像からの除外は対応していません。
 - 実LiveKit Cloudによる音声・画面共有・マーキングと、実Gemini APIによるガイド生成は、有効な認証情報を用意した環境でのsmoke testが必要です。
 - 2台のWindows PCと公開Goサーバーを使う最終E2Eは未実施です。
+- iPhoneのホーム画面へインストールしたPWAでのPush購読、ロック画面通知、再接続通知は、HTTPS公開環境と実端末での確認が必要です。

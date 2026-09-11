@@ -19,6 +19,21 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for AcceptSupportSessionRequestConsentTextVersion.
+const (
+	AcceptSupportSessionRequestConsentTextVersionV4 AcceptSupportSessionRequestConsentTextVersion = "v4"
+)
+
+// Valid indicates whether the value is a known member of the AcceptSupportSessionRequestConsentTextVersion enum.
+func (e AcceptSupportSessionRequestConsentTextVersion) Valid() bool {
+	switch e {
+	case AcceptSupportSessionRequestConsentTextVersionV4:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ArtifactMimeType.
 const (
 	Imagejpeg ArtifactMimeType = "image/jpeg"
@@ -57,13 +72,22 @@ func (e ArtifactPurpose) Valid() bool {
 
 // Defines values for ConsentTextVersion.
 const (
-	V1 ConsentTextVersion = "v1"
+	ConsentTextVersionV1 ConsentTextVersion = "v1"
+	ConsentTextVersionV2 ConsentTextVersion = "v2"
+	ConsentTextVersionV3 ConsentTextVersion = "v3"
+	ConsentTextVersionV4 ConsentTextVersion = "v4"
 )
 
 // Valid indicates whether the value is a known member of the ConsentTextVersion enum.
 func (e ConsentTextVersion) Valid() bool {
 	switch e {
-	case V1:
+	case ConsentTextVersionV1:
+		return true
+	case ConsentTextVersionV2:
+		return true
+	case ConsentTextVersionV3:
+		return true
+	case ConsentTextVersionV4:
 		return true
 	default:
 		return false
@@ -87,13 +111,13 @@ func (e CreateArtifactRequestPurpose) Valid() bool {
 
 // Defines values for CreateGuideMaterialBatchRequestCaptureIntervalSeconds.
 const (
-	CreateGuideMaterialBatchRequestCaptureIntervalSecondsN5 CreateGuideMaterialBatchRequestCaptureIntervalSeconds = 5
+	CreateGuideMaterialBatchRequestCaptureIntervalSecondsN10 CreateGuideMaterialBatchRequestCaptureIntervalSeconds = 10
 )
 
 // Valid indicates whether the value is a known member of the CreateGuideMaterialBatchRequestCaptureIntervalSeconds enum.
 func (e CreateGuideMaterialBatchRequestCaptureIntervalSeconds) Valid() bool {
 	switch e {
-	case CreateGuideMaterialBatchRequestCaptureIntervalSecondsN5:
+	case CreateGuideMaterialBatchRequestCaptureIntervalSecondsN10:
 		return true
 	default:
 		return false
@@ -267,12 +291,15 @@ func (e GuideGenerationJobStatus) Valid() bool {
 
 // Defines values for GuideMaterialBatchCaptureIntervalSeconds.
 const (
-	GuideMaterialBatchCaptureIntervalSecondsN5 GuideMaterialBatchCaptureIntervalSeconds = 5
+	GuideMaterialBatchCaptureIntervalSecondsN10 GuideMaterialBatchCaptureIntervalSeconds = 10
+	GuideMaterialBatchCaptureIntervalSecondsN5  GuideMaterialBatchCaptureIntervalSeconds = 5
 )
 
 // Valid indicates whether the value is a known member of the GuideMaterialBatchCaptureIntervalSeconds enum.
 func (e GuideMaterialBatchCaptureIntervalSeconds) Valid() bool {
 	switch e {
+	case GuideMaterialBatchCaptureIntervalSecondsN10:
+		return true
 	case GuideMaterialBatchCaptureIntervalSecondsN5:
 		return true
 	default:
@@ -318,6 +345,7 @@ func (e GuideRunAction) Valid() bool {
 
 // Defines values for GuideRunStatus.
 const (
+	GuideRunStatusCANCELLED        GuideRunStatus = "CANCELLED"
 	GuideRunStatusCOMPLETED        GuideRunStatus = "COMPLETED"
 	GuideRunStatusINPROGRESS       GuideRunStatus = "IN_PROGRESS"
 	GuideRunStatusPAUSEDFORSUPPORT GuideRunStatus = "PAUSED_FOR_SUPPORT"
@@ -326,6 +354,8 @@ const (
 // Valid indicates whether the value is a known member of the GuideRunStatus enum.
 func (e GuideRunStatus) Valid() bool {
 	switch e {
+	case GuideRunStatusCANCELLED:
+		return true
 	case GuideRunStatusCOMPLETED:
 		return true
 	case GuideRunStatusINPROGRESS:
@@ -337,21 +367,81 @@ func (e GuideRunStatus) Valid() bool {
 	}
 }
 
+// Defines values for PresenceStatus.
+const (
+	CONNECTING PresenceStatus = "CONNECTING"
+	OFFLINE    PresenceStatus = "OFFLINE"
+	ONLINE     PresenceStatus = "ONLINE"
+)
+
+// Valid indicates whether the value is a known member of the PresenceStatus enum.
+func (e PresenceStatus) Valid() bool {
+	switch e {
+	case CONNECTING:
+		return true
+	case OFFLINE:
+		return true
+	case ONLINE:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PushSubscriptionStateResponseDataEnabled.
+const (
+	True PushSubscriptionStateResponseDataEnabled = true
+)
+
+// Valid indicates whether the value is a known member of the PushSubscriptionStateResponseDataEnabled enum.
+func (e PushSubscriptionStateResponseDataEnabled) Valid() bool {
+	switch e {
+	case True:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SupportAcknowledgementKind.
+const (
+	NOW       SupportAcknowledgementKind = "NOW"
+	SCHEDULED SupportAcknowledgementKind = "SCHEDULED"
+	UNKNOWN   SupportAcknowledgementKind = "UNKNOWN"
+)
+
+// Valid indicates whether the value is a known member of the SupportAcknowledgementKind enum.
+func (e SupportAcknowledgementKind) Valid() bool {
+	switch e {
+	case NOW:
+		return true
+	case SCHEDULED:
+		return true
+	case UNKNOWN:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SupportRequestStatus.
 const (
-	INSUPPORT SupportRequestStatus = "IN_SUPPORT"
-	PENDING   SupportRequestStatus = "PENDING"
-	RESOLVED  SupportRequestStatus = "RESOLVED"
+	SupportRequestStatusCANCELLED SupportRequestStatus = "CANCELLED"
+	SupportRequestStatusINSUPPORT SupportRequestStatus = "IN_SUPPORT"
+	SupportRequestStatusPENDING   SupportRequestStatus = "PENDING"
+	SupportRequestStatusRESOLVED  SupportRequestStatus = "RESOLVED"
 )
 
 // Valid indicates whether the value is a known member of the SupportRequestStatus enum.
 func (e SupportRequestStatus) Valid() bool {
 	switch e {
-	case INSUPPORT:
+	case SupportRequestStatusCANCELLED:
 		return true
-	case PENDING:
+	case SupportRequestStatusINSUPPORT:
 		return true
-	case RESOLVED:
+	case SupportRequestStatusPENDING:
+		return true
+	case SupportRequestStatusRESOLVED:
 		return true
 	default:
 		return false
@@ -384,25 +474,28 @@ func (e SupportSessionEndReason) Valid() bool {
 
 // Defines values for SupportSessionStatus.
 const (
-	ACTIVE          SupportSessionStatus = "ACTIVE"
-	ENDED           SupportSessionStatus = "ENDED"
-	GENERATINGGUIDE SupportSessionStatus = "GENERATING_GUIDE"
-	REVIEWINGGUIDE  SupportSessionStatus = "REVIEWING_GUIDE"
-	RINGING         SupportSessionStatus = "RINGING"
+	SupportSessionStatusACTIVE          SupportSessionStatus = "ACTIVE"
+	SupportSessionStatusENDED           SupportSessionStatus = "ENDED"
+	SupportSessionStatusGENERATINGGUIDE SupportSessionStatus = "GENERATING_GUIDE"
+	SupportSessionStatusGUIDESAVED      SupportSessionStatus = "GUIDE_SAVED"
+	SupportSessionStatusREVIEWINGGUIDE  SupportSessionStatus = "REVIEWING_GUIDE"
+	SupportSessionStatusRINGING         SupportSessionStatus = "RINGING"
 )
 
 // Valid indicates whether the value is a known member of the SupportSessionStatus enum.
 func (e SupportSessionStatus) Valid() bool {
 	switch e {
-	case ACTIVE:
+	case SupportSessionStatusACTIVE:
 		return true
-	case ENDED:
+	case SupportSessionStatusENDED:
 		return true
-	case GENERATINGGUIDE:
+	case SupportSessionStatusGENERATINGGUIDE:
 		return true
-	case REVIEWINGGUIDE:
+	case SupportSessionStatusGUIDESAVED:
 		return true
-	case RINGING:
+	case SupportSessionStatusREVIEWINGGUIDE:
+		return true
+	case SupportSessionStatusRINGING:
 		return true
 	default:
 		return false
@@ -429,9 +522,17 @@ func (e UserRole) Valid() bool {
 
 // AcceptSupportSessionRequest defines model for AcceptSupportSessionRequest.
 type AcceptSupportSessionRequest struct {
-	Consent                 Consent `json:"consent"`
-	ExpectedSessionRevision int64   `json:"expectedSessionRevision"`
+	Consent struct {
+		Audio           bool                                          `json:"audio"`
+		PeriodicCapture bool                                          `json:"periodicCapture"`
+		ScreenShare     bool                                          `json:"screenShare"`
+		TextVersion     AcceptSupportSessionRequestConsentTextVersion `json:"textVersion"`
+	} `json:"consent"`
+	ExpectedSessionRevision int64 `json:"expectedSessionRevision"`
 }
+
+// AcceptSupportSessionRequestConsentTextVersion defines model for AcceptSupportSessionRequest.Consent.TextVersion.
+type AcceptSupportSessionRequestConsentTextVersion string
 
 // Artifact defines model for Artifact.
 type Artifact struct {
@@ -474,10 +575,32 @@ type CallSupportRequestResponse struct {
 	} `json:"data"`
 }
 
+// CancelGuideRunRequest defines model for CancelGuideRunRequest.
+type CancelGuideRunRequest = CompleteGuideRunRequest
+
+// CancelSupportRequestRequest defines model for CancelSupportRequestRequest.
+type CancelSupportRequestRequest struct {
+	ExpectedRevision int64 `json:"expectedRevision"`
+}
+
+// CompanionStatusResponse defines model for CompanionStatusResponse.
+type CompanionStatusResponse struct {
+	Data struct {
+		Presence UserPresence `json:"presence"`
+		User     User         `json:"user"`
+	} `json:"data"`
+}
+
 // CompleteGuideMaterialBatchRequest defines model for CompleteGuideMaterialBatchRequest.
 type CompleteGuideMaterialBatchRequest struct {
 	ExpectedBatchRevision int64 `json:"expectedBatchRevision"`
 	ExpectedItemCount     int   `json:"expectedItemCount"`
+}
+
+// CompleteGuideReviewRequest defines model for CompleteGuideReviewRequest.
+type CompleteGuideReviewRequest struct {
+	Drafts                  []GuideDraftRevision `json:"drafts"`
+	ExpectedSessionRevision int64                `json:"expectedSessionRevision"`
 }
 
 // CompleteGuideRunRequest defines model for CompleteGuideRunRequest.
@@ -487,13 +610,15 @@ type CompleteGuideRunRequest struct {
 
 // Consent defines model for Consent.
 type Consent struct {
-	Audio           bool               `json:"audio"`
-	PeriodicCapture bool               `json:"periodicCapture"`
-	ScreenShare     bool               `json:"screenShare"`
-	TextVersion     ConsentTextVersion `json:"textVersion"`
+	Audio           bool `json:"audio"`
+	PeriodicCapture bool `json:"periodicCapture"`
+	ScreenShare     bool `json:"screenShare"`
+
+	// TextVersion v1・v2・v3は過去の同意。新しい応答は10秒撮影、生成・レビュー中の音声通話継続と共有停止、全件保存と同時の支援終了を説明するv4を使う。
+	TextVersion ConsentTextVersion `json:"textVersion"`
 }
 
-// ConsentTextVersion defines model for Consent.TextVersion.
+// ConsentTextVersion v1・v2・v3は過去の同意。新しい応答は10秒撮影、生成・レビュー中の音声通話継続と共有停止、全件保存と同時の支援終了を説明するv4を使う。
 type ConsentTextVersion string
 
 // CreateArtifactRequest defines model for CreateArtifactRequest.
@@ -544,8 +669,18 @@ type CreateSupportRequestRequest struct {
 	InitialScreenshotArtifactId string  `json:"initialScreenshotArtifactId"`
 }
 
+// DeletePushSubscriptionRequest defines model for DeletePushSubscriptionRequest.
+type DeletePushSubscriptionRequest struct {
+	Endpoint string `json:"endpoint"`
+}
+
 // EmptyRequest defines model for EmptyRequest.
 type EmptyRequest = map[string]interface{}
+
+// EndSupportSessionRequest defines model for EndSupportSessionRequest.
+type EndSupportSessionRequest struct {
+	ExpectedSessionRevision int64 `json:"expectedSessionRevision"`
+}
 
 // EndSupportSessionWithoutGuideRequest defines model for EndSupportSessionWithoutGuideRequest.
 type EndSupportSessionWithoutGuideRequest struct {
@@ -615,9 +750,22 @@ type GuideDraft struct {
 	UpdatedAt        time.Time        `json:"updatedAt"`
 }
 
+// GuideDraftListResponse defines model for GuideDraftListResponse.
+type GuideDraftListResponse struct {
+	Data struct {
+		Items []GuideDraft `json:"items"`
+	} `json:"data"`
+}
+
 // GuideDraftResponse defines model for GuideDraftResponse.
 type GuideDraftResponse struct {
 	Data GuideDraft `json:"data"`
+}
+
+// GuideDraftRevision defines model for GuideDraftRevision.
+type GuideDraftRevision struct {
+	ExpectedRevision int64  `json:"expectedRevision"`
+	Id               string `json:"id"`
 }
 
 // GuideDraftStatus defines model for GuideDraftStatus.
@@ -628,17 +776,19 @@ type GuideGenerationErrorCode string
 
 // GuideGenerationJob defines model for GuideGenerationJob.
 type GuideGenerationJob struct {
-	Attempt      int                       `json:"attempt"`
-	BatchId      string                    `json:"batchId"`
-	CreatedAt    time.Time                 `json:"createdAt"`
-	ErrorCode    *GuideGenerationErrorCode `json:"errorCode"`
-	FinishedAt   *time.Time                `json:"finishedAt"`
-	GuideDraftId *string                   `json:"guideDraftId"`
-	Id           string                    `json:"id"`
-	Revision     int64                     `json:"revision"`
-	StartedAt    *time.Time                `json:"startedAt"`
-	Status       GuideGenerationJobStatus  `json:"status"`
-	UpdatedAt    time.Time                 `json:"updatedAt"`
+	Attempt    int                       `json:"attempt"`
+	BatchId    string                    `json:"batchId"`
+	CreatedAt  time.Time                 `json:"createdAt"`
+	ErrorCode  *GuideGenerationErrorCode `json:"errorCode"`
+	FinishedAt *time.Time                `json:"finishedAt"`
+
+	// GuideDraftId 生成順で先頭の下書きID。全件は支援の下書き一覧APIで取得する
+	GuideDraftId *string                  `json:"guideDraftId"`
+	Id           string                   `json:"id"`
+	Revision     int64                    `json:"revision"`
+	StartedAt    *time.Time               `json:"startedAt"`
+	Status       GuideGenerationJobStatus `json:"status"`
+	UpdatedAt    time.Time                `json:"updatedAt"`
 }
 
 // GuideGenerationJobResponse defines model for GuideGenerationJobResponse.
@@ -669,6 +819,7 @@ type GuideMaterial struct {
 
 // GuideMaterialBatch defines model for GuideMaterialBatch.
 type GuideMaterialBatch struct {
+	// CaptureIntervalSeconds 新規は10。5は変更前の履歴。
 	CaptureIntervalSeconds GuideMaterialBatchCaptureIntervalSeconds `json:"captureIntervalSeconds"`
 	CapturedFrom           time.Time                                `json:"capturedFrom"`
 	CapturedTo             time.Time                                `json:"capturedTo"`
@@ -683,7 +834,7 @@ type GuideMaterialBatch struct {
 	UpdatedAt              time.Time                                `json:"updatedAt"`
 }
 
-// GuideMaterialBatchCaptureIntervalSeconds defines model for GuideMaterialBatch.CaptureIntervalSeconds.
+// GuideMaterialBatchCaptureIntervalSeconds 新規は10。5は変更前の履歴。
 type GuideMaterialBatchCaptureIntervalSeconds int
 
 // GuideMaterialBatchCompletedResponse defines model for GuideMaterialBatchCompletedResponse.
@@ -719,6 +870,14 @@ type GuideMaterialCreatedResponse struct {
 	Data struct {
 		Batch    GuideMaterialBatch `json:"batch"`
 		Material GuideMaterial      `json:"material"`
+	} `json:"data"`
+}
+
+// GuideReviewCompletedResponse defines model for GuideReviewCompletedResponse.
+type GuideReviewCompletedResponse struct {
+	Data struct {
+		Guides         []GuideDetail  `json:"guides"`
+		SupportSession SupportSession `json:"supportSession"`
 	} `json:"data"`
 }
 
@@ -801,6 +960,26 @@ type LiveKitTokenResponse struct {
 	} `json:"data"`
 }
 
+// PresenceStatus defines model for PresenceStatus.
+type PresenceStatus string
+
+// PushSubscriptionRequest defines model for PushSubscriptionRequest.
+type PushSubscriptionRequest struct {
+	Auth     string `json:"auth"`
+	Endpoint string `json:"endpoint"`
+	P256dh   string `json:"p256dh"`
+}
+
+// PushSubscriptionStateResponse defines model for PushSubscriptionStateResponse.
+type PushSubscriptionStateResponse struct {
+	Data struct {
+		Enabled PushSubscriptionStateResponseDataEnabled `json:"enabled"`
+	} `json:"data"`
+}
+
+// PushSubscriptionStateResponseDataEnabled defines model for PushSubscriptionStateResponse.Data.Enabled.
+type PushSubscriptionStateResponseDataEnabled bool
+
 // ResolveSupportSessionRequest defines model for ResolveSupportSessionRequest.
 type ResolveSupportSessionRequest struct {
 	ExpectedSessionRevision int64         `json:"expectedSessionRevision"`
@@ -817,19 +996,25 @@ type SaveGuideDraftRequest struct {
 	ExpectedRevision int64 `json:"expectedRevision"`
 }
 
+// SupportAcknowledgementKind defines model for SupportAcknowledgementKind.
+type SupportAcknowledgementKind string
+
 // SupportRequest defines model for SupportRequest.
 type SupportRequest struct {
-	Comment                     string               `json:"comment"`
-	CreatedAt                   time.Time            `json:"createdAt"`
-	FamilyId                    string               `json:"familyId"`
-	GuideContext                *GuideContext        `json:"guideContext"`
-	Id                          string               `json:"id"`
-	InitialScreenshotArtifactId string               `json:"initialScreenshotArtifactId"`
-	Revision                    int64                `json:"revision"`
-	Status                      SupportRequestStatus `json:"status"`
-	SupportSessionId            *string              `json:"supportSessionId"`
-	UpdatedAt                   time.Time            `json:"updatedAt"`
-	UserId                      string               `json:"userId"`
+	AcknowledgedAt              *time.Time                  `json:"acknowledgedAt"`
+	AcknowledgementKind         *SupportAcknowledgementKind `json:"acknowledgementKind"`
+	Comment                     string                      `json:"comment"`
+	CreatedAt                   time.Time                   `json:"createdAt"`
+	EstimatedSupportAt          *time.Time                  `json:"estimatedSupportAt"`
+	FamilyId                    string                      `json:"familyId"`
+	GuideContext                *GuideContext               `json:"guideContext"`
+	Id                          string                      `json:"id"`
+	InitialScreenshotArtifactId string                      `json:"initialScreenshotArtifactId"`
+	Revision                    int64                       `json:"revision"`
+	Status                      SupportRequestStatus        `json:"status"`
+	SupportSessionId            *string                     `json:"supportSessionId"`
+	UpdatedAt                   time.Time                   `json:"updatedAt"`
+	UserId                      string                      `json:"userId"`
 }
 
 // SupportRequestAndSessionResponse defines model for SupportRequestAndSessionResponse.
@@ -857,25 +1042,29 @@ type SupportRequestStatus string
 
 // SupportSession defines model for SupportSession.
 type SupportSession struct {
-	Consent              *Consent                 `json:"consent"`
-	ConsentedAt          *time.Time               `json:"consentedAt"`
-	CreatedAt            time.Time                `json:"createdAt"`
-	EndReason            *SupportSessionEndReason `json:"endReason"`
-	EndedAt              *time.Time               `json:"endedAt"`
-	FamilyId             string                   `json:"familyId"`
-	GuideDecision        *GuideDecision           `json:"guideDecision"`
-	GuideDraftId         *string                  `json:"guideDraftId"`
-	GuideGenerationJobId *string                  `json:"guideGenerationJobId"`
-	GuideId              *string                  `json:"guideId"`
-	GuideMaterialBatchId *string                  `json:"guideMaterialBatchId"`
-	Id                   string                   `json:"id"`
-	LivekitRoomName      string                   `json:"livekitRoomName"`
-	Revision             int64                    `json:"revision"`
-	StartedAt            *time.Time               `json:"startedAt"`
-	Status               SupportSessionStatus     `json:"status"`
-	SupportRequestId     string                   `json:"supportRequestId"`
-	UpdatedAt            time.Time                `json:"updatedAt"`
-	UserId               string                   `json:"userId"`
+	Consent       *Consent                 `json:"consent"`
+	ConsentedAt   *time.Time               `json:"consentedAt"`
+	CreatedAt     time.Time                `json:"createdAt"`
+	EndReason     *SupportSessionEndReason `json:"endReason"`
+	EndedAt       *time.Time               `json:"endedAt"`
+	FamilyId      string                   `json:"familyId"`
+	GuideDecision *GuideDecision           `json:"guideDecision"`
+
+	// GuideDraftId 生成順で先頭の下書きID。全件は支援の下書き一覧APIで取得する
+	GuideDraftId         *string `json:"guideDraftId"`
+	GuideGenerationJobId *string `json:"guideGenerationJobId"`
+
+	// GuideId 生成順で先頭の保存済みガイドID
+	GuideId              *string              `json:"guideId"`
+	GuideMaterialBatchId *string              `json:"guideMaterialBatchId"`
+	Id                   string               `json:"id"`
+	LivekitRoomName      string               `json:"livekitRoomName"`
+	Revision             int64                `json:"revision"`
+	StartedAt            *time.Time           `json:"startedAt"`
+	Status               SupportSessionStatus `json:"status"`
+	SupportRequestId     string               `json:"supportRequestId"`
+	UpdatedAt            time.Time            `json:"updatedAt"`
+	UserId               string               `json:"userId"`
 }
 
 // SupportSessionEndReason defines model for SupportSessionEndReason.
@@ -902,6 +1091,13 @@ type UpdateGuideRunRequest struct {
 	ExpectedRevision int64          `json:"expectedRevision"`
 }
 
+// UpdateSupportRequestAcknowledgementRequest defines model for UpdateSupportRequestAcknowledgementRequest.
+type UpdateSupportRequestAcknowledgementRequest struct {
+	AcknowledgementKind SupportAcknowledgementKind `json:"acknowledgementKind"`
+	EstimatedSupportAt  *time.Time                 `json:"estimatedSupportAt"`
+	ExpectedRevision    int64                      `json:"expectedRevision"`
+}
+
 // User defines model for User.
 type User struct {
 	DisplayName string   `json:"displayName"`
@@ -909,8 +1105,30 @@ type User struct {
 	Role        UserRole `json:"role"`
 }
 
+// UserPresence defines model for UserPresence.
+type UserPresence struct {
+	ConnectedSince *time.Time     `json:"connectedSince"`
+	LastSeenAt     *time.Time     `json:"lastSeenAt"`
+	Revision       int64          `json:"revision"`
+	Status         PresenceStatus `json:"status"`
+	UpdatedAt      *time.Time     `json:"updatedAt"`
+	UserId         string         `json:"userId"`
+}
+
+// UserPresenceResponse defines model for UserPresenceResponse.
+type UserPresenceResponse struct {
+	Data UserPresence `json:"data"`
+}
+
 // UserRole defines model for UserRole.
 type UserRole string
+
+// VapidPublicKeyResponse defines model for VapidPublicKeyResponse.
+type VapidPublicKeyResponse struct {
+	Data struct {
+		PublicKey string `json:"publicKey"`
+	} `json:"data"`
+}
 
 // IdempotencyKey defines model for IdempotencyKey.
 type IdempotencyKey = string
@@ -981,6 +1199,12 @@ type CreateGuideRunParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// CancelGuideRunParams defines parameters for CancelGuideRun.
+type CancelGuideRunParams struct {
+	// IdempotencyKey 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // CompleteGuideRunParams defines parameters for CompleteGuideRun.
 type CompleteGuideRunParams struct {
 	// IdempotencyKey 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。
@@ -1010,8 +1234,26 @@ type CallSupportRequestParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// CancelSupportRequestParams defines parameters for CancelSupportRequest.
+type CancelSupportRequestParams struct {
+	// IdempotencyKey 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // AcceptSupportSessionParams defines parameters for AcceptSupportSession.
 type AcceptSupportSessionParams struct {
+	// IdempotencyKey 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// CompleteGuideReviewParams defines parameters for CompleteGuideReview.
+type CompleteGuideReviewParams struct {
+	// IdempotencyKey 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// EndSupportSessionParams defines parameters for EndSupportSession.
+type EndSupportSessionParams struct {
 	// IdempotencyKey 操作ごとに生成する再送キー。同一のキーと同一入力で完了済みの操作を再送した場合は、 初回と同じHTTP statusと同一バイト列のJSON本文を返す。X-Request-IDなどのレスポンスヘッダーは一致対象外とする。
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
@@ -1041,6 +1283,8 @@ type CreateArtifactMultipartRequestBody = CreateArtifactRequest
 type UpdateGuideDraftJSONRequestBody = UpdateGuideDraftRequest
 
 // SaveGuideDraftJSONRequestBody defines body for SaveGuideDraft for application/json ContentType.
+//
+// Deprecated: this type has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 type SaveGuideDraftJSONRequestBody = SaveGuideDraftRequest
 
 // RetryGuideGenerationJobJSONRequestBody defines body for RetryGuideGenerationJob for application/json ContentType.
@@ -1058,20 +1302,46 @@ type CreateGuideRunJSONRequestBody = CreateGuideRunRequest
 // UpdateGuideRunJSONRequestBody defines body for UpdateGuideRun for application/json ContentType.
 type UpdateGuideRunJSONRequestBody = UpdateGuideRunRequest
 
+// CancelGuideRunJSONRequestBody defines body for CancelGuideRun for application/json ContentType.
+type CancelGuideRunJSONRequestBody = CancelGuideRunRequest
+
 // CompleteGuideRunJSONRequestBody defines body for CompleteGuideRun for application/json ContentType.
 type CompleteGuideRunJSONRequestBody = CompleteGuideRunRequest
 
 // CreateSupportRequestFromGuideRunJSONRequestBody defines body for CreateSupportRequestFromGuideRun for application/json ContentType.
 type CreateSupportRequestFromGuideRunJSONRequestBody = CreateSupportRequestFromGuideRunRequest
 
+// RecordPresenceHeartbeatJSONRequestBody defines body for RecordPresenceHeartbeat for application/json ContentType.
+type RecordPresenceHeartbeatJSONRequestBody = EmptyRequest
+
+// DeletePushSubscriptionJSONRequestBody defines body for DeletePushSubscription for application/json ContentType.
+type DeletePushSubscriptionJSONRequestBody = DeletePushSubscriptionRequest
+
+// UpsertPushSubscriptionJSONRequestBody defines body for UpsertPushSubscription for application/json ContentType.
+type UpsertPushSubscriptionJSONRequestBody = PushSubscriptionRequest
+
 // CreateSupportRequestJSONRequestBody defines body for CreateSupportRequest for application/json ContentType.
 type CreateSupportRequestJSONRequestBody = CreateSupportRequestRequest
+
+// UpdateSupportRequestAcknowledgementJSONRequestBody defines body for UpdateSupportRequestAcknowledgement for application/json ContentType.
+type UpdateSupportRequestAcknowledgementJSONRequestBody = UpdateSupportRequestAcknowledgementRequest
 
 // CallSupportRequestJSONRequestBody defines body for CallSupportRequest for application/json ContentType.
 type CallSupportRequestJSONRequestBody = CallSupportRequestRequest
 
+// CancelSupportRequestJSONRequestBody defines body for CancelSupportRequest for application/json ContentType.
+type CancelSupportRequestJSONRequestBody = CancelSupportRequestRequest
+
 // AcceptSupportSessionJSONRequestBody defines body for AcceptSupportSession for application/json ContentType.
 type AcceptSupportSessionJSONRequestBody = AcceptSupportSessionRequest
+
+// CompleteGuideReviewJSONRequestBody defines body for CompleteGuideReview for application/json ContentType.
+type CompleteGuideReviewJSONRequestBody = CompleteGuideReviewRequest
+
+// EndSupportSessionJSONRequestBody defines body for EndSupportSession for application/json ContentType.
+//
+// Deprecated: this type has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+type EndSupportSessionJSONRequestBody = EndSupportSessionRequest
 
 // EndSupportSessionWithoutGuideJSONRequestBody defines body for EndSupportSessionWithoutGuide for application/json ContentType.
 type EndSupportSessionWithoutGuideJSONRequestBody = EndSupportSessionWithoutGuideRequest
@@ -1093,14 +1363,19 @@ type ServerInterface interface {
 	// GetArtifactContent 権限確認後に画像を返す
 	// (GET /v1/artifacts/{id}/content)
 	GetArtifactContent(w http.ResponseWriter, r *http.Request, id ResourceId)
+	// GetCompanionStatus 家族向けに利用者PCの接続状況を返す
+	// (GET /v1/companion/status)
+	GetCompanionStatus(w http.ResponseWriter, r *http.Request)
 	// GetGuideDraft ガイド下書きを取得する
 	// (GET /v1/guide-drafts/{id})
 	GetGuideDraft(w http.ResponseWriter, r *http.Request, id ResourceId)
 	// UpdateGuideDraft ガイド下書き全体を更新する
 	// (PATCH /v1/guide-drafts/{id})
 	UpdateGuideDraft(w http.ResponseWriter, r *http.Request, id ResourceId)
-	// SaveGuideDraft ガイド下書きをガイドとして保存する
+	// SaveGuideDraft 下書きが1件の支援を保存する（旧クライアント互換）
 	// (POST /v1/guide-drafts/{id}/save)
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	SaveGuideDraft(w http.ResponseWriter, r *http.Request, id ResourceId, params SaveGuideDraftParams)
 	// GetGuideGenerationJob AI生成状態を取得する
 	// (GET /v1/guide-generation-jobs/{id})
@@ -1126,6 +1401,9 @@ type ServerInterface interface {
 	// UpdateGuideRun 前または次のステップへ移動する
 	// (PATCH /v1/guide-runs/{id})
 	UpdateGuideRun(w http.ResponseWriter, r *http.Request, id ResourceId)
+	// CancelGuideRun ガイド利用を途中で終了する
+	// (POST /v1/guide-runs/{id}/cancel)
+	CancelGuideRun(w http.ResponseWriter, r *http.Request, id ResourceId, params CancelGuideRunParams)
 	// CompleteGuideRun ガイド利用を完了する
 	// (POST /v1/guide-runs/{id}/complete)
 	CompleteGuideRun(w http.ResponseWriter, r *http.Request, id ResourceId, params CompleteGuideRunParams)
@@ -1138,6 +1416,18 @@ type ServerInterface interface {
 	// GetGuide 現在版のガイドを取得する
 	// (GET /v1/guides/{id})
 	GetGuide(w http.ResponseWriter, r *http.Request, id ResourceId)
+	// RecordPresenceHeartbeat 利用者PCの接続heartbeatを記録する
+	// (POST /v1/presence/heartbeat)
+	RecordPresenceHeartbeat(w http.ResponseWriter, r *http.Request)
+	// DeletePushSubscription 家族端末のPush購読を解除する
+	// (DELETE /v1/push-subscriptions)
+	DeletePushSubscription(w http.ResponseWriter, r *http.Request)
+	// UpsertPushSubscription 家族端末のPush購読を登録または更新する
+	// (PUT /v1/push-subscriptions)
+	UpsertPushSubscription(w http.ResponseWriter, r *http.Request)
+	// GetVapidPublicKey Push購読用のVAPID公開鍵を返す
+	// (GET /v1/push-subscriptions/vapid-public-key)
+	GetVapidPublicKey(w http.ResponseWriter, r *http.Request)
 	// ListSupportRequests 自分のペアの支援依頼を新しい順に最大20件返す
 	// (GET /v1/support-requests)
 	ListSupportRequests(w http.ResponseWriter, r *http.Request, params ListSupportRequestsParams)
@@ -1147,18 +1437,35 @@ type ServerInterface interface {
 	// GetSupportRequest 支援依頼の詳細を取得する
 	// (GET /v1/support-requests/{id})
 	GetSupportRequest(w http.ResponseWriter, r *http.Request, id ResourceId)
+	// UpdateSupportRequestAcknowledgement 家族が依頼を確認し対応目安を返す
+	// (PATCH /v1/support-requests/{id}/acknowledgement)
+	UpdateSupportRequestAcknowledgement(w http.ResponseWriter, r *http.Request, id ResourceId)
 	// CallSupportRequest RINGINGの支援セッションを作る
 	// (POST /v1/support-requests/{id}/call)
 	CallSupportRequest(w http.ResponseWriter, r *http.Request, id ResourceId, params CallSupportRequestParams)
+	// CancelSupportRequest 利用者が未開始の支援依頼を取り消す
+	// (POST /v1/support-requests/{id}/cancel)
+	CancelSupportRequest(w http.ResponseWriter, r *http.Request, id ResourceId, params CancelSupportRequestParams)
 	// GetSupportSession 支援セッションを取得する
 	// (GET /v1/support-sessions/{id})
 	GetSupportSession(w http.ResponseWriter, r *http.Request, id ResourceId)
 	// AcceptSupportSession 応答と同意を確定する
 	// (POST /v1/support-sessions/{id}/accept)
 	AcceptSupportSession(w http.ResponseWriter, r *http.Request, id ResourceId, params AcceptSupportSessionParams)
+	// CompleteGuideReview 支援の全下書きを1回で確定してレビューを完了する
+	// (POST /v1/support-sessions/{id}/complete-guide-review)
+	CompleteGuideReview(w http.ResponseWriter, r *http.Request, id ResourceId, params CompleteGuideReviewParams)
+	// EndSupportSession 旧版のGUIDE_SAVEDセッションを終了する
+	// (POST /v1/support-sessions/{id}/end)
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	EndSupportSession(w http.ResponseWriter, r *http.Request, id ResourceId, params EndSupportSessionParams)
 	// EndSupportSessionWithoutGuide ガイド作成を中止して支援セッションを終了する
 	// (POST /v1/support-sessions/{id}/end-without-guide)
 	EndSupportSessionWithoutGuide(w http.ResponseWriter, r *http.Request, id ResourceId, params EndSupportSessionWithoutGuideParams)
+	// ListSessionGuideDrafts 支援に紐づくすべての下書きを生成順で返す
+	// (GET /v1/support-sessions/{id}/guide-drafts)
+	ListSessionGuideDrafts(w http.ResponseWriter, r *http.Request, id ResourceId)
 	// CreateGuideMaterialBatch ガイド材料画像の一括登録を開始する
 	// (POST /v1/support-sessions/{id}/guide-material-batches)
 	CreateGuideMaterialBatch(w http.ResponseWriter, r *http.Request, id ResourceId, params CreateGuideMaterialBatchParams)
@@ -1186,6 +1493,12 @@ func (_ Unimplemented) GetArtifactContent(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// GetCompanionStatus 家族向けに利用者PCの接続状況を返す
+// (GET /v1/companion/status)
+func (_ Unimplemented) GetCompanionStatus(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // GetGuideDraft ガイド下書きを取得する
 // (GET /v1/guide-drafts/{id})
 func (_ Unimplemented) GetGuideDraft(w http.ResponseWriter, r *http.Request, id ResourceId) {
@@ -1198,8 +1511,10 @@ func (_ Unimplemented) UpdateGuideDraft(w http.ResponseWriter, r *http.Request, 
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// SaveGuideDraft ガイド下書きをガイドとして保存する
+// SaveGuideDraft 下書きが1件の支援を保存する（旧クライアント互換）
 // (POST /v1/guide-drafts/{id}/save)
+//
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 func (_ Unimplemented) SaveGuideDraft(w http.ResponseWriter, r *http.Request, id ResourceId, params SaveGuideDraftParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
@@ -1252,6 +1567,12 @@ func (_ Unimplemented) UpdateGuideRun(w http.ResponseWriter, r *http.Request, id
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// CancelGuideRun ガイド利用を途中で終了する
+// (POST /v1/guide-runs/{id}/cancel)
+func (_ Unimplemented) CancelGuideRun(w http.ResponseWriter, r *http.Request, id ResourceId, params CancelGuideRunParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // CompleteGuideRun ガイド利用を完了する
 // (POST /v1/guide-runs/{id}/complete)
 func (_ Unimplemented) CompleteGuideRun(w http.ResponseWriter, r *http.Request, id ResourceId, params CompleteGuideRunParams) {
@@ -1276,6 +1597,30 @@ func (_ Unimplemented) GetGuide(w http.ResponseWriter, r *http.Request, id Resou
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// RecordPresenceHeartbeat 利用者PCの接続heartbeatを記録する
+// (POST /v1/presence/heartbeat)
+func (_ Unimplemented) RecordPresenceHeartbeat(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// DeletePushSubscription 家族端末のPush購読を解除する
+// (DELETE /v1/push-subscriptions)
+func (_ Unimplemented) DeletePushSubscription(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// UpsertPushSubscription 家族端末のPush購読を登録または更新する
+// (PUT /v1/push-subscriptions)
+func (_ Unimplemented) UpsertPushSubscription(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetVapidPublicKey Push購読用のVAPID公開鍵を返す
+// (GET /v1/push-subscriptions/vapid-public-key)
+func (_ Unimplemented) GetVapidPublicKey(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // ListSupportRequests 自分のペアの支援依頼を新しい順に最大20件返す
 // (GET /v1/support-requests)
 func (_ Unimplemented) ListSupportRequests(w http.ResponseWriter, r *http.Request, params ListSupportRequestsParams) {
@@ -1294,9 +1639,21 @@ func (_ Unimplemented) GetSupportRequest(w http.ResponseWriter, r *http.Request,
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// UpdateSupportRequestAcknowledgement 家族が依頼を確認し対応目安を返す
+// (PATCH /v1/support-requests/{id}/acknowledgement)
+func (_ Unimplemented) UpdateSupportRequestAcknowledgement(w http.ResponseWriter, r *http.Request, id ResourceId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // CallSupportRequest RINGINGの支援セッションを作る
 // (POST /v1/support-requests/{id}/call)
 func (_ Unimplemented) CallSupportRequest(w http.ResponseWriter, r *http.Request, id ResourceId, params CallSupportRequestParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// CancelSupportRequest 利用者が未開始の支援依頼を取り消す
+// (POST /v1/support-requests/{id}/cancel)
+func (_ Unimplemented) CancelSupportRequest(w http.ResponseWriter, r *http.Request, id ResourceId, params CancelSupportRequestParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1312,9 +1669,29 @@ func (_ Unimplemented) AcceptSupportSession(w http.ResponseWriter, r *http.Reque
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// CompleteGuideReview 支援の全下書きを1回で確定してレビューを完了する
+// (POST /v1/support-sessions/{id}/complete-guide-review)
+func (_ Unimplemented) CompleteGuideReview(w http.ResponseWriter, r *http.Request, id ResourceId, params CompleteGuideReviewParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// EndSupportSession 旧版のGUIDE_SAVEDセッションを終了する
+// (POST /v1/support-sessions/{id}/end)
+//
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+func (_ Unimplemented) EndSupportSession(w http.ResponseWriter, r *http.Request, id ResourceId, params EndSupportSessionParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // EndSupportSessionWithoutGuide ガイド作成を中止して支援セッションを終了する
 // (POST /v1/support-sessions/{id}/end-without-guide)
 func (_ Unimplemented) EndSupportSessionWithoutGuide(w http.ResponseWriter, r *http.Request, id ResourceId, params EndSupportSessionWithoutGuideParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ListSessionGuideDrafts 支援に紐づくすべての下書きを生成順で返す
+// (GET /v1/support-sessions/{id}/guide-drafts)
+func (_ Unimplemented) ListSessionGuideDrafts(w http.ResponseWriter, r *http.Request, id ResourceId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1407,6 +1784,20 @@ func (siw *ServerInterfaceWrapper) GetArtifactContent(w http.ResponseWriter, r *
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetArtifactContent(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetCompanionStatus operation middleware
+func (siw *ServerInterfaceWrapper) GetCompanionStatus(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCompanionStatus(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1833,6 +2224,60 @@ func (siw *ServerInterfaceWrapper) UpdateGuideRun(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
+// CancelGuideRun operation middleware
+func (siw *ServerInterfaceWrapper) CancelGuideRun(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ResourceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CancelGuideRunParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CancelGuideRun(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // CompleteGuideRun operation middleware
 func (siw *ServerInterfaceWrapper) CompleteGuideRun(w http.ResponseWriter, r *http.Request) {
 
@@ -1981,6 +2426,62 @@ func (siw *ServerInterfaceWrapper) GetGuide(w http.ResponseWriter, r *http.Reque
 	handler.ServeHTTP(w, r)
 }
 
+// RecordPresenceHeartbeat operation middleware
+func (siw *ServerInterfaceWrapper) RecordPresenceHeartbeat(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RecordPresenceHeartbeat(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeletePushSubscription operation middleware
+func (siw *ServerInterfaceWrapper) DeletePushSubscription(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeletePushSubscription(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpsertPushSubscription operation middleware
+func (siw *ServerInterfaceWrapper) UpsertPushSubscription(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpsertPushSubscription(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetVapidPublicKey operation middleware
+func (siw *ServerInterfaceWrapper) GetVapidPublicKey(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetVapidPublicKey(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListSupportRequests operation middleware
 func (siw *ServerInterfaceWrapper) ListSupportRequests(w http.ResponseWriter, r *http.Request) {
 
@@ -2085,6 +2586,32 @@ func (siw *ServerInterfaceWrapper) GetSupportRequest(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
+// UpdateSupportRequestAcknowledgement operation middleware
+func (siw *ServerInterfaceWrapper) UpdateSupportRequestAcknowledgement(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ResourceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateSupportRequestAcknowledgement(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // CallSupportRequest operation middleware
 func (siw *ServerInterfaceWrapper) CallSupportRequest(w http.ResponseWriter, r *http.Request) {
 
@@ -2130,6 +2657,60 @@ func (siw *ServerInterfaceWrapper) CallSupportRequest(w http.ResponseWriter, r *
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CallSupportRequest(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CancelSupportRequest operation middleware
+func (siw *ServerInterfaceWrapper) CancelSupportRequest(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ResourceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CancelSupportRequestParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CancelSupportRequest(w, r, id, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2219,6 +2800,114 @@ func (siw *ServerInterfaceWrapper) AcceptSupportSession(w http.ResponseWriter, r
 	handler.ServeHTTP(w, r)
 }
 
+// CompleteGuideReview operation middleware
+func (siw *ServerInterfaceWrapper) CompleteGuideReview(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ResourceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CompleteGuideReviewParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CompleteGuideReview(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// EndSupportSession operation middleware
+func (siw *ServerInterfaceWrapper) EndSupportSession(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ResourceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params EndSupportSessionParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.EndSupportSession(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // EndSupportSessionWithoutGuide operation middleware
 func (siw *ServerInterfaceWrapper) EndSupportSessionWithoutGuide(w http.ResponseWriter, r *http.Request) {
 
@@ -2264,6 +2953,32 @@ func (siw *ServerInterfaceWrapper) EndSupportSessionWithoutGuide(w http.Response
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.EndSupportSessionWithoutGuide(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListSessionGuideDrafts operation middleware
+func (siw *ServerInterfaceWrapper) ListSessionGuideDrafts(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ResourceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListSessionGuideDrafts(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2536,6 +3251,27 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/v1/support-requests/{id}", wrapper.GetSupportRequest)
 	})
 	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/v1/support-requests/{id}/acknowledgement", wrapper.UpdateSupportRequestAcknowledgement)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/v1/support-requests/{id}/cancel", wrapper.CancelSupportRequest)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/v1/presence/heartbeat", wrapper.RecordPresenceHeartbeat)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/v1/companion/status", wrapper.GetCompanionStatus)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/v1/push-subscriptions/vapid-public-key", wrapper.GetVapidPublicKey)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/v1/push-subscriptions", wrapper.DeletePushSubscription)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/v1/push-subscriptions", wrapper.UpsertPushSubscription)
+	})
+	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/v1/support-requests/{id}/call", wrapper.CallSupportRequest)
 	})
 	r.Group(func(r chi.Router) {
@@ -2554,6 +3290,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/v1/support-sessions/{id}/guide-material-batches", wrapper.CreateGuideMaterialBatch)
 	})
 	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/v1/support-sessions/{id}/end", wrapper.EndSupportSession)
+	})
+	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/v1/support-sessions/{id}/end-without-guide", wrapper.EndSupportSessionWithoutGuide)
 	})
 	r.Group(func(r chi.Router) {
@@ -2570,6 +3309,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/v1/guide-generation-jobs/{id}/retry", wrapper.RetryGuideGenerationJob)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/v1/support-sessions/{id}/guide-drafts", wrapper.ListSessionGuideDrafts)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/v1/support-sessions/{id}/complete-guide-review", wrapper.CompleteGuideReview)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/v1/guide-drafts/{id}", wrapper.GetGuideDraft)
@@ -2597,6 +3342,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/v1/guide-runs/{id}/complete", wrapper.CompleteGuideRun)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/v1/guide-runs/{id}/cancel", wrapper.CancelGuideRun)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/v1/guide-runs/{id}/support-request", wrapper.CreateSupportRequestFromGuideRun)
@@ -2854,6 +3602,69 @@ func (response GetArtifactContent503JSONResponse) VisitGetArtifactContentRespons
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCompanionStatusRequestObject struct {
+}
+
+type GetCompanionStatusResponseObject interface {
+	VisitGetCompanionStatusResponse(w http.ResponseWriter) error
+}
+
+type GetCompanionStatus200JSONResponse CompanionStatusResponse
+
+func (response GetCompanionStatus200JSONResponse) VisitGetCompanionStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCompanionStatus401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response GetCompanionStatus401JSONResponse) VisitGetCompanionStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCompanionStatus403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response GetCompanionStatus403JSONResponse) VisitGetCompanionStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCompanionStatus500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response GetCompanionStatus500JSONResponse) VisitGetCompanionStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -3986,6 +4797,117 @@ func (response UpdateGuideRun500JSONResponse) VisitUpdateGuideRunResponse(w http
 	return err
 }
 
+type CancelGuideRunRequestObject struct {
+	Id     ResourceId `json:"id"`
+	Params CancelGuideRunParams
+	Body   *CancelGuideRunJSONRequestBody
+}
+
+type CancelGuideRunResponseObject interface {
+	VisitCancelGuideRunResponse(w http.ResponseWriter) error
+}
+
+type CancelGuideRun200JSONResponse GuideRunResponse
+
+func (response CancelGuideRun200JSONResponse) VisitCancelGuideRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelGuideRun400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response CancelGuideRun400JSONResponse) VisitCancelGuideRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelGuideRun401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response CancelGuideRun401JSONResponse) VisitCancelGuideRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelGuideRun403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CancelGuideRun403JSONResponse) VisitCancelGuideRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelGuideRun404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response CancelGuideRun404JSONResponse) VisitCancelGuideRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelGuideRun409JSONResponse struct{ ConflictJSONResponse }
+
+func (response CancelGuideRun409JSONResponse) VisitCancelGuideRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelGuideRun500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response CancelGuideRun500JSONResponse) VisitCancelGuideRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type CompleteGuideRunRequestObject struct {
 	Id     ResourceId `json:"id"`
 	Params CompleteGuideRunParams
@@ -4349,6 +5271,339 @@ func (response GetGuide500JSONResponse) VisitGetGuideResponse(w http.ResponseWri
 	return err
 }
 
+type RecordPresenceHeartbeatRequestObject struct {
+	Body *RecordPresenceHeartbeatJSONRequestBody
+}
+
+type RecordPresenceHeartbeatResponseObject interface {
+	VisitRecordPresenceHeartbeatResponse(w http.ResponseWriter) error
+}
+
+type RecordPresenceHeartbeat200JSONResponse UserPresenceResponse
+
+func (response RecordPresenceHeartbeat200JSONResponse) VisitRecordPresenceHeartbeatResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RecordPresenceHeartbeat400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response RecordPresenceHeartbeat400JSONResponse) VisitRecordPresenceHeartbeatResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RecordPresenceHeartbeat401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response RecordPresenceHeartbeat401JSONResponse) VisitRecordPresenceHeartbeatResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RecordPresenceHeartbeat403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response RecordPresenceHeartbeat403JSONResponse) VisitRecordPresenceHeartbeatResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RecordPresenceHeartbeat500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response RecordPresenceHeartbeat500JSONResponse) VisitRecordPresenceHeartbeatResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeletePushSubscriptionRequestObject struct {
+	Body *DeletePushSubscriptionJSONRequestBody
+}
+
+type DeletePushSubscriptionResponseObject interface {
+	VisitDeletePushSubscriptionResponse(w http.ResponseWriter) error
+}
+
+type DeletePushSubscription204Response struct {
+}
+
+func (response DeletePushSubscription204Response) VisitDeletePushSubscriptionResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeletePushSubscription400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response DeletePushSubscription400JSONResponse) VisitDeletePushSubscriptionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeletePushSubscription401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response DeletePushSubscription401JSONResponse) VisitDeletePushSubscriptionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeletePushSubscription403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response DeletePushSubscription403JSONResponse) VisitDeletePushSubscriptionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeletePushSubscription500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response DeletePushSubscription500JSONResponse) VisitDeletePushSubscriptionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeletePushSubscription503JSONResponse struct{ ServiceUnavailableJSONResponse }
+
+func (response DeletePushSubscription503JSONResponse) VisitDeletePushSubscriptionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpsertPushSubscriptionRequestObject struct {
+	Body *UpsertPushSubscriptionJSONRequestBody
+}
+
+type UpsertPushSubscriptionResponseObject interface {
+	VisitUpsertPushSubscriptionResponse(w http.ResponseWriter) error
+}
+
+type UpsertPushSubscription200JSONResponse PushSubscriptionStateResponse
+
+func (response UpsertPushSubscription200JSONResponse) VisitUpsertPushSubscriptionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpsertPushSubscription400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response UpsertPushSubscription400JSONResponse) VisitUpsertPushSubscriptionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpsertPushSubscription401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response UpsertPushSubscription401JSONResponse) VisitUpsertPushSubscriptionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpsertPushSubscription403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response UpsertPushSubscription403JSONResponse) VisitUpsertPushSubscriptionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpsertPushSubscription500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response UpsertPushSubscription500JSONResponse) VisitUpsertPushSubscriptionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpsertPushSubscription503JSONResponse struct{ ServiceUnavailableJSONResponse }
+
+func (response UpsertPushSubscription503JSONResponse) VisitUpsertPushSubscriptionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetVapidPublicKeyRequestObject struct {
+}
+
+type GetVapidPublicKeyResponseObject interface {
+	VisitGetVapidPublicKeyResponse(w http.ResponseWriter) error
+}
+
+type GetVapidPublicKey200JSONResponse VapidPublicKeyResponse
+
+func (response GetVapidPublicKey200JSONResponse) VisitGetVapidPublicKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetVapidPublicKey401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response GetVapidPublicKey401JSONResponse) VisitGetVapidPublicKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetVapidPublicKey403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response GetVapidPublicKey403JSONResponse) VisitGetVapidPublicKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetVapidPublicKey500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response GetVapidPublicKey500JSONResponse) VisitGetVapidPublicKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetVapidPublicKey503JSONResponse struct{ ServiceUnavailableJSONResponse }
+
+func (response GetVapidPublicKey503JSONResponse) VisitGetVapidPublicKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListSupportRequestsRequestObject struct {
 	Params ListSupportRequestsParams
 }
@@ -4601,6 +5856,116 @@ func (response GetSupportRequest500JSONResponse) VisitGetSupportRequestResponse(
 	return err
 }
 
+type UpdateSupportRequestAcknowledgementRequestObject struct {
+	Id   ResourceId `json:"id"`
+	Body *UpdateSupportRequestAcknowledgementJSONRequestBody
+}
+
+type UpdateSupportRequestAcknowledgementResponseObject interface {
+	VisitUpdateSupportRequestAcknowledgementResponse(w http.ResponseWriter) error
+}
+
+type UpdateSupportRequestAcknowledgement200JSONResponse SupportRequestResponse
+
+func (response UpdateSupportRequestAcknowledgement200JSONResponse) VisitUpdateSupportRequestAcknowledgementResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSupportRequestAcknowledgement400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response UpdateSupportRequestAcknowledgement400JSONResponse) VisitUpdateSupportRequestAcknowledgementResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSupportRequestAcknowledgement401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response UpdateSupportRequestAcknowledgement401JSONResponse) VisitUpdateSupportRequestAcknowledgementResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSupportRequestAcknowledgement403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response UpdateSupportRequestAcknowledgement403JSONResponse) VisitUpdateSupportRequestAcknowledgementResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSupportRequestAcknowledgement404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response UpdateSupportRequestAcknowledgement404JSONResponse) VisitUpdateSupportRequestAcknowledgementResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSupportRequestAcknowledgement409JSONResponse struct{ ConflictJSONResponse }
+
+func (response UpdateSupportRequestAcknowledgement409JSONResponse) VisitUpdateSupportRequestAcknowledgementResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSupportRequestAcknowledgement500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response UpdateSupportRequestAcknowledgement500JSONResponse) VisitUpdateSupportRequestAcknowledgementResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type CallSupportRequestRequestObject struct {
 	Id     ResourceId `json:"id"`
 	Params CallSupportRequestParams
@@ -4701,6 +6066,117 @@ func (response CallSupportRequest409JSONResponse) VisitCallSupportRequestRespons
 type CallSupportRequest500JSONResponse struct{ InternalErrorJSONResponse }
 
 func (response CallSupportRequest500JSONResponse) VisitCallSupportRequestResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelSupportRequestRequestObject struct {
+	Id     ResourceId `json:"id"`
+	Params CancelSupportRequestParams
+	Body   *CancelSupportRequestJSONRequestBody
+}
+
+type CancelSupportRequestResponseObject interface {
+	VisitCancelSupportRequestResponse(w http.ResponseWriter) error
+}
+
+type CancelSupportRequest200JSONResponse SupportRequestResponse
+
+func (response CancelSupportRequest200JSONResponse) VisitCancelSupportRequestResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelSupportRequest400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response CancelSupportRequest400JSONResponse) VisitCancelSupportRequestResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelSupportRequest401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response CancelSupportRequest401JSONResponse) VisitCancelSupportRequestResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelSupportRequest403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CancelSupportRequest403JSONResponse) VisitCancelSupportRequestResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelSupportRequest404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response CancelSupportRequest404JSONResponse) VisitCancelSupportRequestResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelSupportRequest409JSONResponse struct{ ConflictJSONResponse }
+
+func (response CancelSupportRequest409JSONResponse) VisitCancelSupportRequestResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelSupportRequest500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response CancelSupportRequest500JSONResponse) VisitCancelSupportRequestResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -4901,6 +6377,228 @@ func (response AcceptSupportSession500JSONResponse) VisitAcceptSupportSessionRes
 	return err
 }
 
+type CompleteGuideReviewRequestObject struct {
+	Id     ResourceId `json:"id"`
+	Params CompleteGuideReviewParams
+	Body   *CompleteGuideReviewJSONRequestBody
+}
+
+type CompleteGuideReviewResponseObject interface {
+	VisitCompleteGuideReviewResponse(w http.ResponseWriter) error
+}
+
+type CompleteGuideReview201JSONResponse GuideReviewCompletedResponse
+
+func (response CompleteGuideReview201JSONResponse) VisitCompleteGuideReviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteGuideReview400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response CompleteGuideReview400JSONResponse) VisitCompleteGuideReviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteGuideReview401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response CompleteGuideReview401JSONResponse) VisitCompleteGuideReviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteGuideReview403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CompleteGuideReview403JSONResponse) VisitCompleteGuideReviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteGuideReview404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response CompleteGuideReview404JSONResponse) VisitCompleteGuideReviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteGuideReview409JSONResponse struct{ ConflictJSONResponse }
+
+func (response CompleteGuideReview409JSONResponse) VisitCompleteGuideReviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteGuideReview500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response CompleteGuideReview500JSONResponse) VisitCompleteGuideReviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EndSupportSessionRequestObject struct {
+	Id     ResourceId `json:"id"`
+	Params EndSupportSessionParams
+	Body   *EndSupportSessionJSONRequestBody
+}
+
+type EndSupportSessionResponseObject interface {
+	VisitEndSupportSessionResponse(w http.ResponseWriter) error
+}
+
+type EndSupportSession200JSONResponse SupportSessionResponse
+
+func (response EndSupportSession200JSONResponse) VisitEndSupportSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EndSupportSession400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response EndSupportSession400JSONResponse) VisitEndSupportSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EndSupportSession401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response EndSupportSession401JSONResponse) VisitEndSupportSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EndSupportSession403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response EndSupportSession403JSONResponse) VisitEndSupportSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EndSupportSession404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response EndSupportSession404JSONResponse) VisitEndSupportSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EndSupportSession409JSONResponse struct{ ConflictJSONResponse }
+
+func (response EndSupportSession409JSONResponse) VisitEndSupportSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EndSupportSession500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response EndSupportSession500JSONResponse) VisitEndSupportSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type EndSupportSessionWithoutGuideRequestObject struct {
 	Id     ResourceId `json:"id"`
 	Params EndSupportSessionWithoutGuideParams
@@ -5001,6 +6699,84 @@ func (response EndSupportSessionWithoutGuide409JSONResponse) VisitEndSupportSess
 type EndSupportSessionWithoutGuide500JSONResponse struct{ InternalErrorJSONResponse }
 
 func (response EndSupportSessionWithoutGuide500JSONResponse) VisitEndSupportSessionWithoutGuideResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSessionGuideDraftsRequestObject struct {
+	Id ResourceId `json:"id"`
+}
+
+type ListSessionGuideDraftsResponseObject interface {
+	VisitListSessionGuideDraftsResponse(w http.ResponseWriter) error
+}
+
+type ListSessionGuideDrafts200JSONResponse GuideDraftListResponse
+
+func (response ListSessionGuideDrafts200JSONResponse) VisitListSessionGuideDraftsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSessionGuideDrafts401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response ListSessionGuideDrafts401JSONResponse) VisitListSessionGuideDraftsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSessionGuideDrafts403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ListSessionGuideDrafts403JSONResponse) VisitListSessionGuideDraftsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSessionGuideDrafts404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListSessionGuideDrafts404JSONResponse) VisitListSessionGuideDraftsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSessionGuideDrafts500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response ListSessionGuideDrafts500JSONResponse) VisitListSessionGuideDraftsResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -5382,14 +7158,19 @@ type StrictServerInterface interface {
 	// GetArtifactContent 権限確認後に画像を返す
 	// (GET /v1/artifacts/{id}/content)
 	GetArtifactContent(ctx context.Context, request GetArtifactContentRequestObject) (GetArtifactContentResponseObject, error)
+	// GetCompanionStatus 家族向けに利用者PCの接続状況を返す
+	// (GET /v1/companion/status)
+	GetCompanionStatus(ctx context.Context, request GetCompanionStatusRequestObject) (GetCompanionStatusResponseObject, error)
 	// GetGuideDraft ガイド下書きを取得する
 	// (GET /v1/guide-drafts/{id})
 	GetGuideDraft(ctx context.Context, request GetGuideDraftRequestObject) (GetGuideDraftResponseObject, error)
 	// UpdateGuideDraft ガイド下書き全体を更新する
 	// (PATCH /v1/guide-drafts/{id})
 	UpdateGuideDraft(ctx context.Context, request UpdateGuideDraftRequestObject) (UpdateGuideDraftResponseObject, error)
-	// SaveGuideDraft ガイド下書きをガイドとして保存する
+	// SaveGuideDraft 下書きが1件の支援を保存する（旧クライアント互換）
 	// (POST /v1/guide-drafts/{id}/save)
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	SaveGuideDraft(ctx context.Context, request SaveGuideDraftRequestObject) (SaveGuideDraftResponseObject, error)
 	// GetGuideGenerationJob AI生成状態を取得する
 	// (GET /v1/guide-generation-jobs/{id})
@@ -5415,6 +7196,9 @@ type StrictServerInterface interface {
 	// UpdateGuideRun 前または次のステップへ移動する
 	// (PATCH /v1/guide-runs/{id})
 	UpdateGuideRun(ctx context.Context, request UpdateGuideRunRequestObject) (UpdateGuideRunResponseObject, error)
+	// CancelGuideRun ガイド利用を途中で終了する
+	// (POST /v1/guide-runs/{id}/cancel)
+	CancelGuideRun(ctx context.Context, request CancelGuideRunRequestObject) (CancelGuideRunResponseObject, error)
 	// CompleteGuideRun ガイド利用を完了する
 	// (POST /v1/guide-runs/{id}/complete)
 	CompleteGuideRun(ctx context.Context, request CompleteGuideRunRequestObject) (CompleteGuideRunResponseObject, error)
@@ -5427,6 +7211,18 @@ type StrictServerInterface interface {
 	// GetGuide 現在版のガイドを取得する
 	// (GET /v1/guides/{id})
 	GetGuide(ctx context.Context, request GetGuideRequestObject) (GetGuideResponseObject, error)
+	// RecordPresenceHeartbeat 利用者PCの接続heartbeatを記録する
+	// (POST /v1/presence/heartbeat)
+	RecordPresenceHeartbeat(ctx context.Context, request RecordPresenceHeartbeatRequestObject) (RecordPresenceHeartbeatResponseObject, error)
+	// DeletePushSubscription 家族端末のPush購読を解除する
+	// (DELETE /v1/push-subscriptions)
+	DeletePushSubscription(ctx context.Context, request DeletePushSubscriptionRequestObject) (DeletePushSubscriptionResponseObject, error)
+	// UpsertPushSubscription 家族端末のPush購読を登録または更新する
+	// (PUT /v1/push-subscriptions)
+	UpsertPushSubscription(ctx context.Context, request UpsertPushSubscriptionRequestObject) (UpsertPushSubscriptionResponseObject, error)
+	// GetVapidPublicKey Push購読用のVAPID公開鍵を返す
+	// (GET /v1/push-subscriptions/vapid-public-key)
+	GetVapidPublicKey(ctx context.Context, request GetVapidPublicKeyRequestObject) (GetVapidPublicKeyResponseObject, error)
 	// ListSupportRequests 自分のペアの支援依頼を新しい順に最大20件返す
 	// (GET /v1/support-requests)
 	ListSupportRequests(ctx context.Context, request ListSupportRequestsRequestObject) (ListSupportRequestsResponseObject, error)
@@ -5436,18 +7232,35 @@ type StrictServerInterface interface {
 	// GetSupportRequest 支援依頼の詳細を取得する
 	// (GET /v1/support-requests/{id})
 	GetSupportRequest(ctx context.Context, request GetSupportRequestRequestObject) (GetSupportRequestResponseObject, error)
+	// UpdateSupportRequestAcknowledgement 家族が依頼を確認し対応目安を返す
+	// (PATCH /v1/support-requests/{id}/acknowledgement)
+	UpdateSupportRequestAcknowledgement(ctx context.Context, request UpdateSupportRequestAcknowledgementRequestObject) (UpdateSupportRequestAcknowledgementResponseObject, error)
 	// CallSupportRequest RINGINGの支援セッションを作る
 	// (POST /v1/support-requests/{id}/call)
 	CallSupportRequest(ctx context.Context, request CallSupportRequestRequestObject) (CallSupportRequestResponseObject, error)
+	// CancelSupportRequest 利用者が未開始の支援依頼を取り消す
+	// (POST /v1/support-requests/{id}/cancel)
+	CancelSupportRequest(ctx context.Context, request CancelSupportRequestRequestObject) (CancelSupportRequestResponseObject, error)
 	// GetSupportSession 支援セッションを取得する
 	// (GET /v1/support-sessions/{id})
 	GetSupportSession(ctx context.Context, request GetSupportSessionRequestObject) (GetSupportSessionResponseObject, error)
 	// AcceptSupportSession 応答と同意を確定する
 	// (POST /v1/support-sessions/{id}/accept)
 	AcceptSupportSession(ctx context.Context, request AcceptSupportSessionRequestObject) (AcceptSupportSessionResponseObject, error)
+	// CompleteGuideReview 支援の全下書きを1回で確定してレビューを完了する
+	// (POST /v1/support-sessions/{id}/complete-guide-review)
+	CompleteGuideReview(ctx context.Context, request CompleteGuideReviewRequestObject) (CompleteGuideReviewResponseObject, error)
+	// EndSupportSession 旧版のGUIDE_SAVEDセッションを終了する
+	// (POST /v1/support-sessions/{id}/end)
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	EndSupportSession(ctx context.Context, request EndSupportSessionRequestObject) (EndSupportSessionResponseObject, error)
 	// EndSupportSessionWithoutGuide ガイド作成を中止して支援セッションを終了する
 	// (POST /v1/support-sessions/{id}/end-without-guide)
 	EndSupportSessionWithoutGuide(ctx context.Context, request EndSupportSessionWithoutGuideRequestObject) (EndSupportSessionWithoutGuideResponseObject, error)
+	// ListSessionGuideDrafts 支援に紐づくすべての下書きを生成順で返す
+	// (GET /v1/support-sessions/{id}/guide-drafts)
+	ListSessionGuideDrafts(ctx context.Context, request ListSessionGuideDraftsRequestObject) (ListSessionGuideDraftsResponseObject, error)
 	// CreateGuideMaterialBatch ガイド材料画像の一括登録を開始する
 	// (POST /v1/support-sessions/{id}/guide-material-batches)
 	CreateGuideMaterialBatch(ctx context.Context, request CreateGuideMaterialBatchRequestObject) (CreateGuideMaterialBatchResponseObject, error)
@@ -5550,6 +7363,30 @@ func (sh *strictHandler) GetArtifactContent(w http.ResponseWriter, r *http.Reque
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetArtifactContentResponseObject); ok {
 		if err := validResponse.VisitGetArtifactContentResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetCompanionStatus operation middleware
+func (sh *strictHandler) GetCompanionStatus(w http.ResponseWriter, r *http.Request) {
+	var request GetCompanionStatusRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetCompanionStatus(ctx, request.(GetCompanionStatusRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetCompanionStatus")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetCompanionStatusResponseObject); ok {
+		if err := validResponse.VisitGetCompanionStatusResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -5896,6 +7733,40 @@ func (sh *strictHandler) UpdateGuideRun(w http.ResponseWriter, r *http.Request, 
 	}
 }
 
+// CancelGuideRun operation middleware
+func (sh *strictHandler) CancelGuideRun(w http.ResponseWriter, r *http.Request, id ResourceId, params CancelGuideRunParams) {
+	var request CancelGuideRunRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	var body CancelGuideRunJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CancelGuideRun(ctx, request.(CancelGuideRunRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CancelGuideRun")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CancelGuideRunResponseObject); ok {
+		if err := validResponse.VisitCancelGuideRunResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // CompleteGuideRun operation middleware
 func (sh *strictHandler) CompleteGuideRun(w http.ResponseWriter, r *http.Request, id ResourceId, params CompleteGuideRunParams) {
 	var request CompleteGuideRunRequestObject
@@ -6014,6 +7885,123 @@ func (sh *strictHandler) GetGuide(w http.ResponseWriter, r *http.Request, id Res
 	}
 }
 
+// RecordPresenceHeartbeat operation middleware
+func (sh *strictHandler) RecordPresenceHeartbeat(w http.ResponseWriter, r *http.Request) {
+	var request RecordPresenceHeartbeatRequestObject
+
+	var body RecordPresenceHeartbeatJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RecordPresenceHeartbeat(ctx, request.(RecordPresenceHeartbeatRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RecordPresenceHeartbeat")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RecordPresenceHeartbeatResponseObject); ok {
+		if err := validResponse.VisitRecordPresenceHeartbeatResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeletePushSubscription operation middleware
+func (sh *strictHandler) DeletePushSubscription(w http.ResponseWriter, r *http.Request) {
+	var request DeletePushSubscriptionRequestObject
+
+	var body DeletePushSubscriptionJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeletePushSubscription(ctx, request.(DeletePushSubscriptionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeletePushSubscription")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeletePushSubscriptionResponseObject); ok {
+		if err := validResponse.VisitDeletePushSubscriptionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpsertPushSubscription operation middleware
+func (sh *strictHandler) UpsertPushSubscription(w http.ResponseWriter, r *http.Request) {
+	var request UpsertPushSubscriptionRequestObject
+
+	var body UpsertPushSubscriptionJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpsertPushSubscription(ctx, request.(UpsertPushSubscriptionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpsertPushSubscription")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpsertPushSubscriptionResponseObject); ok {
+		if err := validResponse.VisitUpsertPushSubscriptionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetVapidPublicKey operation middleware
+func (sh *strictHandler) GetVapidPublicKey(w http.ResponseWriter, r *http.Request) {
+	var request GetVapidPublicKeyRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetVapidPublicKey(ctx, request.(GetVapidPublicKeyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetVapidPublicKey")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetVapidPublicKeyResponseObject); ok {
+		if err := validResponse.VisitGetVapidPublicKeyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ListSupportRequests operation middleware
 func (sh *strictHandler) ListSupportRequests(w http.ResponseWriter, r *http.Request, params ListSupportRequestsParams) {
 	var request ListSupportRequestsRequestObject
@@ -6099,6 +8087,39 @@ func (sh *strictHandler) GetSupportRequest(w http.ResponseWriter, r *http.Reques
 	}
 }
 
+// UpdateSupportRequestAcknowledgement operation middleware
+func (sh *strictHandler) UpdateSupportRequestAcknowledgement(w http.ResponseWriter, r *http.Request, id ResourceId) {
+	var request UpdateSupportRequestAcknowledgementRequestObject
+
+	request.Id = id
+
+	var body UpdateSupportRequestAcknowledgementJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateSupportRequestAcknowledgement(ctx, request.(UpdateSupportRequestAcknowledgementRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateSupportRequestAcknowledgement")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateSupportRequestAcknowledgementResponseObject); ok {
+		if err := validResponse.VisitUpdateSupportRequestAcknowledgementResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // CallSupportRequest operation middleware
 func (sh *strictHandler) CallSupportRequest(w http.ResponseWriter, r *http.Request, id ResourceId, params CallSupportRequestParams) {
 	var request CallSupportRequestRequestObject
@@ -6126,6 +8147,40 @@ func (sh *strictHandler) CallSupportRequest(w http.ResponseWriter, r *http.Reque
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(CallSupportRequestResponseObject); ok {
 		if err := validResponse.VisitCallSupportRequestResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CancelSupportRequest operation middleware
+func (sh *strictHandler) CancelSupportRequest(w http.ResponseWriter, r *http.Request, id ResourceId, params CancelSupportRequestParams) {
+	var request CancelSupportRequestRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	var body CancelSupportRequestJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CancelSupportRequest(ctx, request.(CancelSupportRequestRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CancelSupportRequest")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CancelSupportRequestResponseObject); ok {
+		if err := validResponse.VisitCancelSupportRequestResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -6193,6 +8248,74 @@ func (sh *strictHandler) AcceptSupportSession(w http.ResponseWriter, r *http.Req
 	}
 }
 
+// CompleteGuideReview operation middleware
+func (sh *strictHandler) CompleteGuideReview(w http.ResponseWriter, r *http.Request, id ResourceId, params CompleteGuideReviewParams) {
+	var request CompleteGuideReviewRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	var body CompleteGuideReviewJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CompleteGuideReview(ctx, request.(CompleteGuideReviewRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CompleteGuideReview")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CompleteGuideReviewResponseObject); ok {
+		if err := validResponse.VisitCompleteGuideReviewResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// EndSupportSession operation middleware
+func (sh *strictHandler) EndSupportSession(w http.ResponseWriter, r *http.Request, id ResourceId, params EndSupportSessionParams) {
+	var request EndSupportSessionRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	var body EndSupportSessionJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.EndSupportSession(ctx, request.(EndSupportSessionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "EndSupportSession")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(EndSupportSessionResponseObject); ok {
+		if err := validResponse.VisitEndSupportSessionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // EndSupportSessionWithoutGuide operation middleware
 func (sh *strictHandler) EndSupportSessionWithoutGuide(w http.ResponseWriter, r *http.Request, id ResourceId, params EndSupportSessionWithoutGuideParams) {
 	var request EndSupportSessionWithoutGuideRequestObject
@@ -6220,6 +8343,32 @@ func (sh *strictHandler) EndSupportSessionWithoutGuide(w http.ResponseWriter, r 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(EndSupportSessionWithoutGuideResponseObject); ok {
 		if err := validResponse.VisitEndSupportSessionWithoutGuideResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListSessionGuideDrafts operation middleware
+func (sh *strictHandler) ListSessionGuideDrafts(w http.ResponseWriter, r *http.Request, id ResourceId) {
+	var request ListSessionGuideDraftsRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListSessionGuideDrafts(ctx, request.(ListSessionGuideDraftsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListSessionGuideDrafts")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListSessionGuideDraftsResponseObject); ok {
+		if err := validResponse.VisitListSessionGuideDraftsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

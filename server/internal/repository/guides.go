@@ -58,6 +58,7 @@ type GuideTx interface {
 	FailJob(context.Context, domain.ID, int64, domain.GuideGenerationErrorCode, pgtype.Timestamptz) (domain.GuideGenerationJob, error)
 	ReviewDraft(context.Context, domain.ID, domain.ID, pgtype.Timestamptz) (domain.SupportSession, error)
 
+	ListDrafts(context.Context, domain.ID, bool) ([]domain.GuideDraft, error)
 	GetDraft(context.Context, domain.ID, bool) (domain.GuideDraft, error)
 	GetSessionByDraft(context.Context, domain.ID) (domain.SupportSession, error)
 	ListAllowedDraftArtifacts(context.Context, domain.ID) (map[domain.ID]struct{}, error)
@@ -67,7 +68,7 @@ type GuideTx interface {
 	CreateGuideVersionStep(context.Context, domain.ID, domain.GuideStep) (domain.GuideStep, error)
 	PromoteArtifact(context.Context, domain.ID, pgtype.Timestamptz) error
 	ListUnusedArtifacts(context.Context, domain.ID, []domain.ID) ([]ArtifactReference, error)
-	SaveDraft(context.Context, domain.ID, pgtype.Timestamptz) (domain.GuideDraft, error)
+	SaveDraft(context.Context, domain.ID, domain.ID, pgtype.Timestamptz) (domain.GuideDraft, error)
 	FinishGuideSession(context.Context, domain.ID, domain.ID, pgtype.Timestamptz) (domain.SupportSession, error)
 	DeleteGenerationJob(context.Context, domain.ID) error
 	DeleteMaterials(context.Context, domain.ID) error
@@ -80,6 +81,7 @@ type GuideTx interface {
 	GetStepCount(context.Context, domain.ID, int) (int, error)
 	MoveRun(context.Context, domain.ID, int, pgtype.Timestamptz) (domain.GuideRun, error)
 	CompleteRun(context.Context, domain.ID, pgtype.Timestamptz) (domain.GuideRun, error)
+	CancelRun(context.Context, domain.ID, pgtype.Timestamptz) (domain.GuideRun, error)
 	GetPair(context.Context, domain.ID) (domain.UserPair, error)
 	LockUser(context.Context, domain.ID) error
 	HasActiveSupportFlow(context.Context, domain.ID) (bool, error)
@@ -456,7 +458,7 @@ func (t *postgresGuideTx) CreateDraft(ctx context.Context, value domain.GuideDra
 	if err != nil {
 		return domain.GuideDraft{}, err
 	}
-	row, err := t.queries.CreateGuideDraftRow(ctx, dbgen.CreateGuideDraftRowParams{ID: string(value.ID), SupportSessionID: string(value.SupportSessionID), Title: value.Title, Steps: steps, CreatedAt: timestamp(value.CreatedAt)})
+	row, err := t.queries.CreateGuideDraftRow(ctx, dbgen.CreateGuideDraftRowParams{Position: int32(max(1, value.Position)), ID: string(value.ID), SupportSessionID: string(value.SupportSessionID), Title: value.Title, Steps: steps, CreatedAt: timestamp(value.CreatedAt)})
 	if err != nil {
 		return domain.GuideDraft{}, err
 	}
@@ -505,7 +507,7 @@ func (t *postgresGuideTx) GetDraft(ctx context.Context, id domain.ID, lock bool)
 
 func (t *postgresGuideTx) GetSessionByDraft(ctx context.Context, id domain.ID) (domain.SupportSession, error) {
 	value := string(id)
-	row, err := t.queries.GetGuideSessionByDraftID(ctx, &value)
+	row, err := t.queries.GetGuideSessionByDraftID(ctx, value)
 	if err != nil {
 		return domain.SupportSession{}, err
 	}
@@ -584,8 +586,8 @@ func (t *postgresGuideTx) ListUnusedArtifacts(ctx context.Context, sessionID dom
 	return result, nil
 }
 
-func (t *postgresGuideTx) SaveDraft(ctx context.Context, id domain.ID, now pgtype.Timestamptz) (domain.GuideDraft, error) {
-	row, err := t.queries.SaveGuideDraftRow(ctx, dbgen.SaveGuideDraftRowParams{UpdatedAt: now, ID: string(id)})
+func (t *postgresGuideTx) SaveDraft(ctx context.Context, id, guideID domain.ID, now pgtype.Timestamptz) (domain.GuideDraft, error) {
+	row, err := t.queries.SaveGuideDraftRow(ctx, dbgen.SaveGuideDraftRowParams{GuideID: ptrString(string(guideID)), UpdatedAt: now, ID: string(id)})
 	if err != nil {
 		return domain.GuideDraft{}, err
 	}
@@ -594,7 +596,7 @@ func (t *postgresGuideTx) SaveDraft(ctx context.Context, id domain.ID, now pgtyp
 
 func (t *postgresGuideTx) FinishGuideSession(ctx context.Context, sessionID, guideID domain.ID, now pgtype.Timestamptz) (domain.SupportSession, error) {
 	id := string(guideID)
-	row, err := t.queries.FinishGuideSession(ctx, dbgen.FinishGuideSessionParams{GuideID: &id, EndedAt: now, ID: string(sessionID)})
+	row, err := t.queries.FinishGuideSession(ctx, dbgen.FinishGuideSessionParams{GuideID: &id, UpdatedAt: now, ID: string(sessionID)})
 	if err != nil {
 		return domain.SupportSession{}, err
 	}
@@ -760,7 +762,7 @@ func guideDraftFromDB(row *dbgen.GuideDraft) (domain.GuideDraft, error) {
 	if err := json.Unmarshal(row.Steps, &steps); err != nil {
 		return domain.GuideDraft{}, fmt.Errorf("decode guide draft steps: %w", err)
 	}
-	return domain.GuideDraft{ID: domain.ID(row.ID), SupportSessionID: domain.ID(row.SupportSessionID), Title: row.Title, Steps: steps, Status: domain.GuideDraftStatus(row.Status), Revision: row.Revision, CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time}, nil
+	return domain.GuideDraft{ID: domain.ID(row.ID), SupportSessionID: domain.ID(row.SupportSessionID), Position: int(row.Position), Title: row.Title, Steps: steps, Status: domain.GuideDraftStatus(row.Status), Revision: row.Revision, CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time}, nil
 }
 
 func guideFromDB(row *dbgen.Guide) domain.Guide {
@@ -784,7 +786,7 @@ func guideSupportRequestFromDB(row *dbgen.SupportRequest) (domain.SupportRequest
 		}
 		guideContext = &value
 	}
-	return domain.SupportRequest{ID: domain.ID(row.ID), UserID: domain.ID(row.UserID), FamilyID: domain.ID(row.FamilyID), InitialScreenshotArtifactID: domain.ID(row.InitialScreenshotArtifactID), Comment: row.Comment, Status: domain.SupportRequestStatus(row.Status), SupportSessionID: stringPointerToID(row.SupportSessionID), GuideContext: guideContext, CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time, Revision: row.Revision}, nil
+	return domain.SupportRequest{ID: domain.ID(row.ID), UserID: domain.ID(row.UserID), FamilyID: domain.ID(row.FamilyID), InitialScreenshotArtifactID: domain.ID(row.InitialScreenshotArtifactID), Comment: row.Comment, Status: domain.SupportRequestStatus(row.Status), SupportSessionID: stringPointerToID(row.SupportSessionID), GuideContext: guideContext, AcknowledgedAt: optionalTime(row.AcknowledgedAt), AcknowledgementKind: stringPointerToAcknowledgementKind(row.AcknowledgementKind), EstimatedSupportAt: optionalTime(row.EstimatedSupportAt), CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time, Revision: row.Revision}, nil
 }
 
 func supportSessionFromDB(row *dbgen.SupportSession) (domain.SupportSession, error) {
@@ -807,4 +809,34 @@ func supportSessionFromDB(row *dbgen.SupportSession) (domain.SupportSession, err
 		reason = &value
 	}
 	return domain.SupportSession{ID: domain.ID(row.ID), SupportRequestID: domain.ID(row.SupportRequestID), UserID: domain.ID(row.UserID), FamilyID: domain.ID(row.FamilyID), LiveKitRoomName: row.LivekitRoomName, Status: domain.SupportSessionStatus(row.Status), GuideDecision: decision, GuideMaterialBatchID: stringPointerToID(row.GuideMaterialBatchID), GuideGenerationJobID: stringPointerToID(row.GuideGenerationJobID), GuideDraftID: stringPointerToID(row.GuideDraftID), GuideID: stringPointerToID(row.GuideID), Consent: consent, ConsentedAt: optionalTime(row.ConsentedAt), StartedAt: optionalTime(row.StartedAt), EndedAt: optionalTime(row.EndedAt), EndReason: reason, CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time, Revision: row.Revision}, nil
+}
+
+func (t *postgresGuideTx) ListDrafts(ctx context.Context, sessionID domain.ID, lock bool) ([]domain.GuideDraft, error) {
+	var rows []*dbgen.GuideDraft
+	var err error
+	if lock {
+		rows, err = t.queries.LockSessionGuideDraftRows(ctx, string(sessionID))
+	} else {
+		rows, err = t.queries.ListSessionGuideDraftRows(ctx, string(sessionID))
+	}
+	if err != nil {
+		return nil, err
+	}
+	result := make([]domain.GuideDraft, 0, len(rows))
+	for _, row := range rows {
+		draft, err := guideDraftFromDB(row)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, draft)
+	}
+	return result, nil
+}
+
+func (t *postgresGuideTx) CancelRun(ctx context.Context, id domain.ID, now pgtype.Timestamptz) (domain.GuideRun, error) {
+	row, err := t.queries.CancelGuideRunRow(ctx, dbgen.CancelGuideRunRowParams{UpdatedAt: now, ID: string(id)})
+	if err != nil {
+		return domain.GuideRun{}, err
+	}
+	return guideRunFromDB(row), nil
 }

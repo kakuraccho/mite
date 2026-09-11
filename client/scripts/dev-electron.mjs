@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import { request } from 'node:http'
 import path from 'node:path'
 import process from 'node:process'
+import { fileURLToPath } from 'node:url'
 
 const require = createRequire(import.meta.url)
 const [appDirectoryArgument, portArgument] = process.argv.slice(2)
@@ -47,22 +48,20 @@ const childEnvironment = {
   MITE_RENDERER_DEV_URL: `http://127.0.0.1:${port}`,
 }
 
-const tscCli = require.resolve('typescript/bin/tsc')
+const buildElectronCli = fileURLToPath(
+  new URL('./build-electron.mjs', import.meta.url),
+)
 const viteCli = path.join(
   path.dirname(require.resolve('vite/package.json')),
   'bin/vite.js',
 )
 const electronCli = require.resolve('electron/cli.js')
 
-const compileResult = spawnSync(
-  process.execPath,
-  [tscCli, '-p', 'tsconfig.electron.json'],
-  {
-    cwd: appDirectory,
-    env: childEnvironment,
-    stdio: 'inherit',
-  },
-)
+const compileResult = spawnSync(process.execPath, [buildElectronCli, '.'], {
+  cwd: appDirectory,
+  env: childEnvironment,
+  stdio: 'inherit',
+})
 
 if (compileResult.status !== 0) process.exit(compileResult.status ?? 1)
 

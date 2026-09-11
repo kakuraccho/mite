@@ -137,6 +137,12 @@ type UpdateGuideRunCommand struct {
 	Action           domain.GuideRunAction
 }
 
+type CancelGuideRunCommand struct {
+	Meta             CommandMeta
+	RunID            domain.ID
+	ExpectedRevision int64
+}
+
 type CompleteGuideRunCommand struct {
 	Meta             CommandMeta
 	RunID            domain.ID
@@ -998,7 +1004,7 @@ func (s *GuideService) UpdateGuideDraft(ctx context.Context, command UpdateGuide
 		if err := checkRevision(draft.Revision, command.ExpectedRevision); err != nil {
 			return err
 		}
-		if session.Status != domain.SupportSessionReviewingGuide || session.GuideDraftID == nil || *session.GuideDraftID != draft.ID || draft.Status != domain.GuideDraftEditing {
+		if session.Status != domain.SupportSessionReviewingGuide || draft.SupportSessionID != session.ID || draft.Status != domain.GuideDraftEditing {
 			return domain.NewError(domain.CodeInvalidState, "下書きを更新できない")
 		}
 		allowed, err := tx.ListAllowedDraftArtifacts(ctx, session.ID)
@@ -1047,15 +1053,18 @@ func (s *GuideService) SaveGuideDraft(ctx context.Context, command SaveGuideDraf
 		if err != nil {
 			return nil, err
 		}
-		if session.GuideMaterialBatchID == nil || session.GuideGenerationJobID == nil {
-			return nil, domain.NewError(domain.CodeInvalidState, "下書きを保存できない")
-		}
-		batchID, jobID := *session.GuideMaterialBatchID, *session.GuideGenerationJobID
-		if _, err := tx.GetBatch(ctx, batchID, true); err != nil {
+		if err := pairForSession(session).Authorize(command.Meta.Actor, domain.RoleFamily); err != nil {
 			return nil, err
 		}
-		if _, err := tx.GetJob(ctx, jobID, true); err != nil {
-			return nil, err
+		if session.GuideMaterialBatchID != nil {
+			if _, err := tx.GetBatch(ctx, *session.GuideMaterialBatchID, true); err != nil {
+				return nil, err
+			}
+		}
+		if session.GuideGenerationJobID != nil {
+			if _, err := tx.GetJob(ctx, *session.GuideGenerationJobID, true); err != nil {
+				return nil, err
+			}
 		}
 		draft, err := tx.GetDraft(ctx, command.DraftID, true)
 		if err != nil {
@@ -1067,71 +1076,22 @@ func (s *GuideService) SaveGuideDraft(ctx context.Context, command SaveGuideDraf
 		if err := checkRevision(draft.Revision, command.ExpectedRevision); err != nil {
 			return nil, err
 		}
-		if session.Status != domain.SupportSessionReviewingGuide || session.GuideDraftID == nil || *session.GuideDraftID != draft.ID || draft.Status != domain.GuideDraftEditing {
+		if session.GuideMaterialBatchID == nil || session.GuideGenerationJobID == nil || session.Status != domain.SupportSessionReviewingGuide || draft.SupportSessionID != session.ID || draft.Status != domain.GuideDraftEditing {
 			return nil, domain.NewError(domain.CodeInvalidState, "下書きを保存できない")
 		}
-		allowed, err := tx.ListAllowedDraftArtifacts(ctx, session.ID)
+		drafts, err := tx.ListDrafts(ctx, session.ID, true)
 		if err != nil {
 			return nil, err
 		}
-		if err := domain.ValidateGuideDraftContent(draft.Title, draft.Steps, allowed); err != nil {
-			return nil, err
+		if len(drafts) != 1 || drafts[0].ID != draft.ID {
+			return nil, domain.NewError(domain.CodeInvalidState, "複数のガイドはレビュー完了でまとめて保存する")
 		}
-		now := s.now()
-		guide := domain.Guide{ID: s.newID("guide_"), UserID: session.UserID, Title: draft.Title, CurrentVersionNumber: 1, CreatedAt: now, UpdatedAt: now, Revision: 1}
-		guide, err = tx.CreateGuide(ctx, guide)
+		reviewed, events, err := s.persistReviewedDrafts(ctx, tx, command.Meta.Actor, session, drafts)
 		if err != nil {
 			return nil, err
 		}
-		version := domain.GuideVersion{GuideID: guide.ID, VersionNumber: 1, Title: guide.Title, CreatedBy: command.Meta.Actor.ID, CreatedAt: now, Steps: append([]domain.GuideStep(nil), draft.Steps...)}
-		if _, err := tx.CreateGuideVersion(ctx, version); err != nil {
-			return nil, err
-		}
-		used := make([]domain.ID, 0, len(draft.Steps))
-		seen := make(map[domain.ID]struct{})
-		for _, step := range draft.Steps {
-			if _, err := tx.CreateGuideVersionStep(ctx, guide.ID, step); err != nil {
-				return nil, err
-			}
-			if _, ok := seen[step.ArtifactID]; !ok {
-				seen[step.ArtifactID] = struct{}{}
-				used = append(used, step.ArtifactID)
-			}
-			if err := tx.PromoteArtifact(ctx, step.ArtifactID, timestamp(now)); err != nil {
-				return nil, err
-			}
-		}
-		unused, err := tx.ListUnusedArtifacts(ctx, session.ID, used)
-		if err != nil {
-			return nil, err
-		}
-		for _, artifact := range unused {
-			id := artifact.ID
-			if err := tx.CreateDeletionTask(ctx, domain.ArtifactDeletionTask{ID: s.newID("delete_"), ArtifactID: &id, StorageKey: artifact.StorageKey, Status: domain.ArtifactDeletionPending, NextAttemptAt: now, CreatedAt: now}); err != nil {
-				return nil, err
-			}
-		}
-		draft, err = tx.SaveDraft(ctx, draft.ID, timestamp(now))
-		if err != nil {
-			return nil, err
-		}
-		session, err = tx.FinishGuideSession(ctx, session.ID, guide.ID, timestamp(now))
-		if err != nil {
-			return nil, err
-		}
-		if err := tx.DeleteGenerationJob(ctx, jobID); err != nil {
-			return nil, err
-		}
-		if err := tx.DeleteMaterials(ctx, batchID); err != nil {
-			return nil, err
-		}
-		if err := tx.DeleteBatch(ctx, batchID); err != nil {
-			return nil, err
-		}
-		detail := domain.GuideDetail{Guide: guide, RepresentativeArtifactID: draft.Steps[0].ArtifactID, CurrentVersion: version}
-		result.Data = GuideSaved{Guide: detail, SupportSession: session}
-		pair := pairForSession(session)
-		return []domain.Event{s.event(domain.EventGuideDraftUpdated, draft.ID, draft.Revision, draft, pair), s.event(domain.EventGuideCreated, guide.ID, guide.Revision, detail, pair), s.event(domain.EventSupportSessionUpdated, session.ID, session.Revision, session, pair)}, nil
+		result.Data = GuideSaved{Guide: reviewed.Guides[0], SupportSession: reviewed.SupportSession}
+		return events, nil
 	})
 	if err != nil {
 		return GuideSaved{}, err
@@ -1296,6 +1256,14 @@ func (s *GuideService) UpdateGuideRun(ctx context.Context, command UpdateGuideRu
 }
 
 func (s *GuideService) CompleteGuideRun(ctx context.Context, command CompleteGuideRunCommand) (domain.GuideRun, error) {
+	return s.finishGuideRun(ctx, command, false)
+}
+
+func (s *GuideService) CancelGuideRun(ctx context.Context, command CancelGuideRunCommand) (domain.GuideRun, error) {
+	return s.finishGuideRun(ctx, CompleteGuideRunCommand(command), true)
+}
+
+func (s *GuideService) finishGuideRun(ctx context.Context, command CompleteGuideRunCommand, cancel bool) (domain.GuideRun, error) {
 	if err := validateActorRole(command.Meta.Actor, domain.RoleUser); err != nil {
 		return domain.GuideRun{}, err
 	}
@@ -1310,13 +1278,16 @@ func (s *GuideService) CompleteGuideRun(ctx context.Context, command CompleteGui
 	}
 	result := storedEnvelope[domain.GuideRun]{}
 	path := "/v1/guide-runs/" + string(command.RunID) + "/complete"
+	if cancel {
+		path = "/v1/guide-runs/" + string(command.RunID) + "/cancel"
+	}
 	_, events, err := s.idempotent(ctx, command.Meta, path, hash, 200, &result, func(tx repository.GuideTx) ([]domain.Event, error) {
 		unlockedRun, err := tx.GetRun(ctx, command.RunID, false)
 		if err != nil {
 			return nil, err
 		}
 		if unlockedRun.UserID != command.Meta.Actor.ID {
-			return nil, domain.NewError(domain.CodeForbidden, "対象のガイド利用を完了できない")
+			return nil, domain.NewError(domain.CodeForbidden, "対象のガイド利用を終了できない")
 		}
 		if err := tx.LockUser(ctx, unlockedRun.UserID); err != nil {
 			return nil, err
@@ -1329,16 +1300,20 @@ func (s *GuideService) CompleteGuideRun(ctx context.Context, command CompleteGui
 			return nil, err
 		}
 		if run.Status != domain.GuideRunInProgress {
-			return nil, domain.NewError(domain.CodeInvalidState, "ガイド利用を完了できない")
+			return nil, domain.NewError(domain.CodeInvalidState, "ガイド利用を終了できない")
 		}
-		count, err := tx.GetStepCount(ctx, run.GuideID, run.GuideVersionNumber)
-		if err != nil {
-			return nil, err
+		if cancel {
+			run, err = tx.CancelRun(ctx, run.ID, timestamp(s.now()))
+		} else {
+			count, countErr := tx.GetStepCount(ctx, run.GuideID, run.GuideVersionNumber)
+			if countErr != nil {
+				return nil, countErr
+			}
+			if !domain.CanCompleteGuideRun(run.CurrentStepNumber, count) {
+				return nil, domain.NewError(domain.CodeInvalidState, "最終ステップ以外では完了できない")
+			}
+			run, err = tx.CompleteRun(ctx, run.ID, timestamp(s.now()))
 		}
-		if !domain.CanCompleteGuideRun(run.CurrentStepNumber, count) {
-			return nil, domain.NewError(domain.CodeInvalidState, "最終ステップ以外では完了できない")
-		}
-		run, err = tx.CompleteRun(ctx, run.ID, timestamp(s.now()))
 		if err != nil {
 			return nil, err
 		}

@@ -1,5 +1,6 @@
 export * from './idempotency'
 export * from './marking'
+export * from './guidance'
 export * from './polling'
 export * from './retry'
 export * from './revision'
