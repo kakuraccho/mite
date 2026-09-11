@@ -1,17 +1,16 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   HttpMiteApi,
   MiteApiError,
-  type CompanionStatus,
   type SupportAcknowledgementKind,
-  type SupportRequest,
 } from '@mite/client-api'
+import { useCompanionData } from './useCompanionData'
 
 const tokenKey = 'mite.family.companionToken'
 const apiBaseUrl =
   (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
   'http://localhost:3000'
-const initialToken =
+const readInitialToken = () =>
   localStorage.getItem(tokenKey) ??
   (import.meta.env.VITE_DEMO_FAMILY_TOKEN as string | undefined) ??
   ''
@@ -42,55 +41,83 @@ const bytesToBase64URL = (value: ArrayBuffer | null) => {
 }
 
 export function App() {
-  const [token, setToken] = useState(initialToken)
-  const [draftToken, setDraftToken] = useState(initialToken)
-  const [status, setStatus] = useState<CompanionStatus | null>(null)
-  const [request, setRequest] = useState<SupportRequest | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [notificationEnabled, setNotificationEnabled] = useState(false)
-  const [scheduledAt, setScheduledAt] = useState('')
-  const [refreshedAt, setRefreshedAt] = useState(0)
+  const [token, setToken] = useState(readInitialToken)
+  const [draftToken, setDraftToken] = useState(token)
   const api = useMemo(
     () => (token ? new HttpMiteApi({ baseUrl: apiBaseUrl, token }) : null),
     [token],
   )
 
-  const refresh = useCallback(async () => {
-    if (!api) return
-    try {
-      const [nextStatus, pending] = await Promise.all([
-        api.getCompanionStatus(),
-        api.listSupportRequests('PENDING'),
-      ])
-      setStatus(nextStatus)
-      setRequest(pending[0] ?? null)
-      setRefreshedAt(Date.now())
-      setError(null)
-    } catch (caught) {
-      setError(messageFor(caught))
-    }
-  }, [api])
+  if (!api) {
+    return (
+      <main className="setup">
+        <section className="card setup-card">
+          <div className="brand">
+            <span>M</span>
+            <strong>Mite 家族用</strong>
+          </div>
+          <h1>家族用トークンを設定</h1>
+          <p>
+            試作期間中だけの設定です。トークンはこの端末内に保存し、URLや通知には含めません。
+          </p>
+          <label>
+            家族用トークン
+            <input
+              type="password"
+              autoComplete="off"
+              value={draftToken}
+              onChange={(event) => setDraftToken(event.target.value)}
+            />
+          </label>
+          <button
+            className="primary"
+            onClick={() => {
+              const normalized = draftToken.trim()
+              if (!normalized) return
+              localStorage.setItem(tokenKey, normalized)
+              setToken(normalized)
+            }}
+          >
+            はじめる
+          </button>
+        </section>
+      </main>
+    )
+  }
 
-  useEffect(() => {
-    if (!api) return
-    const initial = window.setTimeout(() => void refresh(), 0)
-    const timer = window.setInterval(() => void refresh(), 5_000)
-    const onFocus = () => void refresh()
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') void refresh()
-    }
-    window.addEventListener('focus', onFocus)
-    window.addEventListener('online', onFocus)
-    document.addEventListener('visibilitychange', onVisible)
-    return () => {
-      window.clearTimeout(initial)
-      window.clearInterval(timer)
-      window.removeEventListener('focus', onFocus)
-      window.removeEventListener('online', onFocus)
-      document.removeEventListener('visibilitychange', onVisible)
-    }
-  }, [api, refresh])
+  return (
+    <CompanionDashboard
+      key={token}
+      api={api}
+      onConfigure={() => {
+        localStorage.removeItem(tokenKey)
+        setDraftToken('')
+        setToken('')
+      }}
+    />
+  )
+}
+
+function CompanionDashboard({
+  api,
+  onConfigure,
+}: {
+  api: HttpMiteApi
+  onConfigure: () => void
+}) {
+  const {
+    status,
+    request,
+    refreshError,
+    refreshedAt,
+    refresh,
+    acceptAcknowledgement,
+  } = useCompanionData(api)
+  const [busy, setBusy] = useState(false)
+  const [actionError, setError] = useState<string | null>(null)
+  const error = actionError ?? (refreshError ? messageFor(refreshError) : null)
+  const [notificationEnabled, setNotificationEnabled] = useState(false)
+  const [scheduledAt, setScheduledAt] = useState('')
 
   useEffect(() => {
     if (
@@ -127,13 +154,6 @@ export function App() {
     void updateBadge?.catch(() => undefined)
   }, [request])
 
-  const saveToken = () => {
-    const normalized = draftToken.trim()
-    if (!normalized) return
-    localStorage.setItem(tokenKey, normalized)
-    setToken(normalized)
-  }
-
   const acknowledge = async (kind: SupportAcknowledgementKind) => {
     if (!api || !request) return
     if (kind === 'SCHEDULED' && !scheduledAt) {
@@ -151,7 +171,7 @@ export function App() {
           expectedRevision: request.revision,
         },
       )
-      setRequest(updated)
+      acceptAcknowledgement(updated)
       setError(null)
     } catch (caught) {
       setError(messageFor(caught))
@@ -220,35 +240,6 @@ export function App() {
     }
   }
 
-  if (!token) {
-    return (
-      <main className="setup">
-        <section className="card setup-card">
-          <div className="brand">
-            <span>M</span>
-            <strong>Mite 家族用</strong>
-          </div>
-          <h1>家族用トークンを設定</h1>
-          <p>
-            試作期間中だけの設定です。トークンはこの端末内に保存し、URLや通知には含めません。
-          </p>
-          <label>
-            家族用トークン
-            <input
-              type="password"
-              autoComplete="off"
-              value={draftToken}
-              onChange={(event) => setDraftToken(event.target.value)}
-            />
-          </label>
-          <button className="primary" onClick={saveToken}>
-            はじめる
-          </button>
-        </section>
-      </main>
-    )
-  }
-
   const presence = status?.presence.status ?? 'OFFLINE'
   const presenceLabel =
     presence === 'ONLINE'
@@ -272,14 +263,7 @@ export function App() {
           <button className="text-button" onClick={() => void refresh()}>
             更新
           </button>
-          <button
-            className="text-button"
-            onClick={() => {
-              localStorage.removeItem(tokenKey)
-              setDraftToken('')
-              setToken('')
-            }}
-          >
+          <button className="text-button" onClick={onConfigure}>
             設定
           </button>
         </div>
@@ -296,7 +280,11 @@ export function App() {
           </p>
           <div className={`presence ${presence.toLowerCase()}`}>
             <i aria-hidden="true" />
-            {presenceLabel}
+            {status
+              ? presenceLabel
+              : refreshError
+                ? '接続状況を取得できません'
+                : '接続状況を確認しています'}
           </div>
           <p className="last-seen">
             最終確認: {formatTime(status?.presence.lastSeenAt)}
@@ -311,7 +299,13 @@ export function App() {
             <div>
               <p className="eyebrow">支援依頼</p>
               <h1>
-                {request ? '対応を待っています' : '新しい依頼はありません'}
+                {request
+                  ? '対応を待っています'
+                  : !refreshedAt
+                    ? refreshError
+                      ? '依頼を取得できません'
+                      : '依頼を確認しています'
+                    : '新しい依頼はありません'}
               </h1>
             </div>
             {request ? <span className="badge">支援待ち</span> : null}
@@ -376,7 +370,9 @@ export function App() {
             </>
           ) : (
             <p className="empty-copy">
-              依頼が届くと、内容と対応状況をここで確認できます。
+              {!refreshedAt
+                ? '通信状況を確認し、必要に応じて「更新」を押してください。'
+                : '依頼が届くと、内容と対応状況をここで確認できます。'}
             </p>
           )}
         </section>

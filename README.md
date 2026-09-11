@@ -52,6 +52,7 @@ MVPでは固定の1対1とデモ用Bearerトークンを使用します。遠隔
 | REST APIとWebSocketの手動確認 | [サーバー手動検証ガイド](server/MANUAL_TESTING.md) |
 | MVPの範囲・API・状態・画面・受け入れ条件 | [MVP実装仕様書](docs/specification.md) |
 | 実利用フィードバックへの対応・自動検証結果 | [対応記録](docs/family-support-improvements.md) |
+| devへの取り込み確認・ブランチ整理・保守検証・残る実機確認 | [保守記録](docs/maintenance-audit.md) |
 | 対象ユーザー・課題・提供価値 | [プロダクトシート](docs/PS.md) |
 
 実装時の判断はMVP実装仕様書を優先してください。

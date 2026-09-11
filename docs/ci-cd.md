@@ -13,6 +13,7 @@ GitHub Actionsの[Mite CI/CD](../.github/workflows/server-ci.yml)で、すべて
 | Generated code and shared API | OpenAPI・sqlcの再生成、コミット済み生成物との一致、新規生成ファイルの追跡漏れ、共有APIの型チェック・Lint・ビルド |
 | Go tests and build | gofmt、race検査付きテスト、go vet、ビルド、DB・API・PWAデプロイの順序、checksum、排他制御、失敗時の停止と復元を検証 |
 | Supabase integration and HTTP WebSocket E2E | 一時的なSupabaseへのmigration適用、DB・Storage統合テスト、HTTP/WebSocket E2E |
+| TypeScript client adapter E2E | 専用の一時SupabaseとGoサーバーへ実 `HttpMiteApi` を接続し、支援・複数ガイド保存・ガイド利用を検証 |
 
 Goは`server/go.mod`のバージョン、Node.jsは24を使う。npm依存関係はルートの`package-lock.json`と`client/package-lock.json`、Goツールは`server/go.mod`・`server/go.sum`で固定する。ActionsもコミットSHAで固定する。
 
@@ -20,11 +21,11 @@ clientの整形ジョブは`client/`で`npm ci --ignore-scripts`を実行する�
 
 CI用のSupabaseはGitHub runner内に新規作成する。リポジトリのmigrationには固定デモユーザーと非公開Storageバケットの作成が含まれる。接続先はこの一時環境から取得し、未設定ならテスト開始前に失敗させる。実行後は一時環境を破棄する。共有・VPS側のDB接続情報をCIへ設定する必要はない。
 
-統合テストはパッケージごとに順番に実行し、HTTP/WebSocket E2Eのworkerとほかのテストの生成ジョブが干渉することを避ける。Geminiの生成処理はfakeを使う。実LiveKit・実Gemini、WindowsのElectron実機動作は[既知の未確認事項](../README.md#既知の未確認事項)に従って別途検証する。
+統合テストはパッケージごとに順番に実行し、HTTP/WebSocket E2Eのworkerとほかのテストの生成ジョブが干渉することを避ける。TypeScript adapterの `TestClientAdapterE2E` は `MITE_E2E_CLIENT_ADAPTER=1` で明示的に有効化し、別runnerの新規Supabaseで実行する。前のE2Eが残した未完了依頼との競合を避けるため、両E2EでDBを共有しない。Geminiの生成処理はfakeを使う。実LiveKit・実Gemini、WindowsのElectron実機動作は[既知の未確認事項](../README.md#既知の未確認事項)に従って別途検証する。
 
 Supabase起動時の出力にはローカルAPIキーが含まれるため、起動出力はrunner内の一時ファイルへ保存し、ログや成果物として公開しない。起動に失敗した場合はコンテナの稼働状態だけを表示する。Dockerが使えるローカル環境で`npm ci`、`npx --no-install supabase start`を実行して原因を確認する。
 
-GitHubでマージ前にCI成功を必須にする場合は、`dev`・`main`のbranch rulesetに上記5つをrequired status checksとして登録する。ワークフローを追加するだけではマージ制限は有効にならない。
+GitHubでマージ前にCI成功を必須にする場合は、`dev`・`main`のbranch rulesetに上記6つをrequired status checksとして登録する。ワークフローを追加するだけではマージ制限は有効にならない。
 
 ## CD
 

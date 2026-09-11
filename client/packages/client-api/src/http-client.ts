@@ -132,29 +132,19 @@ export class HttpMiteApi implements MiteApi {
   }
 
   async deletePushSubscription(endpoint: string): Promise<void> {
-    const headers = new Headers({
-      Accept: 'application/json',
-      Authorization: `Bearer ${this.#token}`,
-      'Content-Type': 'application/json',
+    await this.#send('/v1/push-subscriptions', {
+      method: 'DELETE',
+      body: JSON.stringify({ endpoint }),
     })
-    const response = await this.#fetch(
-      `${this.#baseUrl}/v1/push-subscriptions`,
-      { method: 'DELETE', headers, body: JSON.stringify({ endpoint }) },
-    )
-    if (!response.ok) {
-      const body: unknown = await response.json().catch(() => null)
-      if (isApiErrorBody(body)) throw new MiteApiError(response.status, body)
-      throw new Error(`Mite API request failed with HTTP ${response.status}`)
-    }
   }
 
-  async #request<TData>(
+  async #send(
     path: string,
     init: RequestInit = {},
     operation?: IdempotentOperation,
-  ): Promise<TData> {
+  ): Promise<Response> {
     const headers = new Headers(init.headers)
-    headers.set('Accept', 'application/json')
+    if (!headers.has('Accept')) headers.set('Accept', 'application/json')
     headers.set('Authorization', `Bearer ${this.#token}`)
     if (operation) headers.set('Idempotency-Key', operation.idempotencyKey)
     if (typeof init.body === 'string') {
@@ -166,12 +156,8 @@ export class HttpMiteApi implements MiteApi {
       headers,
     })
 
-    const contentType = response.headers.get('content-type') ?? ''
-    const body: unknown = contentType.includes('application/json')
-      ? await response.json()
-      : null
-
     if (!response.ok) {
+      const body: unknown = await response.json().catch(() => null)
       if (isApiErrorBody(body)) {
         const retryAfter = response.headers.get('retry-after')
         const retryAfterSeconds = retryAfter ? Number(retryAfter) : null
@@ -183,6 +169,20 @@ export class HttpMiteApi implements MiteApi {
       }
       throw new Error(`Mite API request failed with HTTP ${response.status}`)
     }
+
+    return response
+  }
+
+  async #request<TData>(
+    path: string,
+    init: RequestInit = {},
+    operation?: IdempotentOperation,
+  ): Promise<TData> {
+    const response = await this.#send(path, init, operation)
+    const contentType = response.headers.get('content-type') ?? ''
+    const body: unknown = contentType.includes('application/json')
+      ? await response.json()
+      : null
 
     if (!body || typeof body !== 'object' || !('data' in body)) {
       throw new Error('Mite API returned an invalid success response')
@@ -248,15 +248,10 @@ export class HttpMiteApi implements MiteApi {
   }
 
   async #fetchArtifactContent(artifactId: string): Promise<Blob> {
-    const response = await this.#fetch(
-      `${this.#baseUrl}/v1/artifacts/${encodeId(artifactId)}/content`,
-      { headers: { Authorization: `Bearer ${this.#token}` } },
+    const response = await this.#send(
+      `/v1/artifacts/${encodeId(artifactId)}/content`,
+      { headers: { Accept: 'image/jpeg' } },
     )
-    if (!response.ok) {
-      const body: unknown = await response.json().catch(() => null)
-      if (isApiErrorBody(body)) throw new MiteApiError(response.status, body)
-      throw new Error(`Artifact request failed with HTTP ${response.status}`)
-    }
     return response.blob()
   }
 

@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@mite/client-api": "*",
+    "@mite/client-core": "*",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   }

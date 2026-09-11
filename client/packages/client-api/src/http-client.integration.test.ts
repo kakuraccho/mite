@@ -43,6 +43,20 @@ describeIntegration('HttpMiteApi local A/B/C integration', () => {
       baseUrl: baseUrl as string,
       token: familyToken as string,
     })
+    const heartbeat = await user.recordPresenceHeartbeat()
+    expect(heartbeat.status).toBe('CONNECTING')
+    expect((await family.getCompanionStatus()).presence.userId).toBe(
+      heartbeat.userId,
+    )
+    await expect(user.getCompanionStatus()).rejects.toMatchObject({
+      status: 403,
+    })
+    await expect(family.getVapidPublicKey()).rejects.toMatchObject({
+      status: 503,
+    })
+    await expect(
+      family.deletePushSubscription('https://push.example.test/subscription'),
+    ).resolves.toBeUndefined()
     const capturedAt = new Date(
       Math.floor(Date.now() / 1_000) * 1_000,
     ).toISOString()
@@ -87,9 +101,23 @@ describeIntegration('HttpMiteApi local A/B/C integration', () => {
       requestInput.comment,
     )
 
+    const acknowledged = await family.updateSupportRequestAcknowledgement(
+      request.id,
+      {
+        acknowledgementKind: 'UNKNOWN',
+        estimatedSupportAt: null,
+        expectedRevision: request.revision,
+      },
+    )
+    expect(acknowledged.status).toBe('PENDING')
+    expect(acknowledged.acknowledgementKind).toBe('UNKNOWN')
+    expect((await user.getSupportRequest(request.id)).revision).toBe(
+      acknowledged.revision,
+    )
+
     const called = await family.callSupportRequest(
       request.id,
-      { expectedRequestRevision: request.revision },
+      { expectedRequestRevision: acknowledged.revision },
       { idempotencyKey: operationKey('call') },
     )
     const accepted = await user.acceptSupportSession(
@@ -289,5 +317,34 @@ describeIntegration('HttpMiteApi local A/B/C integration', () => {
     )
     expect(followUp.guideRun.status).toBe('PAUSED_FOR_SUPPORT')
     expect(followUp.supportRequest.guideContext?.guideRunId).toBe(pausedRun.id)
+    const cancelOptions = { idempotencyKey: operationKey('cancel-request') }
+    const cancelled = await user.cancelSupportRequest(
+      followUp.supportRequest.id,
+      followUp.supportRequest.revision,
+      cancelOptions,
+    )
+    expect(cancelled.status).toBe('CANCELLED')
+    expect(
+      await user.cancelSupportRequest(
+        followUp.supportRequest.id,
+        followUp.supportRequest.revision,
+        cancelOptions,
+      ),
+    ).toEqual(cancelled)
+    expect(await family.listSupportRequests('PENDING')).toEqual([])
+
+    const cancelledRun = await user.createGuideRun(
+      { guideId: savedGuide.id },
+      { idempotencyKey: operationKey('create-cancelled-run') },
+    )
+    expect(
+      (
+        await user.cancelGuideRun(
+          cancelledRun.id,
+          { expectedRevision: cancelledRun.revision },
+          { idempotencyKey: operationKey('cancel-run') },
+        )
+      ).status,
+    ).toBe('CANCELLED')
   }, 30_000)
 })

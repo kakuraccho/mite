@@ -12,6 +12,67 @@ const jsonResponse = (body: unknown, init: ResponseInit = {}) =>
   })
 
 describe('HttpMiteApi', () => {
+  it.each(['json', 'image', 'empty'] as const)(
+    '共通の認証・エラー処理を%s応答でも使う',
+    async (kind) => {
+      const fetch = vi.fn<typeof globalThis.fetch>(async () =>
+        jsonResponse(
+          {
+            error: {
+              code: 'EXTERNAL_SERVICE_UNAVAILABLE',
+              message: 'しばらく待ってください',
+              requestId: 'retry-request',
+            },
+          },
+          { status: 503, headers: { 'retry-after': '3' } },
+        ),
+      )
+      const api = new HttpMiteApi({
+        baseUrl: 'https://example.test/mite',
+        token: 'test-token',
+        fetch,
+      })
+      const request =
+        kind === 'json'
+          ? api.getCompanionStatus()
+          : kind === 'image'
+            ? api.getArtifactContent('image/1')
+            : api.deletePushSubscription('https://push.example/subscription')
+      await expect(request).rejects.toMatchObject({
+        name: 'MiteApiError',
+        status: 503,
+        code: 'EXTERNAL_SERVICE_UNAVAILABLE',
+        retryAfterSeconds: 3,
+      })
+      expect(
+        new Headers(fetch.mock.calls[0]?.[1]?.headers).get('Authorization'),
+      ).toBe('Bearer test-token')
+    },
+  )
+
+  it('Push購読解除の204をJSONとして読み込まず、本文と認証を送る', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(
+      async () => new Response(null, { status: 204 }),
+    )
+    const api = new HttpMiteApi({
+      baseUrl: 'https://example.test/mite',
+      token: 'test-token',
+      fetch,
+    })
+    await expect(
+      api.deletePushSubscription('https://push.example/subscription'),
+    ).resolves.toBeUndefined()
+    const [url, init] = fetch.mock.calls[0]!
+    expect(url).toBe('https://example.test/mite/v1/push-subscriptions')
+    expect(init?.method).toBe('DELETE')
+    expect(JSON.parse(init?.body as string)).toEqual({
+      endpoint: 'https://push.example/subscription',
+    })
+    expect(new Headers(init?.headers).get('Content-Type')).toBe(
+      'application/json',
+    )
+  })
+
   it('認証と保存済みの冪等キーを状態変更リクエストへ付ける', async () => {
     const supportRequest = {
       id: 'request_01',
