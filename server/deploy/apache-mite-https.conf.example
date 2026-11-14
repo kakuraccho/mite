@@ -1,0 +1,32 @@
+# Install as /etc/apache2/sites-available/mite-https.conf after certbot has issued
+# the certificate. Requires the ssl, proxy, proxy_http and headers modules.
+<VirtualHost *:443>
+    ServerName priv.chi-llenge.com
+    DocumentRoot /var/www/mite-public
+
+    SSLEngine on
+    SSLCertificateFile /etc/letsencrypt/live/priv.chi-llenge.com/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/priv.chi-llenge.com/privkey.pem
+
+    <Directory /var/www/mite-public>
+        Options None
+        AllowOverride None
+        Require all granted
+    </Directory>
+
+    # Family PWA (server/deploy/apache-family-pwa.conf.example).
+    # Keep it before the API ProxyPass rules.
+    Include /etc/apache2/mite-family-pwa.conf
+
+    # Go API on the loopback port. The WebSocket rule must precede the broader /mite/v1/ rule.
+    ProxyRequests Off
+    ProxyPass "/mite/v1/events" "http://127.0.0.1:3000/v1/events" upgrade=websocket connectiontimeout=5 timeout=3600
+    ProxyPassReverse "/mite/v1/events" "http://127.0.0.1:3000/v1/events"
+    ProxyPass "/mite/v1/" "http://127.0.0.1:3000/v1/" connectiontimeout=5 timeout=70
+    ProxyPassReverse "/mite/v1/" "http://127.0.0.1:3000/v1/"
+
+    <Location "/mite/v1/">
+        LimitRequestBody 11534336
+        ProxyErrorOverride Off
+    </Location>
+</VirtualHost>

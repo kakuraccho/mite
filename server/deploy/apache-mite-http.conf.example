@@ -1,0 +1,12 @@
+# Install as /etc/apache2/sites-available/mite-http.conf.
+# Serves the webroot used by certbot's HTTP-01 challenge for priv.chi-llenge.com.
+<VirtualHost *:80>
+    ServerName priv.chi-llenge.com
+    DocumentRoot /var/www/mite-public
+
+    <Directory /var/www/mite-public>
+        Options None
+        AllowOverride None
+        Require all granted
+    </Directory>
+</VirtualHost>

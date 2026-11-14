@@ -1,0 +1,22 @@
+[Unit]
+Description=Mite API
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=mite
+Group=mite
+WorkingDirectory=/etc/mite
+ExecStart=/opt/mite/mite-api
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=20s
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
