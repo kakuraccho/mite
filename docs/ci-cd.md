@@ -29,11 +29,11 @@ GitHubでマージ前にCI成功を必須にする場合は、`dev`・`main`のb
 
 ## CD
 
-配置先は現在Goサーバーを実行しているVPSとし、次の既存構成を使う。
+配置先は現在Goサーバーを実行しているVPSとし、次の既存構成を使う。新しいVPSへ構築・移行する場合は、先に[VPSの新規構築・移行](server-provisioning.md)で以下の構成と`mite-api.service`の初回起動を用意する。
 
 | 項目 | 設定 |
 | --- | --- |
-| OS・CPU | Ubuntu 24.04 LTS、amd64（x86_64） |
+| OS・CPU | Ubuntu 24.04 LTS以降、amd64（x86_64） |
 | systemdサービス | `mite-api.service` |
 | 実行ファイル | `/opt/mite/mite-api` |
 | ローカルAPI | `http://127.0.0.1:3000` |

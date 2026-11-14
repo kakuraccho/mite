@@ -48,6 +48,7 @@ MVPでは固定の1対1とデモ用Bearerトークンを使用します。遠隔
 | 初回セットアップ・環境変数の設定・ローカル起動 | [セットアップガイド](docs/setup.md) |
 | コード生成・テスト・ビルド・Windows配布 | [開発ガイド](docs/development.md) |
 | 自動検証・VPSへのAPIとPWAのデプロイ設定 | [MiteのCI/CD](docs/ci-cd.md) |
+| 新しいVPSへの構築・移行 | [VPSの新規構築・移行](docs/server-provisioning.md) |
 | API接続・再送・復旧・E2E確認 | [サーバー・クライアント接続ガイド](docs/server-client-integration.md) |
 | REST APIとWebSocketの手動確認 | [サーバー手動検証ガイド](server/MANUAL_TESTING.md) |
 | MVPの範囲・API・状態・画面・受け入れ条件 | [MVP実装仕様書](docs/specification.md) |
